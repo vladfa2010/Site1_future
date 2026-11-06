@@ -1,7 +1,7 @@
 import { Link } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../api';
-import { ArticleCard } from '../components/ArticleCard';
+import { ArticleCard, TYPE_LABELS } from '../components/ArticleCard';
 import { IdeaCard } from '../components/IdeaCard';
 import { Carousel, CAROUSEL_ITEM } from '../components/Carousel';
 import { CoverThumb } from '../components/CoverThumb';
@@ -41,6 +41,7 @@ const KNOWLEDGE = [
 export default function HomePage() {
   const q = {
     trends: useQuery({ queryKey: ['trends'], queryFn: () => api.trends() }),
+    feed: useQuery({ queryKey: ['feed'], queryFn: () => api.articles() }), // лента событий: все типы, свежие сверху
     news: useQuery({ queryKey: ['news'], queryFn: () => api.articles('novost') }),
     pipeline: useQuery({ queryKey: ['scr', 'pipeline'], queryFn: () => api.screener({ phase: 'pipeline' }) }),
     portfel: useQuery({ queryKey: ['scr', 'portfel'], queryFn: () => api.screener({ phase: 'portfel' }) }),
@@ -50,6 +51,7 @@ export default function HomePage() {
     analitika: useQuery({ queryKey: ['analitika'], queryFn: () => api.articles('analitika') }),
   };
   const { data: trends } = q.trends;
+  const { data: feed } = q.feed;
   const { data: news } = q.news;
   const { data: pipeline } = q.pipeline;
   const { data: portfel } = q.portfel;
@@ -107,9 +109,31 @@ export default function HomePage() {
         ))}
       </Section>
 
+      {/* ЛЕНТА СОБЫТИЙ — компактная хронология всех типов, как у донора */}
+      {(feed?.articles.length ?? 0) > 0 && (
+        <section>
+          <p className="mb-1 text-sm text-zinc-500">Наш фокус внимания на происходящем в мире. Самое свежее – первое в списке</p>
+          <div className="mb-4 flex items-baseline justify-between">
+            <h2 className="text-lg font-semibold uppercase tracking-wide text-zinc-400">Лента событий</h2>
+          </div>
+          <ol className="divide-y divide-zinc-800/60">
+            {feed?.articles.slice(0, 20).map((a) => (
+              <li key={a.id}>
+                <Link to={`/${a.type}/${a.slug}`} className="group flex items-baseline gap-3 py-2.5">
+                  <span className="shrink-0 rounded-full bg-zinc-800/80 px-2 py-0.5 text-xs text-zinc-400">
+                    {TYPE_LABELS[a.type] ?? a.type}
+                  </span>
+                  <span className="flex-1 truncate text-zinc-200 group-hover:text-orange-300">{a.title}</span>
+                  <span className="shrink-0 text-xs text-zinc-600">{a.publishedAt?.slice(0, 10)}</span>
+                </Link>
+              </li>
+            ))}
+          </ol>
+        </section>
+      )}
+
       {/* Свежие новости — карусель с обложками */}
-      <Section title="Свежие новости" linkTo="/novost" itemsCount={news?.articles.length ?? 0}>
-        {news?.articles.slice(0, 12).map((a) => (
+      <Section title="Свежие новости" linkTo="/novost" itemsCount={news?.articles.length ?? 0}>        {news?.articles.slice(0, 12).map((a) => (
           <div key={a.id} className={CAROUSEL_ITEM}><ArticleCard article={a} /></div>
         ))}
       </Section>

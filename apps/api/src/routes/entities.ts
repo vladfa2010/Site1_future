@@ -4,7 +4,7 @@
  */
 import { Router } from 'express';
 import { z } from 'zod';
-import { and, desc, eq, ilike, or, type SQL } from 'drizzle-orm';
+import { and, desc, eq, ilike, or, sql, type SQL } from 'drizzle-orm';
 import {
   db,
   companies,
@@ -62,7 +62,7 @@ entitiesRouter.get('/companies/:slug', async (req, res) => {
     .from(articleCompanies)
     .innerJoin(articles, eq(articleCompanies.articleId, articles.id))
     .where(and(eq(articleCompanies.companyId, company.id), eq(articles.status, 'published')))
-    .orderBy(desc(articles.publishedAt))
+    .orderBy(sql`${articles.publishedAt} desc nulls last`)
     .limit(50);
 
   // Раунды финансирования — только если внесены (раздел 4.3)
@@ -247,7 +247,7 @@ entitiesRouter.get('/trends/:slug', async (req, res) => {
     .from(articleTrends)
     .innerJoin(articles, eq(articleTrends.articleId, articles.id))
     .where(and(eq(articleTrends.trendId, trend.id), eq(articles.status, 'published')))
-    .orderBy(desc(articles.publishedAt))
+    .orderBy(sql`${articles.publishedAt} desc nulls last`)
     .limit(50);
   res.json({ trend, articles: trendArticles });
 });

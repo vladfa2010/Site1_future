@@ -4,7 +4,7 @@
  */
 import { Router } from 'express';
 import { z } from 'zod';
-import { and, desc, eq, type SQL } from 'drizzle-orm';
+import { and, desc, eq, sql, type SQL } from 'drizzle-orm';
 import {
   db, articles, ARTICLE_TYPES, type ArticleType,
   companies, trends, articleCompanies, articleTrends, media,
@@ -64,7 +64,7 @@ articlesRouter.get('/', optionalAuth, async (req, res) => {
     .from(articles)
     .leftJoin(media, eq(articles.coverMediaId, media.id))
     .where(where)
-    .orderBy(desc(articles.publishedAt))
+    .orderBy(sql`${articles.publishedAt} desc nulls last`)
     .limit(limit)
     .offset((page - 1) * limit);
 

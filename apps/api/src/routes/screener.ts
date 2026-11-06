@@ -58,7 +58,7 @@ screenerRouter.get('/screener', async (req, res) => {
     .from(articles)
     .leftJoin(media, eq(articles.coverMediaId, media.id))
     .where(and(...conditions))
-    .orderBy(desc(articles.publishedAt))
+    .orderBy(sql`${articles.publishedAt} desc nulls last`)
     .limit(100);
 
   res.json({ ideas: rows, total: rows.length });
