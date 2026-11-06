@@ -2,14 +2,11 @@ import { Link } from 'react-router';
 import { useAuth } from '../auth';
 import { useAuthModal } from '../authModal';
 import AuthModal from './AuthModal';
-
-// Админка — отдельное приложение (порт 5174 в dev; в проде — тот же origin, путь /admin)
-const ADMIN_URL = import.meta.env.VITE_ADMIN_URL ?? 'http://localhost:5174';
+import { Avatar } from './Avatar';
 
 export function Layout({ children }: { children: React.ReactNode }) {
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
   const { open } = useAuthModal();
-  const isAdmin = user?.role === 'admin' || user?.role === 'super_admin';
 
   const onPropose = () => {
     if (!user) {
@@ -28,23 +25,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
           <Link to="/" className="text-zinc-400">Лента</Link>
           <Link to="/portfolio" className="text-zinc-400">Портфель</Link>
           {user ? (
-            <span className="flex items-center gap-3">
-              {isAdmin && (
-                <a
-                  href={`${ADMIN_URL}/?auth=${localStorage.getItem('token') ?? ''}`}
-                  className="rounded-full border border-[#beff00]/50 px-3 py-1 text-[#c9ff2a] hover:bg-[#beff00]/10"
-                >
-                  Админка
-                </a>
-              )}
-              <Link to="/cabinet" className="text-zinc-300 hover:text-[#c9ff2a]">
-                {user.displayName ?? user.email}
-              </Link>
-              {isAdmin && (
-                <span className="rounded-full bg-[#beff00]/15 px-2 py-0.5 text-xs text-[#c9ff2a]">{user.role === 'super_admin' ? 'супер-админ' : 'админ'}</span>
-              )}
-              <button onClick={logout} className="text-zinc-500 hover:text-zinc-300">Выйти</button>
-            </span>
+            /* круглый аватар → кабинет («Выйти» живёт там) */
+            <Link to="/cabinet" title="Личный кабинет" className="transition-transform hover:scale-105">
+              <Avatar avatar={user.avatar} name={user.displayName} size={34} />
+            </Link>
           ) : (
             <button onClick={() => open('login')} className="rounded-full bg-[#beff00] px-4 py-1.5 font-semibold text-zinc-950 hover:bg-[#c9ff2a]">
               Войти

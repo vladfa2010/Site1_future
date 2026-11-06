@@ -5,6 +5,7 @@ export interface AuthUser {
   email: string;
   role: string;
   displayName: string | null;
+  avatar?: string | null;
 }
 
 interface AuthState {
@@ -12,9 +13,10 @@ interface AuthState {
   login: (email: string, password: string) => Promise<void>;
   register: (username: string, email: string, password: string) => Promise<void>;
   logout: () => void;
+  refresh: () => Promise<void>;
 }
 
-const AuthContext = createContext<AuthState>({ user: null, login: async () => {}, register: async () => {}, logout: () => {} });
+const AuthContext = createContext<AuthState>({ user: null, login: async () => {}, register: async () => {}, logout: () => {}, refresh: async () => {} });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(() => {
@@ -64,7 +66,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
   };
 
-  return <AuthContext.Provider value={{ user, login, register, logout }}>{children}</AuthContext.Provider>;
+  // перечитать профиль с сервера (после смены аватара и т.п.)
+  const refresh = async () => {
+    const token = localStorage.getItem('token');
+    if (!token) return;
+    try {
+      const res = await fetch('/api/auth/me', { headers: { Authorization: `Bearer ${token}` } });
+      if (!res.ok) return;
+      const data = await res.json();
+      localStorage.setItem('user', JSON.stringify(data.user));
+      setUser(data.user);
+    } catch {
+      /* offline — оставляем как есть */
+    }
+  };
+
+  return <AuthContext.Provider value={{ user, login, register, logout, refresh }}>{children}</AuthContext.Provider>;
 }
 
 export const useAuth = () => useContext(AuthContext);

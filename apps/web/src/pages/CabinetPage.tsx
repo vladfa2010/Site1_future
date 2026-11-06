@@ -6,6 +6,7 @@ import { Breadcrumbs } from '../components/Breadcrumbs';
 import { ArticleCard } from '../components/ArticleCard';
 import { useFavorites } from '../favorites';
 import { TelegramConnect } from '../components/TelegramConnect';
+import { Avatar, AVATAR_PRESET } from '../components/Avatar';
 import type { ArticleListItem } from '../api';
 
 type Tab = 'favorites' | 'feed' | 'subscriptions' | 'tariff' | 'notifications';
@@ -27,7 +28,7 @@ interface FavoriteRow {
 }
 
 export default function CabinetPage() {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const { open } = useAuthModal();
   const [tab, setTab] = useState<Tab>('favorites');
 
@@ -46,7 +47,20 @@ export default function CabinetPage() {
   return (
     <div>
       <Breadcrumbs items={[{ label: 'Личный кабинет' }]} />
-      <h1 className="text-2xl font-bold">Кабинет: {user.displayName ?? user.email}</h1>
+
+      {/* Профиль: аватар, имя, выход (сюда переехал «Выйти» из шапки) */}
+      <header className="flex items-center gap-4">
+        <Avatar avatar={user.avatar} name={user.displayName} size={64} />
+        <div className="min-w-0 flex-1">
+          <h1 className="truncate text-2xl font-bold">{user.displayName ?? user.email}</h1>
+          <p className="text-sm text-zinc-500">{user.email}</p>
+        </div>
+        <button onClick={logout} className="shrink-0 rounded-full border border-[#2a2a2a] px-4 py-2 text-sm text-zinc-400 hover:border-red-500/50 hover:text-red-400">
+          Выйти
+        </button>
+      </header>
+
+      <AvatarPicker current={user.avatar} />
 
       <div className="mt-6 flex flex-wrap gap-2 border-b border-[#2a2a2a] pb-4">
         {TABS.map((t) => (
@@ -69,6 +83,46 @@ export default function CabinetPage() {
       </div>
 
       <DeleteAccountBlock />
+    </div>
+  );
+}
+
+/* ---------- Аватар: выбор иконки из пресета ---------- */
+function AvatarPicker({ current }: { current?: string | null }) {
+  const { refresh } = useAuth();
+  const [selected, setSelected] = useState(current ?? null);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  const pick = async (emoji: string) => {
+    setSelected(emoji);
+    await fetch('/api/avatar', { method: 'PUT', headers: authed(), body: JSON.stringify({ avatar: emoji }) });
+    refresh();
+    setNotice('Аватар обновлён ✓');
+    setTimeout(() => setNotice(null), 2000);
+  };
+
+  return (
+    <div className="mt-5">
+      <div className="flex items-center gap-3">
+        <span className="text-sm text-zinc-500">Иконка профиля:</span>
+        {notice && <span className="text-xs text-[#c9ff2a]">{notice}</span>}
+      </div>
+      <div className="mt-2 flex flex-wrap gap-2">
+        {AVATAR_PRESET.map((a) => (
+          <button
+            key={a.emoji}
+            type="button"
+            onClick={() => void pick(a.emoji)}
+            title="Выбрать иконку"
+            className={`flex h-11 w-11 items-center justify-center rounded-full text-xl transition-transform ${
+              selected === a.emoji ? 'ring-2 ring-[#beff00] ring-offset-2 ring-offset-black' : 'opacity-70 hover:scale-110 hover:opacity-100'
+            }`}
+            style={{ background: a.bg }}
+          >
+            {a.emoji}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }

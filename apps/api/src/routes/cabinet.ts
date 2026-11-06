@@ -6,7 +6,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { and, desc, eq, inArray, sql, type SQL } from 'drizzle-orm';
 import {
-  db, favorites, subscriptions, articles, companies, trends, stories,
+  db, favorites, subscriptions, articles, companies, trends, stories, users,
   articleCompanies, articleTrends, articleIndustries, articleTickers, media,
   notificationSettings,
 } from '@newinvest/db';
@@ -151,6 +151,18 @@ cabinetRouter.delete('/subscriptions/:type/:id', async (req, res) => {
 cabinetRouter.get('/subscriptions', async (req, res) => {
   const rows = await db.select().from(subscriptions).where(eq(subscriptions.userId, req.user!.id));
   res.json({ subscriptions: rows });
+});
+
+// PUT /api/avatar — выбор иконки из пресета
+cabinetRouter.put('/avatar', async (req, res) => {
+  const parsed = z.object({ avatar: z.string().max(8) }).safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'validation' });
+    return;
+  }
+  const [row] = await db.update(users).set({ avatar: parsed.data.avatar }).where(eq(users.id, req.user!.id))
+    .returning({ id: users.id, avatar: users.avatar });
+  res.json({ avatar: row.avatar });
 });
 
 // ---------- Настройки уведомлений ----------

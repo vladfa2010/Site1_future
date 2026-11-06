@@ -28,6 +28,7 @@ export const users = pgTable('users', {
   passwordHash: text('password_hash').notNull(),
   displayName: text('display_name'),
   role: text('role').notNull().default('reader'), // super_admin | admin | author | reader
+  avatar: text('avatar'),                                             // эмодзи-иконка из пресета (10 шт)
   tariffId: integer('tariff_id').references(() => tariffPlans.id), // пейволл: тариф юзера
   oldWpId: integer('old_wp_id'),                                    // миграция из Ultimate Member
   createdAt: createdAt(),

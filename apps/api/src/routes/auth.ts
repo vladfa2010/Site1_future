@@ -57,7 +57,7 @@ authRouter.post('/register', async (req, res) => {
 // GET /api/auth/me — текущий пользователь по токену (SSO-проброс между сайтом и админкой)
 authRouter.get('/me', authRequired, async (req, res) => {
   const [user] = await db.select({
-    id: users.id, email: users.email, displayName: users.displayName, role: users.role,
+    id: users.id, email: users.email, displayName: users.displayName, role: users.role, avatar: users.avatar,
   }).from(users).where(eq(users.id, req.user!.id)).limit(1);
   if (!user) {
     res.status(401).json({ error: 'unauthorized' });
