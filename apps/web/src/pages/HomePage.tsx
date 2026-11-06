@@ -4,6 +4,8 @@ import { api } from '../api';
 import { ArticleCard } from '../components/ArticleCard';
 import { IdeaCard } from '../components/IdeaCard';
 import { Carousel, CAROUSEL_ITEM } from '../components/Carousel';
+import { CoverThumb } from '../components/CoverThumb';
+import { ABOUT_PAGES } from '../data/about';
 
 /** Секция с заголовком, ссылкой «все →» и каруселью. Пустые секции не рендерятся (4.3). */
 function Section({
@@ -74,6 +76,21 @@ export default function HomePage() {
           Не удалось загрузить данные с сервера. Проверьте, что API запущен (npm run dev в корне проекта).
         </p>
       )}
+
+      {/* «Кто мы и зачем» — блок из 4 карточек, как у донора */}
+      <section>
+        <div className="mb-4 flex items-baseline justify-between">
+          <h2 className="text-lg font-semibold uppercase tracking-wide text-zinc-400">Кто мы и зачем</h2>
+        </div>
+        <Carousel>
+          {ABOUT_PAGES.map((p) => (
+            <Link key={p.slug} to={`/${p.slug}`} className={CAROUSEL_ITEM}>
+              <CoverThumb title={p.title} coverUrl={p.image} />
+              <p className="mt-2 line-clamp-2 text-sm text-zinc-400">{p.paragraphs[0]}</p>
+            </Link>
+          ))}
+        </Carousel>
+      </section>
 
       {/* ТРЕНДЫ — карточки трендов */}
       <Section title="Тренды" linkTo="/portfolio" itemsCount={trends?.trends.length ?? 0}>
