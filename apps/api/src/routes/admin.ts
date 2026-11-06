@@ -3,8 +3,7 @@
  */
 import { Router } from 'express';
 import { z } from 'zod';
-import { and, desc, eq, gte, sql, type SQL } from 'drizzle-orm';
-import { db, users, redirects, articleViews, articles } from '@newinvest/db';
+import { and, desc, eq, gte, sql, type SQL } from 'drizzle-orm';import { db, users, redirects, articleViews, articles } from '@newinvest/db';
 import { authRequired, requireRole, ADMIN_ROLES } from '../middleware/auth.js';
 
 export const adminRouter = Router();
@@ -27,15 +26,47 @@ adminRouter.get('/users', authRequired, requireRole(...ADMIN_ROLES), async (_req
   res.json({ users: rows });
 });
 
-// смена роли — только super_admin
-const roleSchema = z.object({ role: z.enum(['super_admin', 'admin', 'author', 'reader']) });
+// редактирование пользователя — только super_admin
+const userPatchSchema = z.object({
+  role: z.enum(['super_admin', 'admin', 'author', 'reader']).optional(),
+  email: z.string().email().optional(),
+  displayName: z.string().trim().min(2).max(40).optional(),
+});
+
 adminRouter.patch('/users/:id', authRequired, requireRole('super_admin'), async (req, res) => {
-  const parsed = roleSchema.safeParse(req.body);
+  const id = Number(req.params.id);
+  const parsed = userPatchSchema.safeParse(req.body);
   if (!parsed.success) {
-    res.status(400).json({ error: 'validation' });
+    res.status(400).json({ error: 'validation', details: parsed.error.flatten() });
     return;
   }
-  const [row] = await db.update(users).set({ role: parsed.data.role }).where(eq(users.id, Number(req.params.id))).returning({ id: users.id, email: users.email, role: users.role });
+  const { role, email, displayName } = parsed.data;
+
+  // уникальность email/displayName при смене (case-insensitive), исключая самого юзера
+  if (email) {
+    const [dup] = await db.select({ id: users.id }).from(users)
+      .where(and(sql`lower(${users.email}) = lower(${email})`, sql`${users.id} <> ${id}`)).limit(1);
+    if (dup) {
+      res.status(409).json({ error: 'На эту почту уже зарегистрирован аккаунт', code: 'EMAIL_EXISTS' });
+      return;
+    }
+  }
+  if (displayName) {
+    const [dup] = await db.select({ id: users.id }).from(users)
+      .where(and(sql`lower(${users.displayName}) = lower(${displayName})`, sql`${users.id} <> ${id}`)).limit(1);
+    if (dup) {
+      res.status(409).json({ error: 'Это имя уже занято — придумайте другое', code: 'USERNAME_EXISTS' });
+      return;
+    }
+  }
+
+  const updates: Record<string, unknown> = {};
+  if (role) updates.role = role;
+  if (email) updates.email = email;
+  if (displayName) updates.displayName = displayName;
+
+  const [row] = await db.update(users).set(updates).where(eq(users.id, id))
+    .returning({ id: users.id, email: users.email, displayName: users.displayName, role: users.role });
   if (!row) {
     res.status(404).json({ error: 'not found' });
     return;

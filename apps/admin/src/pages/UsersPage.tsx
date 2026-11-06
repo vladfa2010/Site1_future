@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router';
 import { api } from '../api';
 import { useAuth } from '../auth';
 
@@ -36,7 +37,7 @@ export default function UsersPage() {
       <div className="card overflow-x-auto p-0">
         <table className="w-full">
           <thead className="border-b border-zinc-800">
-            <tr><th className="th">Email</th><th className="th">Имя</th><th className="th">Роль</th><th className="th">Просмотры</th><th className="th">Регистрация</th></tr>
+            <tr><th className="th">Email</th><th className="th">Имя</th><th className="th">Роль</th><th className="th">Просмотры</th><th className="th">Регистрация</th>{isSuper && <th className="th" />}</tr>
           </thead>
           <tbody>
             {rows.map((u) => (
@@ -54,6 +55,11 @@ export default function UsersPage() {
                 </td>
                 <td className="td text-zinc-400">{u.views}</td>
                 <td className="td text-zinc-500">{u.createdAt?.slice(0, 10)}</td>
+                {isSuper && (
+                  <td className="td">
+                    <Link to={`/users/${u.id}/edit`} className="text-orange-400 hover:underline">ред.</Link>
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>
