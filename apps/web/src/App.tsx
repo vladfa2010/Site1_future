@@ -10,6 +10,7 @@ import TypePage from './pages/TypePage';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import AboutPage from './pages/AboutPage';
+import ProposePage from './pages/ProposePage';
 
 export default function App() {
   return (
@@ -25,6 +26,7 @@ export default function App() {
         <Route path="/portfolio" element={<PipelinePage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
+        <Route path="/propose" element={<ProposePage />} />
         {/* «кто мы и зачем» — как у донора */}
         <Route path="/o-nas" element={<AboutPage slug="o-nas" />} />
         <Route path="/zachem" element={<AboutPage slug="zachem" />} />

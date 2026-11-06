@@ -8,8 +8,9 @@ import { and, desc, eq, sql, type SQL } from 'drizzle-orm';
 import {
   db, articles, ARTICLE_TYPES, type ArticleType,
   companies, trends, articleCompanies, articleTrends, media,
-  metaFields, articleViews,
+  metaFields, articleViews, users,
 } from '@newinvest/db';
+import { uniqueSlug, plainTextToHtml } from '../utils/slug.js';
 import { optionalAuth, authRequired, requireRole, ADMIN_ROLES } from '../middleware/auth.js';
 
 export const articlesRouter = Router();
@@ -160,6 +161,35 @@ articlesRouter.patch('/:id', authRequired, requireRole('author', 'admin', 'super
     await saveMetaDescription(id, metaDescription);
   }
   res.json({ article: row });
+});
+
+// POST /api/articles/propose — предложить новость/идею (любой залогиненный).
+// Читатель (reader) при первом предложении автоматически получает роль author.
+articlesRouter.post('/propose', authRequired, async (req, res) => {
+  const parsed = z.object({
+    type: z.enum(['novost', 'ideya']),
+    title: z.string().min(5).max(200),
+    text: z.string().min(20),
+    sourceUrl: z.string().url().optional(),
+  }).safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'validation', details: parsed.error.flatten() });
+    return;
+  }
+  const { type, title, text, sourceUrl } = parsed.data;
+
+  if (req.user!.role === 'reader') {
+    await db.update(users).set({ role: 'author' }).where(eq(users.id, req.user!.id));
+  }
+  const slug = await uniqueSlug(type, title);
+  const [row] = await db.insert(articles).values({
+    type, slug, title,
+    contentHtml: plainTextToHtml(text),
+    sourceUrl: sourceUrl ?? null,
+    authorId: req.user!.id,
+    status: 'draft',
+  }).returning({ id: articles.id, type: articles.type, slug: articles.slug, title: articles.title, status: articles.status });
+  res.status(201).json({ article: row, roleUpgraded: req.user!.role === 'reader' });
 });
 
 // POST /api/articles/:id/publish — только admin/super_admin

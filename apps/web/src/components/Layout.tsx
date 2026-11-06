@@ -1,4 +1,4 @@
-import { Link } from 'react-router';
+import { Link, useNavigate } from 'react-router';
 import { useAuth } from '../auth';
 
 // Админка — отдельное приложение (порт 5174 в dev; в проде — тот же origin, путь /admin)
@@ -6,7 +6,16 @@ const ADMIN_URL = import.meta.env.VITE_ADMIN_URL ?? 'http://localhost:5174';
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuth();
+  const navigate = useNavigate();
   const isAdmin = user?.role === 'admin' || user?.role === 'super_admin';
+
+  const onPropose = () => {
+    if (!user) {
+      navigate('/login', { state: { from: '/propose' } });
+      return;
+    }
+    navigate('/propose');
+  };
   return (
     <div className="mx-auto flex min-h-screen max-w-5xl flex-col px-4">
       <header className="flex items-center justify-between border-b border-zinc-800 py-4">
@@ -39,8 +48,16 @@ export function Layout({ children }: { children: React.ReactNode }) {
         </nav>
       </header>
       <main className="flex-1 py-8">{children}</main>
-      <footer className="border-t border-zinc-800 py-6 text-sm text-zinc-500">
-        Инвестиционно про будущее — тренды, идеи и сделки
+      <footer className="border-t border-zinc-800 py-6">
+        <div className="flex flex-col items-center gap-3 text-center">
+          <button
+            onClick={onPropose}
+            className="rounded-full border border-orange-500/50 px-6 py-2.5 text-sm font-semibold text-orange-400 transition-colors hover:bg-orange-500 hover:text-zinc-950"
+          >
+            ✉ Предложить новость или идею
+          </button>
+          <p className="text-sm text-zinc-500">Инвестиционно про будущее — тренды, идеи и сделки</p>
+        </div>
       </footer>
     </div>
   );
