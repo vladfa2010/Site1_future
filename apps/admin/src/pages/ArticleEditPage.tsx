@@ -1,6 +1,11 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, lazy, Suspense } from 'react';
 import { useParams, useNavigate } from 'react-router';
 import { api } from '../api';
+
+// TipTap тяжёлый (~450 KB) — грузим редактор лениво, только в редакторе статьи
+const RichTextEditor = lazy(() =>
+  import('../components/RichTextEditor').then((m) => ({ default: m.RichTextEditor })),
+);
 
 const TYPES = ['novost', 'ideya', 'sobytie', 'analitika', 'interesnoe'] as const;
 const TYPE_LABELS: Record<string, string> = {
@@ -303,8 +308,10 @@ export default function ArticleEditPage() {
           <input className="input" maxLength={300} value={form.metaDescription} onChange={set('metaDescription')} />
         </div>
         <div>
-          <label className="label">Контент (HTML — сюда ляжет TipTap, раздел 6.2)</label>
-          <textarea className="input font-mono" rows={12} value={form.contentHtml} onChange={set('contentHtml')} />
+          <label className="label">Контент</label>
+          <Suspense fallback={<div className="input min-h-[320px] animate-pulse text-zinc-500">Загружаем редактор…</div>}>
+            <RichTextEditor value={form.contentHtml} onChange={(html) => setForm((f) => ({ ...f, contentHtml: html }))} />
+          </Suspense>
         </div>
       </div>
 
