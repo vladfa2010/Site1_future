@@ -16,6 +16,7 @@ import {
   articleCompanies,
   articleTrends,
   fundingRounds,
+  media,
 } from '@newinvest/db';
 import { authRequired, requireRole } from '../middleware/auth.js';
 
@@ -243,9 +244,11 @@ entitiesRouter.get('/trends/:slug', async (req, res) => {
       title: articles.title,
       excerpt: articles.excerpt,
       publishedAt: articles.publishedAt,
+      coverUrl: media.filePath,
     })
     .from(articleTrends)
     .innerJoin(articles, eq(articleTrends.articleId, articles.id))
+    .leftJoin(media, eq(articles.coverMediaId, media.id))
     .where(and(eq(articleTrends.trendId, trend.id), eq(articles.status, 'published')))
     .orderBy(sql`${articles.publishedAt} desc nulls last`)
     .limit(50);
