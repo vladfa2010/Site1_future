@@ -258,6 +258,32 @@ export const articleStories = pgTable(
   (t) => [primaryKey({ columns: [t.articleId, t.storyId] })],
 );
 
+export const articleDealPhases = pgTable(
+  'article_deal_phases',
+  {
+    articleId: integer('article_id')
+      .notNull()
+      .references(() => articles.id, { onDelete: 'cascade' }),
+    phaseId: integer('phase_id')
+      .notNull()
+      .references(() => dealPhases.id, { onDelete: 'cascade' }),
+  },
+  (t) => [primaryKey({ columns: [t.articleId, t.phaseId] })],
+);
+
+export const articleDealStages = pgTable(
+  'article_deal_stages',
+  {
+    articleId: integer('article_id')
+      .notNull()
+      .references(() => articles.id, { onDelete: 'cascade' }),
+    stageId: integer('stage_id')
+      .notNull()
+      .references(() => dealStages.id, { onDelete: 'cascade' }),
+  },
+  (t) => [primaryKey({ columns: [t.articleId, t.stageId] })],
+);
+
 // ---------- Словари ----------
 
 export const dealStages = pgTable('deal_stages', {
