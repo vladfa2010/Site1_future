@@ -6,6 +6,7 @@ import CompanyPage from './pages/CompanyPage';
 import TrendPage from './pages/TrendPage';
 import StoryPage from './pages/StoryPage';
 import PipelinePage from './pages/PipelinePage';
+import TypePage from './pages/TypePage';
 
 export default function App() {
   return (
@@ -19,6 +20,8 @@ export default function App() {
         <Route path="/trend/:slug" element={<TrendPage />} />
         <Route path="/syuzhet/:slug" element={<StoryPage />} />
         <Route path="/portfolio" element={<PipelinePage />} />
+        {/* архивы типов: /novost /ideya /analitika /interesnoe /sobytie */}
+        <Route path="/:type" element={<TypePage />} />
         <Route path="*" element={<p className="text-zinc-400">Страница не найдена</p>} />
       </Routes>
     </Layout>
