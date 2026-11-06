@@ -26,7 +26,7 @@ export function IdeaChart({ symbol }: { symbol: string }) {
   const PAD = { l: 8, r: 56, t: 12, b: 20 };
 
   if (!data || data.points.length < 2) {
-    return <div className="h-[180px] animate-pulse rounded-lg bg-zinc-900" />;
+    return <div className="h-[180px] animate-pulse rounded-lg bg-[#191919]" />;
   }
 
   const pts = data.points;
@@ -60,7 +60,7 @@ export function IdeaChart({ symbol }: { symbol: string }) {
           </span>
         </span>
       </div>
-      <svg viewBox={`0 0 ${W} ${H}`} className="w-full rounded-lg border border-zinc-800 bg-zinc-900" role="img" aria-label={`График ${symbol}`}>
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full rounded-lg border border-[#2a2a2a] bg-[#191919]" role="img" aria-label={`График ${symbol}`}>
         <defs>
           <linearGradient id={`g-${symbol}`} x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor={color} stopOpacity="0.25" />

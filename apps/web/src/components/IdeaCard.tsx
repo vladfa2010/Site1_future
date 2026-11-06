@@ -13,7 +13,7 @@ export function IdeaCard({ idea }: { idea: Idea }) {
       <div className="relative">
         <CoverThumb title={idea.title} coverUrl={idea.coverUrl} />
         {/* бейдж поверх обложки */}
-        <span className="absolute top-3 left-3 rounded-full bg-zinc-950/80 px-2.5 py-1 text-xs text-orange-400 backdrop-blur">
+        <span className="absolute top-3 left-3 rounded-full bg-black/80 px-2.5 py-1 text-xs text-[#c9ff2a] backdrop-blur">
           {badge}
         </span>
       </div>

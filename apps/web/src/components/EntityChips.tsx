@@ -14,7 +14,7 @@ export function EntityChips({ relations }: { relations: ArticleRelations }) {
         <Link
           key={c.slug}
           to={`/kompaniya/${c.slug}`}
-          className="rounded-full border border-zinc-700 px-3 py-1 text-sm text-zinc-300 hover:border-orange-500"
+          className="rounded-full border border-zinc-700 px-3 py-1 text-sm text-zinc-300 hover:border-[#beff00]"
         >
           🏢 {c.name}
         </Link>
@@ -23,7 +23,7 @@ export function EntityChips({ relations }: { relations: ArticleRelations }) {
         <Link
           key={t.slug}
           to={`/trend/${t.slug}`}
-          className="rounded-full border border-zinc-700 px-3 py-1 text-sm text-zinc-300 hover:border-orange-500"
+          className="rounded-full border border-zinc-700 px-3 py-1 text-sm text-zinc-300 hover:border-[#beff00]"
         >
           📈 {t.name}
         </Link>

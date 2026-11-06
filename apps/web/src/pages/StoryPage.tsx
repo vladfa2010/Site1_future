@@ -25,11 +25,11 @@ export default function StoryPage() {
       </header>
 
       {/* Хронология сюжета */}
-      <ol className="relative space-y-6 border-l border-zinc-800 pl-6">
+      <ol className="relative space-y-6 border-l border-[#2a2a2a] pl-6">
         {articles.map((a) => (
           <li key={a.id} className="relative">
-            <span className="absolute -left-[29px] top-1.5 h-2.5 w-2.5 rounded-full bg-orange-500" />
-            <a href={`/${a.type}/${a.slug}`} className="font-semibold text-zinc-100 hover:text-orange-300">
+            <span className="absolute -left-[29px] top-1.5 h-2.5 w-2.5 rounded-full bg-[#beff00]" />
+            <a href={`/${a.type}/${a.slug}`} className="font-semibold text-zinc-100 hover:text-[#d6ff5c]">
               {a.isPrimary ? '★ ' : ''}
               {a.title}
             </a>

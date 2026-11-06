@@ -35,7 +35,7 @@ function FilterSelect({
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-zinc-200"
+        className="rounded-lg border border-zinc-700 bg-[#191919] px-3 py-2 text-zinc-200"
       >
         <option value="">Все</option>
         {options.map((o) => (
@@ -83,7 +83,7 @@ export default function PipelinePage() {
       <h1 className="text-2xl font-bold">Скринер проектов</h1>
 
       {/* Фильтры: состояние в URL — можно делиться выборкой */}
-      <div className="grid gap-4 rounded-lg border border-zinc-800 bg-zinc-900/50 p-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 rounded-lg border border-[#2a2a2a] bg-[#191919]/50 p-4 sm:grid-cols-2 lg:grid-cols-4">
         <FilterSelect label="Этап сделки" value={phase} options={phases?.phases ?? []} onChange={setFilter('phase')} labels={PHASE_LABELS} />
         <FilterSelect label="Стадия" value={stage} options={stages?.stages ?? []} onChange={setFilter('stage')} />
         <FilterSelect label="Индустрия" value={industry} options={industries?.industries ?? []} onChange={setFilter('industry')} />
@@ -98,7 +98,7 @@ export default function PipelinePage() {
           <Link
             key={idea.id}
             to={`/ideya/${idea.slug}`}
-            className="flex flex-col rounded-lg border border-zinc-800 bg-zinc-900 p-4 transition-colors hover:border-orange-500/50"
+            className="flex flex-col rounded-lg border border-[#2a2a2a] bg-[#191919] p-4 transition-colors hover:border-[#beff00]/50"
           >
             <h3 className="font-semibold leading-snug">{idea.title}</h3>
             {idea.thesis && <p className="mt-2 line-clamp-3 text-sm text-zinc-400">{idea.thesis}</p>}
@@ -107,7 +107,7 @@ export default function PipelinePage() {
             {(idea.stages.length > 0 || idea.industries.length > 0 || idea.phases.length > 0) && (
               <div className="mt-3 flex flex-wrap gap-1.5 text-xs">
                 {idea.phases.map((p) => (
-                  <span key={p} className="rounded-full bg-orange-500/15 px-2 py-0.5 text-orange-400">{p}</span>
+                  <span key={p} className="rounded-full bg-[#beff00]/15 px-2 py-0.5 text-[#c9ff2a]">{p}</span>
                 ))}
                 {idea.stages.map((s) => (
                   <span key={s} className="rounded-full bg-zinc-800 px-2 py-0.5 text-zinc-300">{s}</span>

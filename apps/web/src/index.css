@@ -4,10 +4,10 @@
 
 @layer base {
   body {
-    @apply bg-zinc-950 text-zinc-100 antialiased;
+    @apply bg-black text-zinc-100 antialiased;
   }
   a {
-    @apply text-orange-400 hover:text-orange-300;
+    @apply text-[#c9ff2a] hover:text-[#d6ff5c];
   }
 }
 

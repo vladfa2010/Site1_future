@@ -38,7 +38,7 @@ export default function ArticlePage() {
 
       {/* тезис идеи — только если внесён (4.3) */}
       {article.thesis && (
-        <p className="mt-4 rounded-lg border-l-4 border-orange-500 bg-zinc-900 p-4 text-zinc-300 italic">
+        <p className="mt-4 rounded-lg border-l-4 border-[#beff00] bg-[#191919] p-4 text-zinc-300 italic">
           {article.thesis}
         </p>
       )}
@@ -48,7 +48,7 @@ export default function ArticlePage() {
       </div>
 
       <div
-        className="prose-invert mt-6 space-y-4 leading-relaxed [&_h2]:mt-8 [&_h2]:text-xl [&_h2]:font-bold [&_a]:text-orange-400 [&_p]:text-zinc-300 [&_ul]:list-disc [&_ul]:pl-6"
+        className="prose-invert mt-6 space-y-4 leading-relaxed [&_h2]:mt-8 [&_h2]:text-xl [&_h2]:font-bold [&_a]:text-[#c9ff2a] [&_p]:text-zinc-300 [&_ul]:list-disc [&_ul]:pl-6"
         dangerouslySetInnerHTML={{ __html: sanitizeArticleHtml(article.contentHtml) }}
       />
 

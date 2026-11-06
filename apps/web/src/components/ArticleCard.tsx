@@ -25,7 +25,7 @@ export function ArticleCard({ article }: { article: ArticleListItem }) {
 /** Компактная карточка статьи (для гридов на страницах-архивах) */
 export function ArticleRowCard({ article }: { article: ArticleListItem }) {
   return (
-    <Link to={`/${article.type}/${article.slug}`} className="flex gap-4 rounded-lg border border-zinc-800 bg-zinc-900 p-3 transition-colors hover:border-orange-500/50">
+    <Link to={`/${article.type}/${article.slug}`} className="flex gap-4 rounded-lg border border-[#2a2a2a] bg-[#191919] p-3 transition-colors hover:border-[#beff00]/50">
       {article.coverUrl && (
         <img src={article.coverUrl} alt="" loading="lazy" className="h-20 w-20 shrink-0 rounded-md object-cover" />
       )}

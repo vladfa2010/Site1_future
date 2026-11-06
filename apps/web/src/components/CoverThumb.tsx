@@ -16,7 +16,7 @@ export function CoverThumb({ title, coverUrl, subtitle }: { title: string; cover
       )}
       <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/30 to-transparent" />
       <div className="absolute inset-x-0 bottom-0 p-4">
-        {subtitle && <span className="text-xs uppercase tracking-wide text-orange-400">{subtitle}</span>}
+        {subtitle && <span className="text-xs uppercase tracking-wide text-[#c9ff2a]">{subtitle}</span>}
         <h3 className="mt-1 font-semibold leading-snug text-zinc-100">{title}</h3>
       </div>
     </div>

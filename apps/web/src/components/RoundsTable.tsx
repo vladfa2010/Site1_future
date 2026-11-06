@@ -9,9 +9,9 @@ export function RoundsTable({ rounds }: { rounds: FundingRound[] }) {
   return (
     <section>
       <h2 className="mb-3 text-xl font-bold">Раунды и оценки</h2>
-      <div className="overflow-x-auto rounded-lg border border-zinc-800">
+      <div className="overflow-x-auto rounded-lg border border-[#2a2a2a]">
         <table className="w-full text-sm">
-          <thead className="bg-zinc-900 text-left text-zinc-400">
+          <thead className="bg-[#191919] text-left text-zinc-400">
             <tr>
               <th className="p-3">Дата</th>
               <th className="p-3">Раунд</th>
@@ -23,7 +23,7 @@ export function RoundsTable({ rounds }: { rounds: FundingRound[] }) {
           </thead>
           <tbody>
             {rounds.map((r) => (
-              <tr key={r.id} className="border-t border-zinc-800">
+              <tr key={r.id} className="border-t border-[#2a2a2a]">
                 <td className="p-3 whitespace-nowrap">{r.date ?? '—'}</td>
                 <td className="p-3">{r.stage ?? '—'}</td>
                 <td className="p-3">

@@ -33,7 +33,7 @@ function Section({
 
 // ЗНАНИЯ — баннеры как у донора (большие карточки с фоном)
 const KNOWLEDGE = [
-  { title: 'Инвестиционный курс «Отправь свои деньги на работу»', desc: 'Система от первой сделки до портфеля', bg: 'from-orange-600/40 to-zinc-900' },
+  { title: 'Инвестиционный курс «Отправь свои деньги на работу»', desc: 'Система от первой сделки до портфеля', bg: 'from-[#9ed100]/40 to-zinc-900' },
   { title: 'Клуб «Инсайдер»', desc: 'Закрытое сообщество: идеи раньше, разборы глубже', bg: 'from-violet-600/40 to-zinc-900' },
   { title: 'Личная консультация', desc: 'Разбор вашего портфеля и стратегии', bg: 'from-cyan-600/40 to-zinc-900' },
 ];
@@ -97,15 +97,15 @@ export default function HomePage() {
       {/* ТРЕНДЫ — спецкарточка «что такое тренд» + карточки трендов, как у донора */}
       <Section title="Тренды" itemsCount={(trends?.trends.length ?? 0) + 1}>
         <div className={CAROUSEL_ITEM}>
-          <div className="flex aspect-[3/4] w-full flex-col rounded-lg border border-orange-500/30 bg-gradient-to-br from-zinc-900 to-zinc-950 p-5">
-            <h3 className="text-xl font-bold uppercase tracking-wide text-orange-400">Тренды</h3>
+          <div className="flex aspect-[3/4] w-full flex-col rounded-lg border border-[#beff00]/30 bg-gradient-to-br from-zinc-900 to-zinc-950 p-5">
+            <h3 className="text-xl font-bold uppercase tracking-wide text-[#c9ff2a]">Тренды</h3>
             <p className="mt-3 text-sm leading-relaxed text-zinc-300">
               То, что уже меняет мир. Великие идеи, инновации, новые сектора в экономике. То, о чем
               большинство узнают в будущем… а ты сейчас!
             </p>
             <Link
               to="/portfolio"
-              className="mt-auto rounded-full bg-orange-500 px-4 py-2 text-center text-sm font-bold text-zinc-950 hover:bg-orange-400"
+              className="mt-auto rounded-full bg-[#beff00] px-4 py-2 text-center text-sm font-bold text-zinc-950 hover:bg-[#c9ff2a]"
             >
               Посмотреть в будущее
             </Link>
@@ -113,8 +113,8 @@ export default function HomePage() {
         </div>
         {trends?.trends.slice(0, 12).map((t) => (
           <Link key={t.slug} to={`/trend/${t.slug}`} className={`group ${CAROUSEL_ITEM}`}>
-            <div className="relative flex aspect-[3/4] w-full flex-col justify-end overflow-hidden rounded-lg border border-zinc-800 bg-gradient-to-br from-zinc-800 to-zinc-900 p-4 transition-colors group-hover:border-orange-500/50">
-              <span className="text-xs uppercase tracking-wide text-orange-400">Тренд</span>
+            <div className="relative flex aspect-[3/4] w-full flex-col justify-end overflow-hidden rounded-lg border border-[#2a2a2a] bg-gradient-to-br from-zinc-800 to-zinc-900 p-4 transition-colors group-hover:border-[#beff00]/50">
+              <span className="text-xs uppercase tracking-wide text-[#c9ff2a]">Тренд</span>
               <h3 className="mt-1 text-xl font-bold">{t.name}</h3>
               {t.description && (
                 <p className="mt-2 line-clamp-3 text-sm text-zinc-400">{t.description.replace(/<[^>]*>/g, ' ')}</p>
@@ -131,14 +131,14 @@ export default function HomePage() {
           <div className="mb-4 flex items-baseline justify-between">
             <h2 className="text-lg font-semibold uppercase tracking-wide text-zinc-400">Лента событий</h2>
           </div>
-          <ol className="divide-y divide-zinc-800/60">
+          <ol className="divide-y divide-[#2a2a2a]/60">
             {feed?.articles.slice(0, 20).map((a) => (
               <li key={a.id}>
                 <Link to={`/${a.type}/${a.slug}`} className="group flex items-baseline gap-3 py-2.5">
                   <span className="shrink-0 rounded-full bg-zinc-800/80 px-2 py-0.5 text-xs text-zinc-400">
                     {TYPE_LABELS[a.type] ?? a.type}
                   </span>
-                  <span className="flex-1 truncate text-zinc-200 group-hover:text-orange-300">{a.title}</span>
+                  <span className="flex-1 truncate text-zinc-200 group-hover:text-[#d6ff5c]">{a.title}</span>
                   <span className="shrink-0 text-xs text-zinc-600">{a.publishedAt?.slice(0, 10)}</span>
                 </Link>
               </li>
@@ -167,12 +167,12 @@ export default function HomePage() {
       </Section>
 
       {/* CTA-баннер как у донора */}
-      <div className="relative overflow-hidden rounded-xl border border-orange-500/30 bg-gradient-to-r from-orange-600/20 via-zinc-900 to-zinc-900 p-8 text-center sm:p-12">
+      <div className="relative overflow-hidden rounded-xl border border-[#beff00]/30 bg-gradient-to-r from-[#9ed100]/20 via-zinc-900 to-zinc-900 p-8 text-center sm:p-12">
         <h2 className="text-2xl font-bold">Не упусти возможность</h2>
         <p className="mx-auto mt-2 max-w-xl text-zinc-400">
           Идеи и сделки из мира будущего — в одном портфеле. От глобального тренда до сделки.
         </p>
-        <Link to="/portfolio" className="mt-5 inline-block rounded-full bg-orange-500 px-6 py-2.5 font-semibold text-zinc-950 hover:bg-orange-400">
+        <Link to="/portfolio" className="mt-5 inline-block rounded-full bg-[#beff00] px-6 py-2.5 font-semibold text-zinc-950 hover:bg-[#c9ff2a]">
           Смотреть портфель
         </Link>
       </div>
@@ -189,7 +189,7 @@ export default function HomePage() {
           <div key={k.title} className={`relative flex aspect-[3/4] w-full flex-col justify-end overflow-hidden rounded-lg bg-gradient-to-br p-5 ${k.bg} ${CAROUSEL_ITEM}`}>
             <h3 className="text-lg font-bold leading-snug">{k.title}</h3>
             <p className="mt-2 text-sm text-zinc-300">{k.desc}</p>
-            <span className="mt-3 inline-block w-fit rounded-full bg-zinc-950/60 px-4 py-1.5 text-sm font-semibold text-orange-400">
+            <span className="mt-3 inline-block w-fit rounded-full bg-black/60 px-4 py-1.5 text-sm font-semibold text-[#c9ff2a]">
               Подробнее
             </span>
           </div>

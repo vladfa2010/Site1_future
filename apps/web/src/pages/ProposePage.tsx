@@ -15,7 +15,7 @@ export default function ProposePage() {
       <div className="mx-auto max-w-md py-10 text-center">
         <h1 className="text-2xl font-bold">Предложить новость или идею</h1>
         <p className="mt-3 text-zinc-400">Войдите или зарегистрируйтесь — и отправьте материал редакции.</p>
-        <Link to="/login" state={{ from: '/propose' }} className="mt-6 inline-block rounded-full bg-orange-500 px-6 py-2.5 font-semibold text-zinc-950 hover:bg-orange-400">
+        <Link to="/login" state={{ from: '/propose' }} className="mt-6 inline-block rounded-full bg-[#beff00] px-6 py-2.5 font-semibold text-zinc-950 hover:bg-[#c9ff2a]">
           Войти
         </Link>
         <p className="mt-4 text-sm text-zinc-500">
@@ -56,7 +56,7 @@ export default function ProposePage() {
         <p className="mt-2 text-zinc-400">
           «{done.title}» отправлено редакции. После проверки материал появится на сайте.
         </p>
-        <Link to="/" className="mt-6 inline-block rounded-full bg-orange-500 px-6 py-2.5 font-semibold text-zinc-950 hover:bg-orange-400">
+        <Link to="/" className="mt-6 inline-block rounded-full bg-[#beff00] px-6 py-2.5 font-semibold text-zinc-950 hover:bg-[#c9ff2a]">
           На главную
         </Link>
       </div>
@@ -78,7 +78,7 @@ export default function ProposePage() {
               key={t}
               type="button"
               onClick={() => setForm({ ...form, type: t })}
-              className={`rounded-full px-4 py-2 text-sm font-semibold ${form.type === t ? 'bg-orange-500 text-zinc-950' : 'bg-zinc-800 text-zinc-300'}`}
+              className={`rounded-full px-4 py-2 text-sm font-semibold ${form.type === t ? 'bg-[#beff00] text-zinc-950' : 'bg-zinc-800 text-zinc-300'}`}
             >
               {t === 'novost' ? 'Новость' : 'Идея'}
             </button>
@@ -89,7 +89,7 @@ export default function ProposePage() {
           <input
             required
             minLength={5}
-            className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 focus:border-orange-500 focus:outline-none"
+            className="w-full rounded-lg border border-zinc-700 bg-[#191919] px-3 py-2 focus:border-[#beff00] focus:outline-none"
             value={form.title}
             onChange={(e) => setForm({ ...form, title: e.target.value })}
           />
@@ -100,7 +100,7 @@ export default function ProposePage() {
             required
             minLength={20}
             rows={8}
-            className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 focus:border-orange-500 focus:outline-none"
+            className="w-full rounded-lg border border-zinc-700 bg-[#191919] px-3 py-2 focus:border-[#beff00] focus:outline-none"
             value={form.text}
             onChange={(e) => setForm({ ...form, text: e.target.value })}
           />
@@ -110,13 +110,13 @@ export default function ProposePage() {
           <input
             type="url"
             placeholder="https://…"
-            className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 focus:border-orange-500 focus:outline-none"
+            className="w-full rounded-lg border border-zinc-700 bg-[#191919] px-3 py-2 focus:border-[#beff00] focus:outline-none"
             value={form.sourceUrl}
             onChange={(e) => setForm({ ...form, sourceUrl: e.target.value })}
           />
         </div>
         {error && <p className="text-sm text-red-400">{error}</p>}
-        <button type="submit" disabled={busy} className="rounded-full bg-orange-500 px-6 py-2.5 font-semibold text-zinc-950 hover:bg-orange-400 disabled:opacity-50">
+        <button type="submit" disabled={busy} className="rounded-full bg-[#beff00] px-6 py-2.5 font-semibold text-zinc-950 hover:bg-[#c9ff2a] disabled:opacity-50">
           {busy ? 'Отправляем…' : 'Отправить редакции'}
         </button>
       </form>
