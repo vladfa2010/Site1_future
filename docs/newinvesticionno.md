@@ -352,6 +352,8 @@ CREATE INDEX ON article_embeddings USING hnsw (embedding vector_cosine_ops);
 
 Открыто: отдельное приложение админки или защищённый раздел основного SPA (склоняюсь к отдельному Vite-приложению — проще права и деплой).
 
+**Редактор статей (решено 2026-11-06): TipTap 3** — как в PULSE (`@tiptap/react` + starter-kit + table + image). Причины: выдаёт HTML в `articles.content_html` (паритет со схемой БД), открывает LLM-HTML из бота wptg без конвертации, один пакет для автора (site) и админки. Пайплайн: TipTap HTML → `sanitize-html` (теги p/h2/h3/ul/li/strong/a/img, защита от XSS и мусора) → БД; excerpt — plain-text из редактора или вручную.
+
 ### 6.3 Роли и доступ (решено 2026-11-06)
 
 | Роль | Где работает | Что может |
@@ -527,3 +529,4 @@ investicionno_rf/
 | 2026-11-06 | **Прототип работает локально**: Homebrew Postgres 17 + pgvector 0.8.7 (Docker на машине нет — заменён локальной БД, compose оставлен для сервера). Схема Drizzle (27 таблиц) → миграция применена → смоук-тест зелёный (npm run db:smoke) |
 | 2026-11-06 | Изучены репозитории PULSE (backend + frontend). Раздел 7: совпадение стека, TEI + Qwen3-Embedding-0.6B (dim 1024 = наш выбор), гибридный поиск, трёхзонная кластеризация каскадов → идеи для Сюжетов. Репозитории склонированы в reference/ (.gitignore) |
 | 2026-11-06 | Сверен TECH_STACK.md с package.json обоих репозиториев — факт совпадает. Фронтенд-наследие для apps/web: TanStack Query 5, TipTap 3, react-helmet-async, ECharts, Vitest/Playwright, DESIGN_SYSTEM.md как основа визуальной семьи |
+| 2026-11-06 | **apps/api работает**: Express + JWT + bcrypt, роли super_admin/admin/author/reader (раздел 6.3). Эндпоинты: register/login, список/просмотр статей (публично — только published), author → draft, публикация — admin. Сквозные curl-тесты пройдены. Запуск: npm run seed -w @newinvest/api, dev: npm run dev -w @newinvest/api |
