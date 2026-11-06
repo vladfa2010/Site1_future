@@ -85,8 +85,9 @@ adminRouter.patch('/users/:id', authRequired, requireRole('super_admin'), async 
 
 // ---------- Редиректы ----------
 
-adminRouter.get('/redirects', authRequired, requireRole(...ADMIN_ROLES), async (_req, res) => {
-  res.json({ redirects: await db.select().from(redirects).orderBy(desc(redirects.oldPath)).limit(500) });
+adminRouter.get('/redirects', async (_req, res) => {
+  // публичное чтение: SPA использует для клиентских 301 (данные не чувствительные)
+  res.json({ redirects: await db.select().from(redirects).orderBy(desc(redirects.oldPath)).limit(1000) });
 });
 
 const redirectSchema = z.object({

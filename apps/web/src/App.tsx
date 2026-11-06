@@ -14,11 +14,14 @@ import PrivacyPage from './pages/PrivacyPage';
 import TermsPage from './pages/TermsPage';
 import CabinetPage from './pages/CabinetPage';
 import PricingPage from './pages/PricingPage';
+import StaticPage from './pages/StaticPage';
+import { RedirectHandler } from './components/RedirectHandler';
 
 export default function App() {
   return (
-    <Layout>
-      <Routes>
+    <RedirectHandler>
+      <Layout>
+        <Routes>
         <Route path="/" element={<HomePage />} />
         {/* статьи: /novost/slug, /ideya/slug, /analitika/slug, /interesnoe/slug, /sobytie/slug */}
         <Route path="/:type/:slug" element={<ArticlePage />} />
@@ -34,6 +37,12 @@ export default function App() {
         <Route path="/terms" element={<TermsPage />} />
         <Route path="/cabinet" element={<CabinetPage />} />
         <Route path="/pricing" element={<PricingPage />} />
+        {/* служебные страницы донора (мигрированный контент) */}
+        <Route path="/kak-tut-vsyo-ustroeno" element={<StaticPage />} />
+        <Route path="/portfel-kak-ispolzovat" element={<StaticPage />} />
+        <Route path="/paypleyn-kak-ispolzovat" element={<StaticPage />} />
+        <Route path="/arhiv-sdelok-kak-ispolzovat-razdel" element={<StaticPage />} />
+        <Route path="/trendy-chto-ehto-takoe" element={<StaticPage />} />
         {/* «кто мы и зачем» — как у донора */}
         <Route path="/o-nas" element={<AboutPage slug="o-nas" />} />
         <Route path="/zachem" element={<AboutPage slug="zachem" />} />
@@ -43,6 +52,7 @@ export default function App() {
         <Route path="/:type" element={<TypePage />} />
         <Route path="*" element={<p className="text-zinc-400">Страница не найдена</p>} />
       </Routes>
-    </Layout>
+      </Layout>
+    </RedirectHandler>
   );
 }
