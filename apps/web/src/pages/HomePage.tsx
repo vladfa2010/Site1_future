@@ -37,14 +37,26 @@ const KNOWLEDGE = [
 ];
 
 export default function HomePage() {
-  const { data: trends } = useQuery({ queryKey: ['trends'], queryFn: () => api.trends() });
-  const { data: news } = useQuery({ queryKey: ['news'], queryFn: () => api.articles('novost') });
-  const { data: pipeline } = useQuery({ queryKey: ['scr', 'pipeline'], queryFn: () => api.screener({ phase: 'pipeline' }) });
-  const { data: portfel } = useQuery({ queryKey: ['scr', 'portfel'], queryFn: () => api.screener({ phase: 'portfel' }) });
-  const { data: arhiv } = useQuery({ queryKey: ['scr', 'arhiv'], queryFn: () => api.screener({ phase: 'arhiv' }) });
-  const { data: ai } = useQuery({ queryKey: ['scr', 'ai'], queryFn: () => api.screener({ industry: 'ai' }) });
-  const { data: interesnoe } = useQuery({ queryKey: ['interesnoe'], queryFn: () => api.articles('interesnoe') });
-  const { data: analitika } = useQuery({ queryKey: ['analitika'], queryFn: () => api.articles('analitika') });
+  const q = {
+    trends: useQuery({ queryKey: ['trends'], queryFn: () => api.trends() }),
+    news: useQuery({ queryKey: ['news'], queryFn: () => api.articles('novost') }),
+    pipeline: useQuery({ queryKey: ['scr', 'pipeline'], queryFn: () => api.screener({ phase: 'pipeline' }) }),
+    portfel: useQuery({ queryKey: ['scr', 'portfel'], queryFn: () => api.screener({ phase: 'portfel' }) }),
+    arhiv: useQuery({ queryKey: ['scr', 'arhiv'], queryFn: () => api.screener({ phase: 'arhiv' }) }),
+    ai: useQuery({ queryKey: ['scr', 'ai'], queryFn: () => api.screener({ industry: 'ai' }) }),
+    interesnoe: useQuery({ queryKey: ['interesnoe'], queryFn: () => api.articles('interesnoe') }),
+    analitika: useQuery({ queryKey: ['analitika'], queryFn: () => api.articles('analitika') }),
+  };
+  const { data: trends } = q.trends;
+  const { data: news } = q.news;
+  const { data: pipeline } = q.pipeline;
+  const { data: portfel } = q.portfel;
+  const { data: arhiv } = q.arhiv;
+  const { data: ai } = q.ai;
+  const { data: interesnoe } = q.interesnoe;
+  const { data: analitika } = q.analitika;
+  // Ошибка загрузки видна пользователю, а не маскируется пустой страницей
+  const loadError = Object.values(q).some((x) => x.isError);
 
   return (
     <div className="space-y-12">
@@ -56,6 +68,12 @@ export default function HomePage() {
           искусственный интеллект, космос.
         </p>
       </header>
+
+      {loadError && (
+        <p className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">
+          Не удалось загрузить данные с сервера. Проверьте, что API запущен (npm run dev в корне проекта).
+        </p>
+      )}
 
       {/* ТРЕНДЫ — карточки трендов */}
       <Section title="Тренды" linkTo="/portfolio" itemsCount={trends?.trends.length ?? 0}>
