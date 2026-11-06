@@ -40,7 +40,8 @@ async function kimiImage(prompt: string): Promise<GeneratedImage> {
   if (item.url) {
     const img = await fetch(item.url);
     if (!img.ok) throw new Error(`Не удалось скачать картинку: ${img.status}`);
-    const mime = img.headers.get('content-type') ?? 'image/png';
+    const mime = img.headers.get('content-type') ?? '';
+    if (!mime.startsWith('image/')) throw new Error(`Kimi вернул не картинку: ${mime.slice(0, 60)}`); // защита от подмены контента
     const ext = mime.includes('jpeg') ? 'jpg' : mime.includes('webp') ? 'webp' : 'png';
     return { buffer: Buffer.from(await img.arrayBuffer()), mime, ext };
   }

@@ -1,7 +1,7 @@
 import express from 'express';
-import cors from 'cors';
 import path from 'node:path';
 import { config } from './config.js';
+import { securityHeaders, corsAllowlist, apiLimiter, loginLimiter, registerLimiter, generateLimiter } from './middleware/security.js';
 import { authRouter } from './routes/auth.js';
 import { articlesRouter } from './routes/articles.js';
 import { entitiesRouter } from './routes/entities.js';
@@ -11,9 +11,21 @@ import { screenerRouter } from './routes/screener.js';
 import { mediaRouter } from './routes/media.js';
 import { adminRouter } from './routes/admin.js';
 
+// В production запрет на дефолтный секрет — fail fast
+if (process.env.NODE_ENV === 'production' && config.jwtSecret === 'dev-secret-change-me') {
+  throw new Error('JWT_SECRET не задан (production). Остановка.');
+}
+
 const app = express();
 
-app.use(cors());
+// безопасность: заголовки + CORS-allowlist + лимиты
+app.use(securityHeaders);
+app.use(corsAllowlist(config.corsOrigins));
+app.use('/api/', apiLimiter);
+app.use('/api/auth/login', loginLimiter);
+app.use('/api/auth/register', registerLimiter);
+app.use('/api/media/generate', generateLimiter);
+
 app.use(express.json({ limit: '2mb' }));
 
 // загруженные/сгенерированные файлы (обложки)
@@ -36,10 +48,10 @@ app.use((_req, res) => {
   res.status(404).json({ error: 'not found' });
 });
 
-// Единый обработчик ошибок
+// Единый обработчик ошибок: НЕ leak'им внутренние детали клиенту
 app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error('[api error]', err.message);
-  res.status(500).json({ error: 'internal', message: err.message });
+  res.status(500).json({ error: 'internal' });
 });
 
 app.listen(config.port, () => {

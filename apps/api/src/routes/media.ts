@@ -29,19 +29,20 @@ const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
-    const ok = ['image/jpeg', 'image/png', 'image/webp', 'image/svg+xml'].includes(file.mimetype);
+    // Только растровые: SVG с клиента — stored-XSS вектор (<script> внутри)
+    const ok = ['image/jpeg', 'image/png', 'image/webp'].includes(file.mimetype);
     cb(null, ok);
   },
 });
 
 mediaRouter.post('/media/upload', authRequired, requireRole('admin', 'super_admin'), upload.single('file'), async (req, res) => {
   if (!req.file) {
-    res.status(400).json({ error: 'file required' });
+    res.status(400).json({ error: 'file required (jpeg, png, webp, до 5 МБ)' });
     return;
   }
   const dir = path.resolve(config.uploadDir);
   await mkdir(dir, { recursive: true });
-  const ext = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/svg+xml': 'svg' }[req.file.mimetype as string] ?? 'bin';
+  const ext = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' }[req.file.mimetype as string] ?? 'bin';
   const name = `${Date.now()}-${createHash('sha1').update(req.file.buffer).digest('hex').slice(0, 10)}.${ext}`;
   await writeFile(path.join(dir, name), req.file.buffer);
   const url = `/uploads/${name}`;

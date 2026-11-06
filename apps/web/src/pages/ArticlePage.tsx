@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from '../api';
 import { EntityChips } from '../components/EntityChips';
 import { Breadcrumbs } from '../components/Breadcrumbs';
+import { sanitizeArticleHtml } from '../lib/sanitize';
 import { TYPE_LABELS } from '../components/ArticleCard';
 
 export default function ArticlePage() {
@@ -43,7 +44,7 @@ export default function ArticlePage() {
 
       <div
         className="prose-invert mt-6 space-y-4 leading-relaxed [&_h2]:mt-8 [&_h2]:text-xl [&_h2]:font-bold [&_a]:text-orange-400 [&_p]:text-zinc-300 [&_ul]:list-disc [&_ul]:pl-6"
-        dangerouslySetInnerHTML={{ __html: article.contentHtml }}
+        dangerouslySetInnerHTML={{ __html: sanitizeArticleHtml(article.contentHtml) }}
       />
 
       {article.sourceUrl && (
