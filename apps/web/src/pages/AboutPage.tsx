@@ -1,9 +1,7 @@
-import { useParams } from 'react-router';
 import { ABOUT_PAGES } from '../data/about';
 import { Breadcrumbs } from '../components/Breadcrumbs';
 
-export default function AboutPage() {
-  const { slug = '' } = useParams();
+export default function AboutPage({ slug }: { slug: string }) {
   const page = ABOUT_PAGES.find((p) => p.slug === slug);
 
   if (!page) return <p className="text-zinc-400">Страница не найдена</p>;

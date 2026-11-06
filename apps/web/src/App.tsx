@@ -26,10 +26,10 @@ export default function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
         {/* «кто мы и зачем» — как у донора */}
-        <Route path="/o-nas" element={<AboutPage />} />
-        <Route path="/zachem" element={<AboutPage />} />
-        <Route path="/smysl" element={<AboutPage />} />
-        <Route path="/missiya" element={<AboutPage />} />
+        <Route path="/o-nas" element={<AboutPage slug="o-nas" />} />
+        <Route path="/zachem" element={<AboutPage slug="zachem" />} />
+        <Route path="/smysl" element={<AboutPage slug="smysl" />} />
+        <Route path="/missiya" element={<AboutPage slug="missiya" />} />
         {/* архивы типов: /novost /ideya /analitika /interesnoe /sobytie */}
         <Route path="/:type" element={<TypePage />} />
         <Route path="*" element={<p className="text-zinc-400">Страница не найдена</p>} />
