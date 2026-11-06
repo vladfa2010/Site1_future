@@ -1,0 +1,25 @@
+/**
+ * Тестовый админ-аккаунт (dev). Запуск: npm run seed:test -w @newinvest/api
+ * Логин: test@test.ru / test
+ */
+import bcrypt from 'bcrypt';
+import { db, users } from '@newinvest/db';
+import { eq } from 'drizzle-orm';
+
+const EMAIL = 'test@test.ru';
+const PASSWORD = 'test';
+
+const [existing] = await db.select({ id: users.id }).from(users).where(eq(users.email, EMAIL)).limit(1);
+if (existing) {
+  const passwordHash = await bcrypt.hash(PASSWORD, 10);
+  await db.update(users).set({ passwordHash, role: 'admin' }).where(eq(users.id, existing.id));
+  console.log(`Обновлён тестовый админ: ${EMAIL} / ${PASSWORD} (role=admin)`);
+} else {
+  const passwordHash = await bcrypt.hash(PASSWORD, 10);
+  const [user] = await db
+    .insert(users)
+    .values({ email: EMAIL, passwordHash, displayName: 'Test Admin', role: 'admin' })
+    .returning({ id: users.id, email: users.email, role: users.role });
+  console.log(`Создан тестовый админ: ${user.email} / ${PASSWORD} (role=${user.role})`);
+}
+process.exit(0);

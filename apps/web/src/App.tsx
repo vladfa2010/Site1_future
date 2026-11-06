@@ -7,6 +7,8 @@ import TrendPage from './pages/TrendPage';
 import StoryPage from './pages/StoryPage';
 import PipelinePage from './pages/PipelinePage';
 import TypePage from './pages/TypePage';
+import LoginPage from './pages/LoginPage';
+import RegisterPage from './pages/RegisterPage';
 
 export default function App() {
   return (
@@ -20,6 +22,8 @@ export default function App() {
         <Route path="/trend/:slug" element={<TrendPage />} />
         <Route path="/syuzhet/:slug" element={<StoryPage />} />
         <Route path="/portfolio" element={<PipelinePage />} />
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/register" element={<RegisterPage />} />
         {/* архивы типов: /novost /ideya /analitika /interesnoe /sobytie */}
         <Route path="/:type" element={<TypePage />} />
         <Route path="*" element={<p className="text-zinc-400">Страница не найдена</p>} />
