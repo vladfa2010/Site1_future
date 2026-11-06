@@ -2,6 +2,7 @@ import { useParams } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../api';
 import { ArticleCard, TYPE_LABELS } from '../components/ArticleCard';
+import { Breadcrumbs } from '../components/Breadcrumbs';
 
 const KNOWN_TYPES = ['novost', 'ideya', 'analitika', 'interesnoe', 'sobytie'];
 
@@ -19,6 +20,7 @@ export default function TypePage() {
 
   return (
     <div className="space-y-6">
+      <Breadcrumbs items={[{ label: TYPE_LABELS[type] ?? type }]} />
       <h1 className="text-2xl font-bold">{TYPE_LABELS[type] ?? type}</h1>
       {isLoading && <p className="text-zinc-400">Загрузка…</p>}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

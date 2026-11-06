@@ -2,6 +2,7 @@ import { useParams } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../api';
 import { ArticleCard } from '../components/ArticleCard';
+import { Breadcrumbs } from '../components/Breadcrumbs';
 
 export default function TrendPage() {
   const { slug = '' } = useParams();
@@ -17,6 +18,7 @@ export default function TrendPage() {
 
   return (
     <div className="space-y-10">
+      <Breadcrumbs items={[{ label: 'Тренды' }, { label: trend.name }]} />
       <header>
         <span className="text-xs uppercase tracking-wide text-zinc-500">Тренд</span>
         <h1 className="mt-1 text-3xl font-bold">{trend.name}</h1>

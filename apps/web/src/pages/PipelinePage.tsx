@@ -1,5 +1,6 @@
 import { useSearchParams, Link } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
+import { Breadcrumbs } from '../components/Breadcrumbs';
 
 interface Idea {
   id: number;
@@ -75,6 +76,7 @@ export default function PipelinePage() {
 
   return (
     <div className="space-y-8">
+      <Breadcrumbs items={[{ label: 'Скринер проектов' }, ...(phase ? [{ label: PHASE_LABELS[phase] ?? phase }] : [])]} />
       <h1 className="text-2xl font-bold">Скринер проектов</h1>
 
       {/* Фильтры: фаза/стадия/индустрия — состояние в URL */}

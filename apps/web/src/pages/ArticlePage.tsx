@@ -2,6 +2,7 @@ import { useParams } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../api';
 import { EntityChips } from '../components/EntityChips';
+import { Breadcrumbs } from '../components/Breadcrumbs';
 import { TYPE_LABELS } from '../components/ArticleCard';
 
 export default function ArticlePage() {
@@ -18,6 +19,12 @@ export default function ArticlePage() {
 
   return (
     <article className="mx-auto max-w-3xl">
+      <Breadcrumbs
+        items={[
+          { label: TYPE_LABELS[article.type] ?? article.type, to: `/${article.type}` },
+          { label: article.title.length > 60 ? `${article.title.slice(0, 60)}…` : article.title },
+        ]}
+      />
       <span className="text-xs uppercase tracking-wide text-zinc-500">
         {TYPE_LABELS[article.type] ?? article.type}
       </span>

@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from '../api';
 import { ArticleCard } from '../components/ArticleCard';
 import { RoundsTable } from '../components/RoundsTable';
+import { Breadcrumbs } from '../components/Breadcrumbs';
 
 export default function CompanyPage() {
   const { slug = '' } = useParams();
@@ -18,6 +19,7 @@ export default function CompanyPage() {
 
   return (
     <div className="space-y-10">
+      <Breadcrumbs items={[{ label: 'Скринер проектов', to: '/portfolio' }, { label: company.name }]} />
       {/* Шапка профиля */}
       <header>
         <h1 className="text-3xl font-bold">{company.name}</h1>

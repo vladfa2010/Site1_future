@@ -1,6 +1,7 @@
 import { useParams } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../api';
+import { Breadcrumbs } from '../components/Breadcrumbs';
 
 export default function StoryPage() {
   const { slug = '' } = useParams();
@@ -16,6 +17,7 @@ export default function StoryPage() {
 
   return (
     <div className="space-y-10">
+      <Breadcrumbs items={[{ label: 'Сюжеты' }, { label: story.name }]} />
       <header>
         <span className="text-xs uppercase tracking-wide text-zinc-500">Сюжет</span>
         <h1 className="mt-1 text-3xl font-bold">{story.name}</h1>
