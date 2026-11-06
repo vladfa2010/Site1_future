@@ -64,6 +64,44 @@ export default function ArticleEditPage() {
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
     setForm((f) => ({ ...f, [k]: e.target.value }));
 
+  // ---- Автогенерация slug из заголовка (транслит, стиль донора) ----
+  const [autoSlug, setAutoSlug] = useState<string | null>(null);
+
+  const slugify = (title: string) => {
+    const map: Record<string, string> = {
+      а: 'a', б: 'b', в: 'v', г: 'g', д: 'd', е: 'e', ё: 'e', ж: 'zh', з: 'z', и: 'i', й: 'j',
+      к: 'k', л: 'l', м: 'm', н: 'n', о: 'o', п: 'p', р: 'r', с: 's', т: 't', у: 'u', ф: 'f',
+      х: 'h', ц: 'c', ч: 'ch', ш: 'sh', щ: 'shh', ъ: '', ы: 'y', ь: '', э: 'e', ю: 'ju', я: 'ja',
+    };
+    return title
+      .toLowerCase()
+      .split('')
+      .map((ch) => (map[ch] !== undefined ? map[ch] : ch))
+      .join('')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 80);
+  };
+
+  const onTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const title = e.target.value;
+    setForm((f) => {
+      // перезаписываем slug только если он пуст или равен последнему автогенерированному
+      const next = { ...f, title };
+      const generated = slugify(title);
+      if (autoSlug === null ? f.slug === '' || f.slug === slugify(f.title) : f.slug === autoSlug) {
+        next.slug = generated;
+        setAutoSlug(generated);
+      }
+      return next;
+    });
+  };
+
+  const onSlugManual = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setAutoSlug(null); // ручная правка — автогенерацию отключаем
+    setForm((f) => ({ ...f, slug: e.target.value }));
+  };
+
   const toggle = (key: keyof Relations, id: number) =>
     setRels((r) => ({ ...r, [key]: r[key].includes(id) ? r[key].filter((x) => x !== id) : [...r[key], id] }));
 
@@ -236,7 +274,7 @@ export default function ArticleEditPage() {
         </div>
         <div>
           <label className="label">Slug (латиница-цифры-дефис)</label>
-          <input className="input" value={form.slug} onChange={set('slug')} pattern="[a-z0-9-]+" required />
+          <input className="input" value={form.slug} onChange={onSlugManual} pattern="[a-z0-9-]+" required />
         </div>
         <div>
           <label className="label">Статус</label>
@@ -250,7 +288,7 @@ export default function ArticleEditPage() {
       <div className="card space-y-4">
         <div>
           <label className="label">Заголовок</label>
-          <input className="input" value={form.title} onChange={set('title')} required />
+          <input className="input" value={form.title} onChange={onTitleChange} required />
         </div>
         <div>
           <label className="label">Тезис идеи (для type=ideya)</label>
