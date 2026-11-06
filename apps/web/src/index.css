@@ -10,3 +10,13 @@
     @apply text-orange-400 hover:text-orange-300;
   }
 }
+
+/* карусель как у донора: скрыть скроллбар, плавный скролл */
+.carousel-scroll {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  scroll-behavior: smooth;
+}
+.carousel-scroll::-webkit-scrollbar {
+  display: none;
+}

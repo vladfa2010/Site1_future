@@ -12,6 +12,7 @@ export interface ArticleListItem {
   title: string;
   excerpt: string | null;
   publishedAt: string | null;
+  coverUrl: string | null;
 }
 
 export interface ArticleDetail extends ArticleListItem {
@@ -84,6 +85,8 @@ export interface Idea {
   title: string;
   excerpt: string | null;
   thesis: string | null;
+  publishedAt: string | null;
+  coverUrl: string | null;
   phases: string[];
   stages: string[];
   industries: string[];

@@ -5,7 +5,7 @@
  */
 import { Router } from 'express';
 import { and, desc, eq, sql, type SQL } from 'drizzle-orm';
-import { db, articles, dealPhases, dealStages, industries } from '@newinvest/db';
+import { db, articles, dealPhases, dealStages, industries, media } from '@newinvest/db';
 
 export const screenerRouter = Router();
 
@@ -50,11 +50,13 @@ screenerRouter.get('/screener', async (req, res) => {
       excerpt: articles.excerpt,
       thesis: articles.thesis,
       publishedAt: articles.publishedAt,
+      coverUrl: media.filePath,
       phases: badges('article_deal_phases', 'deal_phases', 'phase_id'),
       stages: badges('article_deal_stages', 'deal_stages', 'stage_id'),
       industries: badges('article_industries', 'industries', 'industry_id'),
     })
     .from(articles)
+    .leftJoin(media, eq(articles.coverMediaId, media.id))
     .where(and(...conditions))
     .orderBy(desc(articles.publishedAt))
     .limit(100);

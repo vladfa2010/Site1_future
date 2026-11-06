@@ -7,7 +7,7 @@ import { z } from 'zod';
 import { and, desc, eq, type SQL } from 'drizzle-orm';
 import {
   db, articles, ARTICLE_TYPES, type ArticleType,
-  companies, trends, articleCompanies, articleTrends,
+  companies, trends, articleCompanies, articleTrends, media,
 } from '@newinvest/db';
 import { optionalAuth, authRequired, requireRole, ADMIN_ROLES } from '../middleware/auth.js';
 
@@ -56,8 +56,10 @@ articlesRouter.get('/', optionalAuth, async (req, res) => {
       excerpt: articles.excerpt,
       status: articles.status,
       publishedAt: articles.publishedAt,
+      coverUrl: media.filePath,
     })
     .from(articles)
+    .leftJoin(media, eq(articles.coverMediaId, media.id))
     .where(where)
     .orderBy(desc(articles.publishedAt))
     .limit(limit)
