@@ -29,11 +29,24 @@ export function SubscribeButton({ entityType, entityId, label }: { entityType: s
     }
     const next = !subscribed;
     setSubscribed(next);
-    await fetch(`/api/subscriptions/${entityType}/${entityId}`, {
-      method: next ? 'PUT' : 'DELETE',
-      headers: { Authorization: `Bearer ${localStorage.getItem('token')}`, 'Content-Type': 'application/json' },
-      ...(next ? { body: JSON.stringify({ entityType, entityId }) } : {}),
-    }).catch(() => setSubscribed(!next));
+    const token = localStorage.getItem('token');
+    try {
+      if (next) {
+        // PUT /api/subscriptions (тело) — путь НЕ с path-параметрами
+        await fetch('/api/subscriptions', {
+          method: 'PUT',
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ entityType, entityId }),
+        });
+      } else {
+        await fetch(`/api/subscriptions/${entityType}/${entityId}`, {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${token}` },
+        });
+      }
+    } catch {
+      setSubscribed(!next);
+    }
   };
 
   return (

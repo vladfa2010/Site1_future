@@ -40,13 +40,20 @@ export function FavoritesProvider({ children }: { children: ReactNode }) {
       return next;
     });
     try {
-      const r = await fetch(`/api/favorites/${entityType}/${entityId}`, {
-        method: had ? 'DELETE' : 'PUT',
-        headers: authHeaders(),
-        ...(had ? {} : { body: JSON.stringify({ entityType, entityId }) }),
-      });
+      let r: Response;
+      if (had) {
+        r = await fetch(`/api/favorites/${entityType}/${entityId}`, { method: 'DELETE', headers: authHeaders() });
+      } else {
+        // PUT /api/favorites (тело) — роут НЕ принимает path-параметры
+        r = await fetch('/api/favorites', {
+          method: 'PUT',
+          headers: authHeaders(),
+          body: JSON.stringify({ entityType, entityId }),
+        });
+      }
       if (!r.ok) throw new Error();
     } catch {
+      // откат оптимистичного обновления
       setKeys((prev) => {
         const next = new Set(prev);
         if (had) next.add(key);
