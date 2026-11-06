@@ -5,7 +5,10 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { and, desc, eq, type SQL } from 'drizzle-orm';
-import { db, articles, ARTICLE_TYPES, type ArticleType } from '@newinvest/db';
+import {
+  db, articles, ARTICLE_TYPES, type ArticleType,
+  companies, trends, articleCompanies, articleTrends,
+} from '@newinvest/db';
 import { optionalAuth, authRequired, requireRole, ADMIN_ROLES } from '../middleware/auth.js';
 
 export const articlesRouter = Router();
@@ -71,7 +74,18 @@ articlesRouter.get('/:type/:slug', optionalAuth, async (req, res) => {
     res.status(404).json({ error: 'not found' });
     return;
   }
-  res.json({ article: row });
+  // Публичные связи — чипсы для навигации «проваливание из любой точки» (раздел 4.2)
+  const relCompanies = await db
+    .select({ slug: companies.slug, name: companies.name })
+    .from(articleCompanies)
+    .innerJoin(companies, eq(articleCompanies.companyId, companies.id))
+    .where(eq(articleCompanies.articleId, row.id));
+  const relTrends = await db
+    .select({ slug: trends.slug, name: trends.name })
+    .from(articleTrends)
+    .innerJoin(trends, eq(articleTrends.trendId, trends.id))
+    .where(eq(articleTrends.articleId, row.id));
+  res.json({ article: row, relations: { companies: relCompanies, trends: relTrends } });
 });
 
 // POST /api/articles — author+; автор может только в черновики
