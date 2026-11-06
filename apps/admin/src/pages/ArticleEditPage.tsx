@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router';
 import { api } from '../api';
 
@@ -28,6 +28,8 @@ export default function ArticleEditPage() {
   const [genBusy, setGenBusy] = useState(false);
   const [genError, setGenError] = useState<string | null>(null);
   const [genMock, setGenMock] = useState(false);
+  const coverFileRef = useRef<HTMLInputElement>(null);
+  const [uploadBusy, setUploadBusy] = useState(false);
   const [rels, setRels] = useState<Relations>(EMPTY);
   const [dicts, setDicts] = useState<{ companies: Option[]; tickers: Option[]; industries: Option[]; trends: Option[] }>({ companies: [], tickers: [], industries: [], trends: [] });
   const [notice, setNotice] = useState<string | null>(null);
@@ -137,6 +139,33 @@ export default function ArticleEditPage() {
     }
   };
 
+  // Загрузка обложки из файла (multipart — в обход JSON-клиента)
+  const uploadCover = async (file: File) => {
+    if (!articleId) return;
+    setUploadBusy(true);
+    setError(null);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await fetch('/api/media/upload', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+        body: fd,
+      });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.message ?? JSON.stringify(body));
+      setCoverMediaId(body.media.id);
+      setCoverPreview(`${window.location.origin}${body.url}`);
+      setGenMock(false);
+      setNotice('Обложка загружена ✓');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Ошибка загрузки');
+    } finally {
+      setUploadBusy(false);
+      if (coverFileRef.current) coverFileRef.current.value = '';
+    }
+  };
+
   // Автоподстановка цепочки тикер→компания→индустрия (раздел 6.2)
   const suggest = async () => {
     if (!articleId) return;
@@ -217,21 +246,33 @@ export default function ArticleEditPage() {
         </div>
       </div>
 
-      {/* Обложка: текущая + генерация через Kimi */}
+      {/* Обложка: текущая + генерация/загрузка */}
       <div className="card space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="font-semibold">Обложка</h2>
           {!isNew && (
-            <button
-              type="button"
-              className="btn-secondary"
-              onClick={() => {
-                setGenPrompt(buildPrompt());
-                setGenOpen(!genOpen);
-              }}
-            >
-              ✨ Сгенерировать обложку
-            </button>
+            <span className="flex items-center gap-2">
+              <input
+                ref={coverFileRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/svg+xml"
+                className="hidden"
+                onChange={(e) => e.target.files?.[0] && void uploadCover(e.target.files[0])}
+              />
+              <button type="button" className="btn-secondary" disabled={uploadBusy} onClick={() => coverFileRef.current?.click()}>
+                {uploadBusy ? 'Загружаем…' : '⬆ Загрузить картинку'}
+              </button>
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => {
+                  setGenPrompt(buildPrompt());
+                  setGenOpen(!genOpen);
+                }}
+              >
+                ✨ Сгенерировать обложку
+              </button>
+            </span>
           )}
         </div>
         {isNew && <p className="text-sm text-zinc-500">Сохраните статью — затем появится генерация обложки.</p>}
