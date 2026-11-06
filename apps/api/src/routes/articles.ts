@@ -38,10 +38,10 @@ articlesRouter.get('/', optionalAuth, async (req, res) => {
   if (type && (ARTICLE_TYPES as readonly string[]).includes(type)) {
     conditions.push(eq(articles.type, type));
   }
-  // Публично видны только опубликованные; админ — любые
+  // Публично видны только опубликованные; админ — любые (или по выбранному статусу)
   const requestedStatus = req.query.status as string | undefined;
-  if (isAdmin(req.user?.role) && requestedStatus) {
-    conditions.push(eq(articles.status, requestedStatus));
+  if (isAdmin(req.user?.role)) {
+    if (requestedStatus) conditions.push(eq(articles.status, requestedStatus));
   } else {
     conditions.push(eq(articles.status, 'published'));
   }

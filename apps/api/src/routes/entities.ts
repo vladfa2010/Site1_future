@@ -103,6 +103,29 @@ entitiesRouter.post('/companies', authRequired, requireRole('admin', 'super_admi
   res.status(201).json({ company });
 });
 
+// PATCH /api/companies/:id — редактирование карточки (admin)
+entitiesRouter.patch('/companies/:id', authRequired, requireRole('admin', 'super_admin'), async (req, res) => {
+  const id = Number(req.params.id);
+  const parsed = companySchema.partial().safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'validation', details: parsed.error.flatten() });
+    return;
+  }
+  const { industryIds, ...data } = parsed.data;
+  const [company] = await db.update(companies).set(data).where(eq(companies.id, id)).returning();
+  if (!company) {
+    res.status(404).json({ error: 'not found' });
+    return;
+  }
+  if (industryIds) {
+    await db.delete(companyIndustries).where(eq(companyIndustries.companyId, id));
+    if (industryIds.length) {
+      await db.insert(companyIndustries).values(industryIds.map((industryId) => ({ companyId: id, industryId })));
+    }
+  }
+  res.json({ company });
+});
+
 // POST /api/companies/:id/rounds — раунд финансирования (admin).
 // sourceUrl обязателен: каждая цифра — со ссылкой на новость/раскрытие.
 const roundSchema = z.object({
@@ -244,4 +267,19 @@ entitiesRouter.post('/trends', authRequired, requireRole('admin', 'super_admin')
   }
   const [row] = await db.insert(trends).values(parsed.data).returning();
   res.status(201).json({ trend: row });
+});
+
+// PATCH /api/trends/:id — редактирование тренда (admin)
+entitiesRouter.patch('/trends/:id', authRequired, requireRole('admin', 'super_admin'), async (req, res) => {
+  const parsed = trendSchema.partial().safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'validation', details: parsed.error.flatten() });
+    return;
+  }
+  const [row] = await db.update(trends).set(parsed.data).where(eq(trends.id, Number(req.params.id))).returning();
+  if (!row) {
+    res.status(404).json({ error: 'not found' });
+    return;
+  }
+  res.json({ trend: row });
 });
