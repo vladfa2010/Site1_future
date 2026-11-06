@@ -4,6 +4,7 @@ import { api } from '../api';
 import { EntityChips } from '../components/EntityChips';
 import { Breadcrumbs } from '../components/Breadcrumbs';
 import { sanitizeArticleHtml } from '../lib/sanitize';
+import { IdeaChart } from '../components/IdeaChart';
 import { TYPE_LABELS } from '../components/ArticleCard';
 
 export default function ArticlePage() {
@@ -16,7 +17,11 @@ export default function ArticlePage() {
   if (isLoading) return <p className="text-zinc-400">Загрузка…</p>;
   if (error || !data) return <p className="text-red-400">Статья не найдена</p>;
 
-  const { article, relations } = data;
+  const { article, relations, stages } = data;
+
+  // «Торги на бирже» ⇒ у компании есть тикер → показываем график (источник решает бэкенд)
+  const trading = (stages ?? []).includes('Торги на бирже');
+  const chartSymbol = trading ? relations.tickers[0]?.symbol ?? null : null;
 
   return (
     <article className="mx-auto max-w-3xl">
@@ -46,6 +51,13 @@ export default function ArticlePage() {
         className="prose-invert mt-6 space-y-4 leading-relaxed [&_h2]:mt-8 [&_h2]:text-xl [&_h2]:font-bold [&_a]:text-orange-400 [&_p]:text-zinc-300 [&_ul]:list-disc [&_ul]:pl-6"
         dangerouslySetInnerHTML={{ __html: sanitizeArticleHtml(article.contentHtml) }}
       />
+
+      {/* График: идея в статусе «Торги на бирже» и есть MOEX-тикер */}
+      {chartSymbol && (
+        <div className="mt-8">
+          <IdeaChart symbol={chartSymbol} />
+        </div>
+      )}
 
       {article.sourceUrl && (
         <p className="mt-8 text-sm text-zinc-500">

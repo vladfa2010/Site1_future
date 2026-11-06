@@ -25,6 +25,7 @@ export interface ArticleDetail extends ArticleListItem {
 export interface ArticleRelations {
   companies: { slug: string; name: string }[];
   trends: { slug: string; name: string }[];
+  tickers: { symbol: string; exchange: string | null }[];
 }
 
 export interface FundingRound {
@@ -68,7 +69,7 @@ export const api = {
   articles: (type?: string) =>
     get<{ articles: ArticleListItem[] }>(`/articles${type ? `?type=${type}` : ''}`),
   article: (type: string, slug: string) =>
-    get<{ article: ArticleDetail; coverUrl: string | null; relations: ArticleRelations }>(`/articles/${type}/${slug}`),
+    get<{ article: ArticleDetail; coverUrl: string | null; relations: ArticleRelations; stages: string[] }>(`/articles/${type}/${slug}`),
   company: (slug: string) => get<CompanyDetail>(`/companies/${slug}`),
   trend: (slug: string) => get<TrendDetail>(`/trends/${slug}`),
   story: (slug: string) => get<StoryDetail>(`/stories/${slug}`),
