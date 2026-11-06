@@ -1,0 +1,28 @@
+# Зависимости
+node_modules/
+
+# Сборка
+dist/
+build/
+*.tsbuildinfo
+
+# Окружение и секреты
+.env
+.env.*
+!.env.example
+
+# Локальные данные (SQLite, загрузки, логи)
+data/
+*.log
+
+# Docker / инфра
+postgres-data/
+
+# Системное
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/*
+!.vscode/extensions.json
