@@ -10,6 +10,12 @@ import CompanyEditPage from './pages/CompanyEditPage';
 import TrendsPage from './pages/TrendsPage';
 import TrendEditPage from './pages/TrendEditPage';
 import DictionariesPage from './pages/DictionariesPage';
+import StoriesPage from './pages/StoriesPage';
+import StoryEditPage from './pages/StoryEditPage';
+import MediaPage from './pages/MediaPage';
+import RedirectsPage from './pages/RedirectsPage';
+import UsersPage from './pages/UsersPage';
+import StatsPage from './pages/StatsPage';
 
 function RequireAdmin({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
@@ -38,6 +44,12 @@ export default function App() {
                   <Route path="/trends" element={<TrendsPage />} />
                   <Route path="/trends/:id/edit" element={<TrendEditPage />} />
                   <Route path="/dictionaries" element={<DictionariesPage />} />
+                  <Route path="/stories" element={<StoriesPage />} />
+                  <Route path="/stories/:id/edit" element={<StoryEditPage />} />
+                  <Route path="/media" element={<MediaPage />} />
+                  <Route path="/redirects" element={<RedirectsPage />} />
+                  <Route path="/users" element={<UsersPage />} />
+                  <Route path="/stats" element={<StatsPage />} />
                 </Routes>
               </Layout>
             </RequireAdmin>

@@ -18,7 +18,7 @@ export default function ArticleEditPage() {
   const navigate = useNavigate();
 
   const [form, setForm] = useState({
-    type: 'novost', slug: '', title: '', excerpt: '', thesis: '', contentHtml: '', status: 'draft',
+    type: 'novost', slug: '', title: '', excerpt: '', thesis: '', contentHtml: '', status: 'draft', metaDescription: '',
   });
   const [articleId, setArticleId] = useState<number | null>(null);
   const [coverMediaId, setCoverMediaId] = useState<number | null>(null);
@@ -45,9 +45,9 @@ export default function ArticleEditPage() {
       setDicts({ companies: companies.companies, tickers: tickers.tickers, industries: industries.industries, trends: trends.trends });
 
       if (!isNew && urlType && slug) {
-        const detail = await api<{ article: { id: number; type: string; slug: string; title: string; excerpt: string | null; thesis: string | null; contentHtml: string; status: string; coverMediaId: number | null }; coverUrl: string | null }>(`/articles/${urlType}/${slug}`);
+        const detail = await api<{ article: { id: number; type: string; slug: string; title: string; excerpt: string | null; thesis: string | null; contentHtml: string; status: string; coverMediaId: number | null }; coverUrl: string | null; meta: { description: string | null } }>(`/articles/${urlType}/${slug}`);
         const a = detail.article;
-        setForm({ type: a.type, slug: a.slug, title: a.title, excerpt: a.excerpt ?? '', thesis: a.thesis ?? '', contentHtml: a.contentHtml, status: a.status });
+        setForm({ type: a.type, slug: a.slug, title: a.title, excerpt: a.excerpt ?? '', thesis: a.thesis ?? '', contentHtml: a.contentHtml, status: a.status, metaDescription: detail.meta.description ?? '' });
         setArticleId(a.id);
         setCoverMediaId(a.coverMediaId);
         setCoverPreview(detail.coverUrl ? (detail.coverUrl.startsWith('/') ? `${window.location.origin}${detail.coverUrl}` : detail.coverUrl) : null);
@@ -206,6 +206,10 @@ export default function ArticleEditPage() {
         <div>
           <label className="label">Excerpt</label>
           <textarea className="input" rows={2} value={form.excerpt} onChange={set('excerpt')} />
+        </div>
+        <div>
+          <label className="label">SEO meta description (до 300 символов)</label>
+          <input className="input" maxLength={300} value={form.metaDescription} onChange={set('metaDescription')} />
         </div>
         <div>
           <label className="label">Контент (HTML — сюда ляжет TipTap, раздел 6.2)</label>

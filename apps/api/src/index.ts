@@ -9,6 +9,7 @@ import { storiesRouter } from './routes/stories.js';
 import { bindingsRouter } from './routes/bindings.js';
 import { screenerRouter } from './routes/screener.js';
 import { mediaRouter } from './routes/media.js';
+import { adminRouter } from './routes/admin.js';
 
 const app = express();
 
@@ -28,7 +29,8 @@ app.use('/api/articles', articlesRouter);
 app.use('/api', entitiesRouter);   // /companies /tickers /industries /trends
 app.use('/api', storiesRouter);    // /stories
 app.use('/api', screenerRouter);   // /screener /deal-phases /deal-stages
-app.use('/api', mediaRouter);      // /media/generate
+app.use('/api', mediaRouter);      // /media/generate /media/upload /media
+app.use('/api', adminRouter);      // /users /redirects /stats
 
 app.use((_req, res) => {
   res.status(404).json({ error: 'not found' });

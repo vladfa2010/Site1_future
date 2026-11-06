@@ -3,9 +3,14 @@ import { useAuth } from '../auth';
 
 const NAV = [
   { to: '/articles', label: 'Статьи' },
+  { to: '/stories', label: 'Сюжеты' },
   { to: '/companies', label: 'Компании' },
   { to: '/trends', label: 'Тренды' },
   { to: '/dictionaries', label: 'Индустрии и тикеры' },
+  { to: '/media', label: 'Медиатека' },
+  { to: '/redirects', label: 'Редиректы' },
+  { to: '/users', label: 'Пользователи' },
+  { to: '/stats', label: 'Аналитика' },
 ];
 
 export function Layout({ children }: { children: React.ReactNode }) {

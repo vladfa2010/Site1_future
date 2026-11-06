@@ -8,6 +8,7 @@ import { and, desc, eq, type SQL } from 'drizzle-orm';
 import {
   db, articles, ARTICLE_TYPES, type ArticleType,
   companies, trends, articleCompanies, articleTrends, media,
+  metaFields, articleViews,
 } from '@newinvest/db';
 import { optionalAuth, authRequired, requireRole, ADMIN_ROLES } from '../middleware/auth.js';
 
@@ -21,6 +22,7 @@ const createSchema = z.object({
   excerpt: z.string().optional(),
   thesis: z.string().optional(), // тезис идеи
   coverMediaId: z.number().int().optional(),
+  metaDescription: z.string().max(300).optional(), // SEO (meta_fields)
   sourceUrl: z.string().url().optional(),
   status: z.enum(['draft', 'published']).default('draft'),
 });
@@ -94,7 +96,13 @@ articlesRouter.get('/:type/:slug', optionalAuth, async (req, res) => {
     .from(articleTrends)
     .innerJoin(trends, eq(articleTrends.trendId, trends.id))
     .where(eq(articleTrends.articleId, article.id));
-  res.json({ article, coverUrl: row.coverUrl, relations: { companies: relCompanies, trends: relTrends } });
+  // фиксируем просмотр (аналитика, раздел 6.2) — не блокируем ответ
+  void db.insert(articleViews).values({ userId: req.user?.id ?? null, articleId: article.id }).catch(() => {});
+  // SEO meta description (meta_fields)
+  const [meta] = await db.select({ value: metaFields.value }).from(metaFields)
+    .where(and(eq(metaFields.ownerType, 'article'), eq(metaFields.ownerId, article.id), eq(metaFields.key, 'meta_description')))
+    .limit(1);
+  res.json({ article, coverUrl: row.coverUrl, meta: { description: meta?.value ?? null }, relations: { companies: relCompanies, trends: relTrends } });
 });
 
 // POST /api/articles — author+; автор может только в черновики
@@ -105,15 +113,26 @@ articlesRouter.post('/', authRequired, requireRole('author', 'admin', 'super_adm
     return;
   }
   const data = parsed.data;
+  const { metaDescription, ...articleData } = data;
   // автор не публикует напрямую — только через admin (раздел 6.3)
   const status = isAdmin(req.user!.role) ? data.status : 'draft';
 
   const [row] = await db
     .insert(articles)
-    .values({ ...data, status, authorId: req.user!.id })
+    .values({ ...articleData, status, authorId: req.user!.id })
     .returning();
+  if (metaDescription) {
+    await saveMetaDescription(row.id, metaDescription);
+  }
   res.status(201).json({ article: row });
 });
+
+// SEO meta description для статьи (meta_fields, раздел 5.4)
+async function saveMetaDescription(articleId: number, value: string) {
+  await db.insert(metaFields)
+    .values({ ownerType: 'article', ownerId: articleId, key: 'meta_description', value })
+    .onConflictDoUpdate({ target: [metaFields.ownerType, metaFields.ownerId, metaFields.key], set: { value } });
+}
 
 // PATCH /api/articles/:id — автор: свои неопубликованные; admin: любые
 articlesRouter.patch('/:id', authRequired, requireRole('author', 'admin', 'super_admin'), async (req, res) => {
@@ -133,10 +152,13 @@ articlesRouter.patch('/:id', authRequired, requireRole('author', 'admin', 'super
     res.status(403).json({ error: 'authors can edit only their own unpublished articles' });
     return;
   }
-  const updates = { ...parsed.data };
+  const { metaDescription, ...updates } = parsed.data;
   if (!admin) delete updates.status; // автор не меняет статус
 
   const [row] = await db.update(articles).set(updates).where(eq(articles.id, id)).returning();
+  if (metaDescription) {
+    await saveMetaDescription(id, metaDescription);
+  }
   res.json({ article: row });
 });
 

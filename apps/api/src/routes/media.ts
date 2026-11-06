@@ -7,14 +7,47 @@ import { Router } from 'express';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
+import multer from 'multer';
 import { z } from 'zod';
-import { eq } from 'drizzle-orm';
+import { desc, eq } from 'drizzle-orm';
 import { db, media, articles } from '@newinvest/db';
 import { authRequired, requireRole } from '../middleware/auth.js';
 import { generateImage } from '../services/mediaGen.js';
 import { config } from '../config.js';
 
 export const mediaRouter = Router();
+
+// ---------- Медиатека ----------
+
+mediaRouter.get('/media', authRequired, requireRole('admin', 'super_admin'), async (_req, res) => {
+  const rows = await db.select().from(media).orderBy(desc(media.createdAt)).limit(200);
+  res.json({ media: rows });
+});
+
+// загрузка файла (картинка) — multer в память, валидация типа, запись в uploadDir
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const ok = ['image/jpeg', 'image/png', 'image/webp', 'image/svg+xml'].includes(file.mimetype);
+    cb(null, ok);
+  },
+});
+
+mediaRouter.post('/media/upload', authRequired, requireRole('admin', 'super_admin'), upload.single('file'), async (req, res) => {
+  if (!req.file) {
+    res.status(400).json({ error: 'file required' });
+    return;
+  }
+  const dir = path.resolve(config.uploadDir);
+  await mkdir(dir, { recursive: true });
+  const ext = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/svg+xml': 'svg' }[req.file.mimetype as string] ?? 'bin';
+  const name = `${Date.now()}-${createHash('sha1').update(req.file.buffer).digest('hex').slice(0, 10)}.${ext}`;
+  await writeFile(path.join(dir, name), req.file.buffer);
+  const url = `/uploads/${name}`;
+  const [row] = await db.insert(media).values({ filePath: url, alt: req.body.alt ?? null, sourceUrl: 'upload' }).returning();
+  res.status(201).json({ media: row, url });
+});
 
 const generateSchema = z.object({
   prompt: z.string().min(10),

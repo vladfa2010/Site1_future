@@ -56,3 +56,63 @@ storiesRouter.post('/stories', authRequired, requireRole('admin', 'super_admin')
   const [row] = await db.insert(stories).values(parsed.data).returning();
   res.status(201).json({ story: row });
 });
+
+// PATCH /api/stories/:id
+storiesRouter.patch('/stories/:id', authRequired, requireRole('admin', 'super_admin'), async (req, res) => {
+  const parsed = storySchema.partial().safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'validation', details: parsed.error.flatten() });
+    return;
+  }
+  const [row] = await db.update(stories).set(parsed.data).where(eq(stories.id, Number(req.params.id))).returning();
+  if (!row) {
+    res.status(404).json({ error: 'not found' });
+    return;
+  }
+  res.json({ story: row });
+});
+
+// GET /api/stories/:id/articles — состав (admin)
+storiesRouter.get('/stories/:id/articles', authRequired, requireRole('admin', 'super_admin'), async (req, res) => {
+  const rows = await db
+    .select({ articleId: articles.id, title: articles.title, publishedAt: articles.publishedAt, isPrimary: articleStories.isPrimary })
+    .from(articleStories)
+    .innerJoin(articles, eq(articleStories.articleId, articles.id))
+    .where(eq(articleStories.storyId, Number(req.params.id)))
+    .orderBy(articles.publishedAt);
+  res.json({ articles: rows });
+});
+
+// PUT /api/stories/:id/articles — состав сюжета (транзакционно) + главная статья
+const storyArticlesSchema = z.object({
+  articleIds: z.array(z.number().int()),
+  primaryArticleId: z.number().int().optional(),
+});
+
+storiesRouter.put('/stories/:id/articles', authRequired, requireRole('admin', 'super_admin'), async (req, res) => {
+  const storyId = Number(req.params.id);
+  const parsed = storyArticlesSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'validation', details: parsed.error.flatten() });
+    return;
+  }
+  const { articleIds, primaryArticleId } = parsed.data;
+
+  await db.transaction(async (tx) => {
+    await tx.delete(articleStories).where(eq(articleStories.storyId, storyId));
+    if (articleIds.length) {
+      await tx.insert(articleStories).values(
+        articleIds.map((articleId) => ({ articleId, storyId, isPrimary: articleId === primaryArticleId })),
+      );
+    }
+    await tx.update(stories).set({ primaryArticleId: primaryArticleId ?? null }).where(eq(stories.id, storyId));
+  });
+
+  const storyArticlesRows = await db
+    .select({ articleId: articles.id, title: articles.title, publishedAt: articles.publishedAt, isPrimary: articleStories.isPrimary })
+    .from(articleStories)
+    .innerJoin(articles, eq(articleStories.articleId, articles.id))
+    .where(eq(articleStories.storyId, storyId))
+    .orderBy(articles.publishedAt);
+  res.json({ articles: storyArticlesRows });
+});
