@@ -526,3 +526,4 @@ investicionno_rf/
 | 2026-11-06 | Инициализирован локальный git-репозиторий. Добавлена структура монорепозитория: npm workspaces, apps/api + web + admin, packages/db (Drizzle) + shared, infra/docker (раздел 6.4) |
 | 2026-11-06 | **Прототип работает локально**: Homebrew Postgres 17 + pgvector 0.8.7 (Docker на машине нет — заменён локальной БД, compose оставлен для сервера). Схема Drizzle (27 таблиц) → миграция применена → смоук-тест зелёный (npm run db:smoke) |
 | 2026-11-06 | Изучены репозитории PULSE (backend + frontend). Раздел 7: совпадение стека, TEI + Qwen3-Embedding-0.6B (dim 1024 = наш выбор), гибридный поиск, трёхзонная кластеризация каскадов → идеи для Сюжетов. Репозитории склонированы в reference/ (.gitignore) |
+| 2026-11-06 | Сверен TECH_STACK.md с package.json обоих репозиториев — факт совпадает. Фронтенд-наследие для apps/web: TanStack Query 5, TipTap 3, react-helmet-async, ECharts, Vitest/Playwright, DESIGN_SYSTEM.md как основа визуальной семьи |
