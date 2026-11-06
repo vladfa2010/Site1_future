@@ -86,7 +86,7 @@ articlesRouter.get('/', optionalAuth, async (req, res) => {
     .from(articles)
     .leftJoin(media, eq(articles.coverMediaId, media.id))
     .where(where)
-    .orderBy(sql`${articles.publishedAt} desc nulls last`)
+    .orderBy(sql`coalesce(${articles.publishedAt}, ${articles.createdAt}) desc`)
     .limit(limit)
     .offset((page - 1) * limit);
 
