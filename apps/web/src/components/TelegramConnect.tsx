@@ -45,6 +45,14 @@ export function TelegramConnect({ compact = false }: { compact?: boolean }) {
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
   }, []);
 
+  // ХУКИ ВЫШЕ условных return — иначе нарушается порядок хуков и React падает
+  useEffect(() => {
+    if (status?.connected && timerRef.current) {
+      clearInterval(timerRef.current);
+      setConnecting(false);
+    }
+  }, [status?.connected]);
+
   if (!user) return null;
   if (status && (status.connected || status.enabled === false)) return null;
 
@@ -68,13 +76,6 @@ export function TelegramConnect({ compact = false }: { compact?: boolean }) {
       setError(e instanceof Error ? e.message : 'Ошибка подключения');
     }
   };
-
-  useEffect(() => {
-    if (status?.connected && timerRef.current) {
-      clearInterval(timerRef.current);
-      setConnecting(false);
-    }
-  }, [status?.connected]);
 
   if (compact) {
     return (
