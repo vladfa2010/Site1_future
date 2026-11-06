@@ -9,7 +9,8 @@ import CompaniesPage from './pages/CompaniesPage';
 import CompanyEditPage from './pages/CompanyEditPage';
 import TrendsPage from './pages/TrendsPage';
 import TrendEditPage from './pages/TrendEditPage';
-import DictionariesPage from './pages/DictionariesPage';
+import DictionariesPage from './pages/IndustriesPage';
+import TickersPage from './pages/TickersPage';
 import StoriesPage from './pages/StoriesPage';
 import StoryEditPage from './pages/StoryEditPage';
 import MediaPage from './pages/MediaPage';
@@ -43,7 +44,8 @@ export default function App() {
                   <Route path="/companies/:slug/edit" element={<CompanyEditPage />} />
                   <Route path="/trends" element={<TrendsPage />} />
                   <Route path="/trends/:id/edit" element={<TrendEditPage />} />
-                  <Route path="/dictionaries" element={<DictionariesPage />} />
+                  <Route path="/industries" element={<DictionariesPage />} />
+                  <Route path="/tickers" element={<TickersPage />} />
                   <Route path="/stories" element={<StoriesPage />} />
                   <Route path="/stories/:id/edit" element={<StoryEditPage />} />
                   <Route path="/media" element={<MediaPage />} />
