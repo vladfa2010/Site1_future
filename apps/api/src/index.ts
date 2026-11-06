@@ -6,6 +6,7 @@ import { articlesRouter } from './routes/articles.js';
 import { entitiesRouter } from './routes/entities.js';
 import { storiesRouter } from './routes/stories.js';
 import { bindingsRouter } from './routes/bindings.js';
+import { screenerRouter } from './routes/screener.js';
 
 const app = express();
 
@@ -21,6 +22,7 @@ app.use('/api', bindingsRouter); // ПЕРЕД articlesRouter: пути /article
 app.use('/api/articles', articlesRouter);
 app.use('/api', entitiesRouter);   // /companies /tickers /industries /trends
 app.use('/api', storiesRouter);    // /stories
+app.use('/api', screenerRouter);   // /screener /deal-phases /deal-stages
 
 app.use((_req, res) => {
   res.status(404).json({ error: 'not found' });
