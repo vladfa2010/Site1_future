@@ -37,12 +37,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
                   Админка
                 </a>
               )}
-              <span className="text-zinc-300">
+              <Link to="/cabinet" className="text-zinc-300 hover:text-[#c9ff2a]">
                 {user.displayName ?? user.email}
-                {isAdmin && (
-                  <span className="ml-2 rounded-full bg-[#beff00]/15 px-2 py-0.5 text-xs text-[#c9ff2a]">{user.role === 'super_admin' ? 'супер-админ' : 'админ'}</span>
-                )}
-              </span>
+              </Link>
+              {isAdmin && (
+                <span className="rounded-full bg-[#beff00]/15 px-2 py-0.5 text-xs text-[#c9ff2a]">{user.role === 'super_admin' ? 'супер-админ' : 'админ'}</span>
+              )}
               <button onClick={logout} className="text-zinc-500 hover:text-zinc-300">Выйти</button>
             </span>
           ) : (

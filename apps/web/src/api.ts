@@ -41,6 +41,7 @@ export interface FundingRound {
 
 export interface CompanyDetail {
   company: {
+    id: number;
     slug: string;
     name: string;
     oneLiner: string | null;
@@ -56,12 +57,12 @@ export interface CompanyDetail {
 }
 
 export interface TrendDetail {
-  trend: { slug: string; name: string; description: string | null };
+  trend: { id: number; slug: string; name: string; description: string | null };
   articles: ArticleListItem[];
 }
 
 export interface StoryDetail {
-  story: { slug: string; name: string; description: string | null };
+  story: { id: number; slug: string; name: string; description: string | null };
   articles: (ArticleListItem & { isPrimary: boolean })[];
 }
 

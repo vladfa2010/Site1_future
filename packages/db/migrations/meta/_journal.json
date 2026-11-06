@@ -29,6 +29,13 @@
       "when": 1793955859899,
       "tag": "0003_famous_the_captain",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1793971563757,
+      "tag": "0004_milky_mercury",
+      "breakpoints": true
     }
   ]
 }

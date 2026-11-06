@@ -1,6 +1,7 @@
 import { Link } from 'react-router';
 import type { Idea } from '../api';
 import { CoverThumb } from './CoverThumb';
+import { FavoriteButton } from './FavoriteButton';
 
 /**
  * Карточка идеи с вертикальной обложкой (как у донора) + бейджи
@@ -9,7 +10,8 @@ import { CoverThumb } from './CoverThumb';
 export function IdeaCard({ idea }: { idea: Idea }) {
   const badge = idea.phases[0] ?? idea.stages[0] ?? idea.industries[0] ?? 'Идея';
   return (
-    <Link to={`/ideya/${idea.slug}`} className="group block h-full">
+    <div className="group relative h-full">
+      <Link to={`/ideya/${idea.slug}`} className="block h-full">
       <div className="relative">
         <CoverThumb title={idea.title} coverUrl={idea.coverUrl} />
         {/* бейдж поверх обложки */}
@@ -28,6 +30,8 @@ export function IdeaCard({ idea }: { idea: Idea }) {
           ))}
         </div>
       )}
-    </Link>
+      </Link>
+      <FavoriteButton entityType="article" entityId={idea.id} className="absolute top-2 right-2" />
+    </div>
   );
 }

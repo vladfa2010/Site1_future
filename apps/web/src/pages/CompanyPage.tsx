@@ -4,6 +4,8 @@ import { api } from '../api';
 import { ArticleCard } from '../components/ArticleCard';
 import { RoundsTable } from '../components/RoundsTable';
 import { Breadcrumbs } from '../components/Breadcrumbs';
+import { FavoriteButton } from '../components/FavoriteButton';
+import { SubscribeButton } from '../components/SubscribeButton';
 
 export default function CompanyPage() {
   const { slug = '' } = useParams();
@@ -22,7 +24,13 @@ export default function CompanyPage() {
       <Breadcrumbs items={[{ label: 'Скринер проектов', to: '/portfolio' }, { label: company.name }]} />
       {/* Шапка профиля */}
       <header>
-        <h1 className="text-3xl font-bold">{company.name}</h1>
+        <div className="flex items-start justify-between gap-4">
+          <h1 className="text-3xl font-bold">{company.name}</h1>
+          <span className="flex shrink-0 gap-2 pt-1">
+            <FavoriteButton entityType="company" entityId={company.id} className="static" />
+            <SubscribeButton entityType="company" entityId={company.id} />
+          </span>
+        </div>
         {company.oneLiner && <p className="mt-2 text-lg text-zinc-400">{company.oneLiner}</p>}
         <div className="mt-3 flex flex-wrap gap-3 text-sm text-zinc-500">
           {company.foundedYear && <span>осн. {company.foundedYear}</span>}

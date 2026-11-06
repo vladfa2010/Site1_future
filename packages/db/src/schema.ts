@@ -333,6 +333,22 @@ export const bookmarks = pgTable(
   (t) => [primaryKey({ columns: [t.userId, t.articleId] })],
 );
 
+// Избранное (фаза 1 ЛК): универсальная таблица — статьи, компании, тренды, сюжеты
+export const FAVORITE_TYPES = ['article', 'company', 'trend', 'story'] as const;
+
+export const favorites = pgTable(
+  'favorites',
+  {
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    entityType: text('entity_type').notNull(), // article | company | trend | story
+    entityId: integer('entity_id').notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.entityType, t.entityId] })],
+);
+
 export const subscriptions = pgTable(
   'subscriptions',
   {

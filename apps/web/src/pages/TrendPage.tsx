@@ -5,6 +5,8 @@ import { api, type ArticleListItem } from '../api';
 import { ArticleCard, TYPE_LABELS } from '../components/ArticleCard';
 import { Breadcrumbs } from '../components/Breadcrumbs';
 import { Carousel, CAROUSEL_ITEM } from '../components/Carousel';
+import { FavoriteButton } from '../components/FavoriteButton';
+import { SubscribeButton } from '../components/SubscribeButton';
 
 /**
  * Страница тренда — структура как у донора:
@@ -44,8 +46,12 @@ export default function TrendPage() {
       <Breadcrumbs items={[{ label: 'Тренды' }, { label: trend.name }]} />
 
       {/* Шапка */}
-      <header>
+      <header className="flex items-start justify-between gap-4">
         <h1 className="text-3xl font-bold">{trend.name}</h1>
+        <span className="flex shrink-0 gap-2 pt-1">
+          <FavoriteButton entityType="trend" entityId={trend.id} className="static" />
+          <SubscribeButton entityType="trend" entityId={trend.id} />
+        </span>
       </header>
 
       {/* «Про тренд» — лонгрид, сворачиваемый */}

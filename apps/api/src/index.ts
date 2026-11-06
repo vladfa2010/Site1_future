@@ -11,6 +11,7 @@ import { screenerRouter } from './routes/screener.js';
 import { mediaRouter } from './routes/media.js';
 import { adminRouter } from './routes/admin.js';
 import { marketRouter } from './routes/market.js';
+import { cabinetRouter } from './routes/cabinet.js';
 
 // В production запрет на дефолтный секрет — fail fast
 if (process.env.NODE_ENV === 'production' && config.jwtSecret === 'dev-secret-change-me') {
@@ -45,6 +46,7 @@ app.use('/api', screenerRouter);   // /screener /deal-phases /deal-stages
 app.use('/api', mediaRouter);      // /media/generate /media/upload /media
 app.use('/api', adminRouter);      // /users /redirects /stats
 app.use('/api', marketRouter);     // /market/chart
+app.use('/api', cabinetRouter);    // /favorites /subscriptions /feed (auth)
 
 app.use((_req, res) => {
   res.status(404).json({ error: 'not found' });

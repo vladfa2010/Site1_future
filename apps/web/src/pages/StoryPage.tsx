@@ -2,6 +2,7 @@ import { useParams } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../api';
 import { Breadcrumbs } from '../components/Breadcrumbs';
+import { FavoriteButton } from '../components/FavoriteButton';
 
 export default function StoryPage() {
   const { slug = '' } = useParams();
@@ -20,7 +21,10 @@ export default function StoryPage() {
       <Breadcrumbs items={[{ label: 'Сюжеты' }, { label: story.name }]} />
       <header>
         <span className="text-xs uppercase tracking-wide text-zinc-500">Сюжет</span>
-        <h1 className="mt-1 text-3xl font-bold">{story.name}</h1>
+        <div className="flex items-start justify-between gap-4">
+          <h1 className="mt-1 text-3xl font-bold">{story.name}</h1>
+          <FavoriteButton entityType="story" entityId={story.id} className="static" />
+        </div>
         {story.description && <p className="mt-4 text-zinc-300">{story.description}</p>}
       </header>
 

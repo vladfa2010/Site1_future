@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import App from './App';
 import { AuthProvider } from './auth';
 import { AuthModalProvider } from './authModal';
+import { FavoritesProvider } from './favorites';
 import './index.css';
 
 const queryClient = new QueryClient({
@@ -16,9 +17,11 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <AuthModalProvider>
-          <BrowserRouter>
-            <App />
-          </BrowserRouter>
+          <FavoritesProvider>
+            <BrowserRouter>
+              <App />
+            </BrowserRouter>
+          </FavoritesProvider>
         </AuthModalProvider>
       </AuthProvider>
     </QueryClientProvider>
