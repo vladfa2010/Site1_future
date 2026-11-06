@@ -15,6 +15,7 @@ import {
   companyIndustries,
   articleCompanies,
   articleTrends,
+  fundingRounds,
 } from '@newinvest/db';
 import { authRequired, requireRole } from '../middleware/auth.js';
 
@@ -64,7 +65,15 @@ entitiesRouter.get('/companies/:slug', async (req, res) => {
     .orderBy(desc(articles.publishedAt))
     .limit(50);
 
-  res.json({ company, tickers: companyTickers, industries: companyIndustriesList, articles: companyArticles });
+  // Раунды финансирования — только если внесены (раздел 4.3)
+  const rounds = await db
+    .select()
+    .from(fundingRounds)
+    .where(eq(fundingRounds.companyId, company.id))
+    .orderBy(desc(fundingRounds.date))
+    .limit(50);
+
+  res.json({ company, tickers: companyTickers, industries: companyIndustriesList, articles: companyArticles, fundingRounds: rounds });
 });
 
 const companySchema = z.object({
@@ -92,6 +101,39 @@ entitiesRouter.post('/companies', authRequired, requireRole('admin', 'super_admi
     await db.insert(companyIndustries).values(industryIds.map((industryId) => ({ companyId: company.id, industryId })));
   }
   res.status(201).json({ company });
+});
+
+// POST /api/companies/:id/rounds — раунд финансирования (admin).
+// sourceUrl обязателен: каждая цифра — со ссылкой на новость/раскрытие.
+const roundSchema = z.object({
+  stage: z.string().optional(), // seed | series-a..e | ipo | grant | mna
+  date: z.coerce.date().optional(),
+  amount: z.string().optional(), // NUMERIC приходит строкой, чтобы не терять точность
+  currency: z.string().optional(),
+  postMoneyValuation: z.string().optional(),
+  investors: z.array(z.string()).optional(),
+  sourceUrl: z.string().url(),
+  status: z.string().optional(),
+});
+
+entitiesRouter.post('/companies/:id/rounds', authRequired, requireRole('admin', 'super_admin'), async (req, res) => {
+  const companyId = Number(req.params.id);
+  const parsed = roundSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'validation', details: parsed.error.flatten() });
+    return;
+  }
+  const [company] = await db.select({ id: companies.id }).from(companies).where(eq(companies.id, companyId)).limit(1);
+  if (!company) {
+    res.status(404).json({ error: 'company not found' });
+    return;
+  }
+  const { date, ...rest } = parsed.data;
+  const [round] = await db
+    .insert(fundingRounds)
+    .values({ ...rest, date: date ? date.toISOString().slice(0, 10) : undefined, companyId })
+    .returning();
+  res.status(201).json({ round });
 });
 
 // ---------- Тикеры ----------

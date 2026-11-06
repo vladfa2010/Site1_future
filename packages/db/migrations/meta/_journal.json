@@ -15,6 +15,13 @@
       "when": 1793954182725,
       "tag": "0001_equal_blade",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1793954901962,
+      "tag": "0002_sad_ben_urich",
+      "breakpoints": true
     }
   ]
 }

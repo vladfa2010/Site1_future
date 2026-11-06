@@ -171,6 +171,15 @@
 - эндпоинт `GET /api/articles/:id/related` — блоки: развитие сюжета / те же компании другие типы / идеи того же тренда / векторно-похожие (механика из 7.3)
 - «карусели» = отрисованный подграф («всё по тренду», «всё по тикеру»)
 
+### 4.3 Принцип отображения: показываем только внесённое (2026-11-06)
+
+Данные по оценкам/раундам есть не всегда — и это норма (частные компании без раскрытий). Правила:
+
+- **Блок рендерится только если данные внесены.** Нет раундов — нет пустого заголовка «Оценки и раунды» и прочерков на странице компании
+- **Каждая цифра — с источником**: `funding_rounds.source_url` обязателен (API отдаёт 400 без него). Доверие = ссылка на новость/раскрытие
+- **Частичность допустима**: раунд может иметь сумму без оценки, оценку без инвесторов; график динамики строится по точкам, где оценка известна
+- Аналогично для тикеров, стадий сделки и пр. — отсутствие данных ≠ «0», это отсутствие блока
+
 ## 5. Схема БД новой платформы (PostgreSQL)
 
 ### 5.1 Справочники-сущности (граф знаний)
@@ -228,6 +237,20 @@ trends (                           -- Тренды (16), сливаем trend + 
 
 trend_industries (trend_id, industry_id, PRIMARY KEY(trend_id, industry_id))
 company_trends   (company_id, trend_id, PRIMARY KEY(company_id, trend_id))
+
+funding_rounds (                   -- РАУНДЫ И ОЦЕНКИ (питчбук-лайт), миграция 0002
+  id            SERIAL PRIMARY KEY,
+  company_id    INT REFERENCES companies(id) ON DELETE CASCADE,
+  stage         TEXT,                   -- seed | series-a..e | ipo | grant | mna
+  date          DATE,
+  amount        NUMERIC,                -- сумма раунда
+  currency      TEXT DEFAULT 'USD',
+  post_money_valuation NUMERIC,         -- для графика динамики оценки
+  investors     TEXT[],                 -- MVP: список имён
+  source_url    TEXT NOT NULL,          -- обязателен: каждая цифра — со ссылкой
+  status        TEXT DEFAULT 'completed',
+  created_at, updated_at
+)
 
 stories (                          -- СЮЖЕТЫ (решение 2026-11-06): объединяют
   id            SERIAL PRIMARY KEY,      -- серии статей об одном событии
@@ -575,3 +598,4 @@ investicionno_rf/
 | 2026-11-06 | **apps/api работает**: Express + JWT + bcrypt, роли super_admin/admin/author/reader (раздел 6.3). Эндпоинты: register/login, список/просмотр статей (публично — только published), author → draft, публикация — admin. Сквозные curl-тесты пройдены. Запуск: npm run seed -w @newinvest/api, dev: npm run dev -w @newinvest/api |
 | 2026-11-06 | **Граф знаний в API**: карточки /companies/:slug (тикеры+индустрии+статьи), /trends/:slug (лендинг), /stories/:slug (хронология), автодополнение /tickers?q=. Привязки: PUT /articles/:id/relations (транзакционно), автоподстановка цепочки GET /articles/:id/bindings-suggest (тикер→компания→индустрия) — протестировано end-to-end |
 | 2026-11-06 | **Предметная модель «венчурный портфель»** (раздел 4.1): тренд→идея→компания→пайплайн сделки→архив; идея может быть без компаний. Миграция 0001: articles.thesis, companies.one_liner/logo_media_id/founded_year |
+| 2026-11-06 | **Питчбук-лайт**: миграция 0002 `funding_rounds` (раунды, post-money оценка, инвесторы TEXT[], обязательный source_url). API: раунды в карточке компании, POST для admin. Принцип 4.3: «показываем только внесённое», 400 без источника. Тесты пройдены |

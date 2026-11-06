@@ -9,6 +9,8 @@ import {
   integer,
   boolean,
   timestamp,
+  date,
+  numeric,
   uniqueIndex,
   primaryKey,
   index,
@@ -114,6 +116,25 @@ export const trendIndustries = pgTable(
   },
   (t) => [primaryKey({ columns: [t.trendId, t.industryId] })],
 );
+
+// Раунды и оценки (питчбук-лайт). Показываются ТОЛЬКО если внесены (раздел 4.3).
+// Каждая цифра — с источником: доверие = ссылка.
+export const fundingRounds = pgTable('funding_rounds', {
+  id: serial('id').primaryKey(),
+  companyId: integer('company_id')
+    .notNull()
+    .references(() => companies.id, { onDelete: 'cascade' }),
+  stage: text('stage'), // seed | series-a..e | ipo | grant | mna
+  date: date('date'),
+  amount: numeric('amount'), // сумма раунда, NUMERIC — деньги точные
+  currency: text('currency').default('USD'),
+  postMoneyValuation: numeric('post_money_valuation'), // для графика динамики
+  investors: text('investors').array(), // MVP: просто список имён
+  sourceUrl: text('source_url').notNull(), // обязателен
+  status: text('status').default('completed'),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+});
 
 export const companyTrends = pgTable(
   'company_trends',
