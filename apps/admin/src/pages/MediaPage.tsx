@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../api';
+import SearchInput, { filterRows } from '../components/SearchInput';
 
 interface MediaItem { id: number; filePath: string; alt: string | null; sourceUrl: string | null; createdAt: string }
 
 export default function MediaPage() {
   const [items, setItems] = useState<MediaItem[]>([]);
+  const [q, setQ] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -12,6 +14,8 @@ export default function MediaPage() {
 
   const load = async () => setItems((await api<{ media: MediaItem[] }>('/media')).media);
   useEffect(() => { void load().catch(() => setError('Ошибка загрузки')); }, []);
+
+  const filtered = filterRows(items, q, ['filePath', 'alt', 'sourceUrl']);
 
   const upload = async (file: File) => {
     setBusy(true); setError(null); setNotice(null);
@@ -57,8 +61,13 @@ export default function MediaPage() {
       {notice && <p className="rounded-lg bg-green-500/10 px-3 py-2 text-sm text-green-400">{notice}</p>}
       {error && <p className="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-400">{error}</p>}
 
+      <div className="flex items-center justify-between gap-3">
+        <SearchInput value={q} onChange={setQ} placeholder="Поиск по файлу…" />
+        <span className="text-sm text-zinc-500">{filtered.length} из {items.length}</span>
+      </div>
+
       <div className="grid grid-cols-3 gap-3 sm:grid-cols-5 lg:grid-cols-8">
-        {items.map((m) => (
+        {filtered.map((m) => (
           <figure key={m.id} className="group relative">
             <img src={src(m)} alt={m.alt ?? ''} loading="lazy" className="aspect-square w-full rounded-lg border border-zinc-800 object-cover" />
             <figcaption className="absolute inset-x-0 bottom-0 truncate rounded-b-lg bg-zinc-950/80 px-2 py-1 text-[10px] text-zinc-400 opacity-0 transition-opacity group-hover:opacity-100">
@@ -67,7 +76,7 @@ export default function MediaPage() {
           </figure>
         ))}
       </div>
-      {items.length === 0 && <p className="text-sm text-zinc-500">Пусто. Сгенерируйте обложку в редакторе статьи или загрузите файл.</p>}
+      {filtered.length === 0 && <p className="text-sm text-zinc-500">Пусто. Сгенерируйте обложку в редакторе статьи или загрузите файл.</p>}
     </div>
   );
 }

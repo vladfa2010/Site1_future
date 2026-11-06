@@ -71,6 +71,13 @@ articlesRouter.get('/', optionalAuth, async (req, res) => {
     conditions.push(eq(articles.status, 'published'));
   }
 
+  // Поиск по заголовку/slug (админка) — case-insensitive подстрока
+  const q = (req.query.q as string | undefined)?.trim();
+  if (q) {
+    const like = `%${q.toLowerCase()}%`;
+    conditions.push(sql`lower(${articles.title}) like ${like} or lower(${articles.slug}) like ${like}`);
+  }
+
   const where = conditions.length > 0 ? and(...conditions) : undefined;
   const rows = await db
     .select({

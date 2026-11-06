@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { api } from '../api';
+import SearchInput from '../components/SearchInput';
 
 const TYPE_LABELS: Record<string, string> = {
   novost: 'Новость', ideya: 'Идея', sobytie: 'Событие', analitika: 'Аналитика', interesnoe: 'Интересное',
@@ -15,6 +16,7 @@ interface Row {
 export default function ArticlesPage() {
   const [type, setType] = useState('');
   const [status, setStatus] = useState('');
+  const [q, setQ] = useState('');
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -26,6 +28,7 @@ export default function ArticlesPage() {
       const qs = new URLSearchParams({ limit: '100' });
       if (type) qs.set('type', type);
       if (status) qs.set('status', status);
+      if (q) qs.set('q', q);
       const data = await api<{ articles: Row[] }>(`/articles?${qs}`);
       setRows(data.articles);
     } catch (e) {
@@ -35,7 +38,7 @@ export default function ArticlesPage() {
     }
   };
 
-  useEffect(() => { void load(); }, [type, status]);
+  useEffect(() => { void load(); }, [type, status, q]);
 
   return (
     <div className="space-y-4">
@@ -44,7 +47,8 @@ export default function ArticlesPage() {
         <Link to="/articles/new" className="btn">+ Новая статья</Link>
       </div>
 
-      <div className="flex gap-3">
+      <div className="flex flex-wrap items-center gap-3">
+        <SearchInput value={q} onChange={setQ} placeholder="Поиск по заголовку / slug…" />
         <select className="input max-w-[180px]" value={type} onChange={(e) => setType(e.target.value)}>
           <option value="">Все типы</option>
           {Object.entries(TYPE_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}

@@ -1,16 +1,20 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { api } from '../api';
+import SearchInput, { filterRows } from '../components/SearchInput';
 
 interface Industry { id: number; slug: string; name: string; description: string | null }
 
 export default function IndustriesPage() {
   const [rows, setRows] = useState<Industry[]>([]);
+  const [q, setQ] = useState('');
   const [form, setForm] = useState({ slug: '', name: '' });
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
   const load = async () => setRows((await api<{ industries: Industry[] }>('/industries')).industries);
   useEffect(() => { void load().catch(() => setError('Ошибка загрузки')); }, []);
+
+  const filtered = filterRows(rows, q, ['name', 'slug', 'description']);
 
   const create = async (e: FormEvent) => {
     e.preventDefault();
@@ -27,7 +31,11 @@ export default function IndustriesPage() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-xl font-bold">Индустрии</h1>
+      <div className="flex items-center justify-between gap-3">
+        <h1 className="text-xl font-bold">Индустрии</h1>
+        <span className="text-sm text-zinc-500">{filtered.length} из {rows.length}</span>
+      </div>
+      <SearchInput value={q} onChange={setQ} placeholder="Поиск по названию / slug…" />
       {notice && <p className="rounded-lg bg-green-500/10 px-3 py-2 text-sm text-green-400">{notice}</p>}
       {error && <p className="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-400">{error}</p>}
 
@@ -49,7 +57,7 @@ export default function IndustriesPage() {
             <tr><th className="th">Название</th><th className="th">Slug</th><th className="th">URL на сайте</th></tr>
           </thead>
           <tbody>
-            {rows.map((i) => (
+            {filtered.map((i) => (
               <tr key={i.id} className="border-b border-zinc-800 last:border-0">
                 <td className="td font-medium">{i.name}</td>
                 <td className="td text-zinc-500">{i.slug}</td>

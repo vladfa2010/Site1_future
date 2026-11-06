@@ -1,17 +1,21 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Link } from 'react-router';
 import { api } from '../api';
+import SearchInput, { filterRows } from '../components/SearchInput';
 
 interface Company { id: number; slug: string; name: string; oneLiner: string | null; country: string | null; isPublic: boolean }
 
 export default function CompaniesPage() {
   const [rows, setRows] = useState<Company[]>([]);
+  const [q, setQ] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ slug: '', name: '' });
   const [error, setError] = useState<string | null>(null);
 
   const load = async () => setRows((await api<{ companies: Company[] }>('/companies')).companies);
   useEffect(() => { void load().catch(() => setError('Ошибка загрузки')); }, []);
+
+  const filtered = filterRows(rows, q, ['name', 'slug', 'country']);
 
   const create = async (e: FormEvent) => {
     e.preventDefault();
@@ -48,13 +52,18 @@ export default function CompaniesPage() {
       )}
       {error && <p className="text-sm text-red-600">{error}</p>}
 
+      <div className="flex items-center justify-between gap-3">
+        <SearchInput value={q} onChange={setQ} placeholder="Поиск по названию / slug…" />
+        <span className="text-sm text-zinc-500">{filtered.length} из {rows.length}</span>
+      </div>
+
       <div className="card overflow-x-auto p-0">
         <table className="w-full">
           <thead className="border-b border-zinc-800">
             <tr><th className="th">Название</th><th className="th">Slug</th><th className="th">Страна</th><th className="th">Публичная</th><th className="th" /></tr>
           </thead>
           <tbody>
-            {rows.map((c) => (
+            {filtered.map((c) => (
               <tr key={c.id} className="border-b border-zinc-800 last:border-0">
                 <td className="td font-medium">{c.name}</td>
                 <td className="td text-zinc-500">{c.slug}</td>

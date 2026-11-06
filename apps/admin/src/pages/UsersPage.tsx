@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { api } from '../api';
 import { useAuth } from '../auth';
+import SearchInput, { filterRows } from '../components/SearchInput';
 
 interface UserRow { id: number; email: string; displayName: string | null; role: string; createdAt: string; views: number }
 const ROLES = ['reader', 'author', 'admin', 'super_admin'] as const;
@@ -11,11 +12,14 @@ export default function UsersPage() {
   const { user: me } = useAuth();
   const isSuper = me?.role === 'super_admin';
   const [rows, setRows] = useState<UserRow[]>([]);
+  const [q, setQ] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
   const load = async () => setRows((await api<{ users: UserRow[] }>('/users')).users);
   useEffect(() => { void load().catch(() => setError('Ошибка загрузки')); }, []);
+
+  const filtered = filterRows(rows, q, ['email', 'displayName', 'role']);
 
   const changeRole = async (id: number, role: string) => {
     setError(null); setNotice(null);
@@ -30,7 +34,11 @@ export default function UsersPage() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-xl font-bold">Пользователи</h1>
+      <div className="flex items-center justify-between gap-3">
+        <h1 className="text-xl font-bold">Пользователи</h1>
+        <span className="text-sm text-zinc-500">{filtered.length} из {rows.length}</span>
+      </div>
+      <SearchInput value={q} onChange={setQ} placeholder="Поиск по email / имени…" />
       {notice && <p className="rounded-lg bg-green-500/10 px-3 py-2 text-sm text-green-400">{notice}</p>}
       {error && <p className="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-400">{error}</p>}
 
@@ -40,7 +48,7 @@ export default function UsersPage() {
             <tr><th className="th">Email</th><th className="th">Имя</th><th className="th">Роль</th><th className="th">Просмотры</th><th className="th">Регистрация</th>{isSuper && <th className="th" />}</tr>
           </thead>
           <tbody>
-            {rows.map((u) => (
+            {filtered.map((u) => (
               <tr key={u.id} className="border-b border-zinc-800 last:border-0">
                 <td className="td font-medium">{u.email}</td>
                 <td className="td text-zinc-400">{u.displayName ?? '—'}</td>

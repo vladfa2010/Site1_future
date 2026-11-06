@@ -1,16 +1,20 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { api } from '../api';
+import SearchInput, { filterRows } from '../components/SearchInput';
 
 interface Redirect { oldPath: string; newPath: string; httpCode: number }
 
 export default function RedirectsPage() {
   const [rows, setRows] = useState<Redirect[]>([]);
+  const [q, setQ] = useState('');
   const [form, setForm] = useState({ oldPath: '', newPath: '', httpCode: '301' });
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
   const load = async () => setRows((await api<{ redirects: Redirect[] }>('/redirects')).redirects);
   useEffect(() => { void load().catch(() => setError('Ошибка загрузки')); }, []);
+
+  const filtered = filterRows(rows, q, ['oldPath', 'newPath']);
 
   const create = async (e: FormEvent) => {
     e.preventDefault();
@@ -35,8 +39,12 @@ export default function RedirectsPage() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-xl font-bold">Редиректы (SEO-миграция)</h1>
+      <div className="flex items-center justify-between gap-3">
+        <h1 className="text-xl font-bold">Редиректы (SEO-миграция)</h1>
+        <span className="text-sm text-zinc-500">{filtered.length} из {rows.length}</span>
+      </div>
       <p className="text-sm text-zinc-500">301-перенаправления со старых URL донора на новые. Пустая таблица — все URL сохранены 1:1.</p>
+      <SearchInput value={q} onChange={setQ} placeholder="Поиск по URL…" />
       {notice && <p className="rounded-lg bg-green-500/10 px-3 py-2 text-sm text-green-400">{notice}</p>}
       {error && <p className="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-400">{error}</p>}
 
@@ -65,7 +73,7 @@ export default function RedirectsPage() {
             <tr><th className="th">Старый URL</th><th className="th">→ Новый</th><th className="th">Код</th><th className="th" /></tr>
           </thead>
           <tbody>
-            {rows.map((r) => (
+            {filtered.map((r) => (
               <tr key={r.oldPath} className="border-b border-zinc-800 last:border-0">
                 <td className="td font-mono text-xs">{r.oldPath}</td>
                 <td className="td font-mono text-xs">{r.newPath}</td>

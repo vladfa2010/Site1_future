@@ -1,17 +1,21 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Link } from 'react-router';
 import { api } from '../api';
+import SearchInput, { filterRows } from '../components/SearchInput';
 
 interface Story { id: number; slug: string; name: string; status: string }
 
 export default function StoriesPage() {
   const [rows, setRows] = useState<Story[]>([]);
+  const [q, setQ] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ slug: '', name: '' });
   const [error, setError] = useState<string | null>(null);
 
   const load = async () => setRows((await api<{ stories: Story[] }>('/stories')).stories);
   useEffect(() => { void load().catch(() => setError('Ошибка загрузки')); }, []);
+
+  const filtered = filterRows(rows, q, ['name', 'slug']);
 
   const create = async (e: FormEvent) => {
     e.preventDefault();
@@ -48,13 +52,18 @@ export default function StoriesPage() {
       )}
       {error && <p className="text-sm text-red-400">{error}</p>}
 
+      <div className="flex items-center justify-between gap-3">
+        <SearchInput value={q} onChange={setQ} placeholder="Поиск по названию / slug…" />
+        <span className="text-sm text-zinc-500">{filtered.length} из {rows.length}</span>
+      </div>
+
       <div className="card overflow-x-auto p-0">
         <table className="w-full">
           <thead className="border-b border-zinc-800">
             <tr><th className="th">Название</th><th className="th">Slug</th><th className="th">Статус</th><th className="th" /></tr>
           </thead>
           <tbody>
-            {rows.map((s) => (
+            {filtered.map((s) => (
               <tr key={s.id} className="border-b border-zinc-800 last:border-0">
                 <td className="td font-medium">{s.name}</td>
                 <td className="td text-zinc-500">/syuzhet/{s.slug}</td>

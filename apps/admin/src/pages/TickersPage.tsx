@@ -1,11 +1,13 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { api } from '../api';
+import SearchInput, { filterRows } from '../components/SearchInput';
 
 interface Ticker { id: number; slug: string; symbol: string; exchange: string | null; companyName: string | null }
 interface CompanyOpt { id: number; name: string }
 
 export default function TickersPage() {
   const [rows, setRows] = useState<Ticker[]>([]);
+  const [q, setQ] = useState('');
   const [companies, setCompanies] = useState<CompanyOpt[]>([]);
   const [form, setForm] = useState({ slug: '', symbol: '', companyId: '' });
   const [error, setError] = useState<string | null>(null);
@@ -20,6 +22,8 @@ export default function TickersPage() {
     setCompanies(c.companies);
   };
   useEffect(() => { void load().catch(() => setError('Ошибка загрузки')); }, []);
+
+  const filtered = filterRows(rows, q, ['symbol', 'slug', 'companyName', 'exchange']);
 
   const create = async (e: FormEvent) => {
     e.preventDefault();
@@ -43,7 +47,11 @@ export default function TickersPage() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-xl font-bold">Тикеры</h1>
+      <div className="flex items-center justify-between gap-3">
+        <h1 className="text-xl font-bold">Тикеры</h1>
+        <span className="text-sm text-zinc-500">{filtered.length} из {rows.length}</span>
+      </div>
+      <SearchInput value={q} onChange={setQ} placeholder="Поиск по символу / компании…" />
       {notice && <p className="rounded-lg bg-green-500/10 px-3 py-2 text-sm text-green-400">{notice}</p>}
       {error && <p className="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-400">{error}</p>}
 
@@ -68,7 +76,7 @@ export default function TickersPage() {
             <tr><th className="th">Символ</th><th className="th">Компания</th><th className="th">Биржа</th><th className="th">URL на сайте</th></tr>
           </thead>
           <tbody>
-            {rows.map((t) => (
+            {filtered.map((t) => (
               <tr key={t.id} className="border-b border-zinc-800 last:border-0">
                 <td className="td font-mono font-semibold">{t.symbol}</td>
                 <td className="td">{t.companyName ?? <span className="text-zinc-600">— не привязан</span>}</td>
