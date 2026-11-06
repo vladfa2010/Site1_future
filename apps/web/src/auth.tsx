@@ -10,10 +10,11 @@ export interface AuthUser {
 interface AuthState {
   user: AuthUser | null;
   login: (email: string, password: string) => Promise<void>;
+  register: (username: string, email: string, password: string) => Promise<void>;
   logout: () => void;
 }
 
-const AuthContext = createContext<AuthState>({ user: null, login: async () => {}, logout: () => {} });
+const AuthContext = createContext<AuthState>({ user: null, login: async () => {}, register: async () => {}, logout: () => {} });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(() => {
@@ -32,7 +33,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
-      throw new Error(body.error === 'invalid credentials' ? 'Неверный логин или пароль' : 'Ошибка входа');
+      throw new Error(body.error === 'invalid credentials' ? 'Неправильный логин или пароль' : 'Ошибка входа');
+    }
+    const data = await res.json();
+    localStorage.setItem('token', data.token);
+    localStorage.setItem('user', JSON.stringify(data.user));
+    setUser(data.user);
+  };
+
+  // 1:1 с PULSE: регистрация { username, email, password }, пароль от 8
+  const register = async (username: string, email: string, password: string) => {
+    const res = await fetch('/api/auth/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, email, password }),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.error ?? 'Ошибка регистрации');
     }
     const data = await res.json();
     localStorage.setItem('token', data.token);
@@ -46,7 +64,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
   };
 
-  return <AuthContext.Provider value={{ user, login, logout }}>{children}</AuthContext.Provider>;
+  return <AuthContext.Provider value={{ user, login, register, logout }}>{children}</AuthContext.Provider>;
 }
 
 export const useAuth = () => useContext(AuthContext);

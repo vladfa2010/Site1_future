@@ -7,8 +7,7 @@ import TrendPage from './pages/TrendPage';
 import StoryPage from './pages/StoryPage';
 import PipelinePage from './pages/PipelinePage';
 import TypePage from './pages/TypePage';
-import LoginPage from './pages/LoginPage';
-import RegisterPage from './pages/RegisterPage';
+import AuthModalOpener from './pages/AuthModalOpener';
 import AboutPage from './pages/AboutPage';
 import ProposePage from './pages/ProposePage';
 
@@ -24,8 +23,8 @@ export default function App() {
         <Route path="/trend/:slug" element={<TrendPage />} />
         <Route path="/syuzhet/:slug" element={<StoryPage />} />
         <Route path="/portfolio" element={<PipelinePage />} />
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/register" element={<RegisterPage />} />
+        <Route path="/login" element={<AuthModalOpener mode="login" />} />
+        <Route path="/register" element={<AuthModalOpener mode="register" />} />
         <Route path="/propose" element={<ProposePage />} />
         {/* «кто мы и зачем» — как у донора */}
         <Route path="/o-nas" element={<AboutPage slug="o-nas" />} />

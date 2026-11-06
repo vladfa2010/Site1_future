@@ -1,20 +1,22 @@
-import { Link, useNavigate } from 'react-router';
+import { Link } from 'react-router';
 import { useAuth } from '../auth';
+import { useAuthModal } from '../authModal';
+import AuthModal from './AuthModal';
 
 // Админка — отдельное приложение (порт 5174 в dev; в проде — тот же origin, путь /admin)
 const ADMIN_URL = import.meta.env.VITE_ADMIN_URL ?? 'http://localhost:5174';
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuth();
-  const navigate = useNavigate();
+  const { open } = useAuthModal();
   const isAdmin = user?.role === 'admin' || user?.role === 'super_admin';
 
   const onPropose = () => {
     if (!user) {
-      navigate('/login', { state: { from: '/propose' } });
+      open('register', '/propose'); // регистрация, после — обратно на предложение
       return;
     }
-    navigate('/propose');
+    window.location.assign('/propose');
   };
   return (
     <div className="mx-auto flex min-h-screen max-w-5xl flex-col px-4">
@@ -41,13 +43,14 @@ export function Layout({ children }: { children: React.ReactNode }) {
               <button onClick={logout} className="text-zinc-500 hover:text-zinc-300">Выйти</button>
             </span>
           ) : (
-            <Link to="/login" className="rounded-full bg-orange-500 px-4 py-1.5 font-semibold text-zinc-950 hover:bg-orange-400">
+            <button onClick={() => open('login')} className="rounded-full bg-orange-500 px-4 py-1.5 font-semibold text-zinc-950 hover:bg-orange-400">
               Войти
-            </Link>
+            </button>
           )}
         </nav>
       </header>
       <main className="flex-1 py-8">{children}</main>
+      <AuthModal />
       <footer className="border-t border-zinc-800 py-6">
         <div className="flex flex-col items-center gap-3 text-center">
           <button
