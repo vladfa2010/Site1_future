@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import path from 'node:path';
 import { config } from './config.js';
 import { authRouter } from './routes/auth.js';
 import { articlesRouter } from './routes/articles.js';
@@ -7,11 +8,15 @@ import { entitiesRouter } from './routes/entities.js';
 import { storiesRouter } from './routes/stories.js';
 import { bindingsRouter } from './routes/bindings.js';
 import { screenerRouter } from './routes/screener.js';
+import { mediaRouter } from './routes/media.js';
 
 const app = express();
 
 app.use(cors());
 app.use(express.json({ limit: '2mb' }));
+
+// загруженные/сгенерированные файлы (обложки)
+app.use('/uploads', express.static(path.resolve(config.uploadDir)));
 
 app.get('/api/health', (_req, res) => {
   res.json({ ok: true, service: 'newinvest-api' });
@@ -23,6 +28,7 @@ app.use('/api/articles', articlesRouter);
 app.use('/api', entitiesRouter);   // /companies /tickers /industries /trends
 app.use('/api', storiesRouter);    // /stories
 app.use('/api', screenerRouter);   // /screener /deal-phases /deal-stages
+app.use('/api', mediaRouter);      // /media/generate
 
 app.use((_req, res) => {
   res.status(404).json({ error: 'not found' });

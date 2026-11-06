@@ -13,6 +13,7 @@ build/
 
 # Локальные данные (SQLite, загрузки, логи)
 data/
+uploads/
 *.log
 
 # Docker / инфра

@@ -68,7 +68,7 @@ export const api = {
   articles: (type?: string) =>
     get<{ articles: ArticleListItem[] }>(`/articles${type ? `?type=${type}` : ''}`),
   article: (type: string, slug: string) =>
-    get<{ article: ArticleDetail; relations: ArticleRelations }>(`/articles/${type}/${slug}`),
+    get<{ article: ArticleDetail; coverUrl: string | null; relations: ArticleRelations }>(`/articles/${type}/${slug}`),
   company: (slug: string) => get<CompanyDetail>(`/companies/${slug}`),
   trend: (slug: string) => get<TrendDetail>(`/trends/${slug}`),
   story: (slug: string) => get<StoryDetail>(`/stories/${slug}`),

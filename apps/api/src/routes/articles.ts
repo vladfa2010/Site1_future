@@ -20,6 +20,7 @@ const createSchema = z.object({
   contentHtml: z.string().min(1),
   excerpt: z.string().optional(),
   thesis: z.string().optional(), // тезис идеи
+  coverMediaId: z.number().int().optional(),
   sourceUrl: z.string().url().optional(),
   status: z.enum(['draft', 'published']).default('draft'),
 });
@@ -71,8 +72,14 @@ articlesRouter.get('/', optionalAuth, async (req, res) => {
 // GET /api/articles/:type/:slug — публичный просмотр
 articlesRouter.get('/:type/:slug', optionalAuth, async (req, res) => {
   const { type, slug } = req.params;
-  const [row] = await db.select().from(articles).where(and(eq(articles.type, type), eq(articles.slug, slug))).limit(1);
-  if (!row || (row.status !== 'published' && !isAdmin(req.user?.role) && row.authorId !== req.user?.id)) {
+  const [row] = await db
+    .select({ article: articles, coverUrl: media.filePath })
+    .from(articles)
+    .leftJoin(media, eq(articles.coverMediaId, media.id))
+    .where(and(eq(articles.type, type), eq(articles.slug, slug)))
+    .limit(1);
+  const article = row?.article;
+  if (!article || (article.status !== 'published' && !isAdmin(req.user?.role) && article.authorId !== req.user?.id)) {
     res.status(404).json({ error: 'not found' });
     return;
   }
@@ -81,13 +88,13 @@ articlesRouter.get('/:type/:slug', optionalAuth, async (req, res) => {
     .select({ slug: companies.slug, name: companies.name })
     .from(articleCompanies)
     .innerJoin(companies, eq(articleCompanies.companyId, companies.id))
-    .where(eq(articleCompanies.articleId, row.id));
+    .where(eq(articleCompanies.articleId, article.id));
   const relTrends = await db
     .select({ slug: trends.slug, name: trends.name })
     .from(articleTrends)
     .innerJoin(trends, eq(articleTrends.trendId, trends.id))
-    .where(eq(articleTrends.articleId, row.id));
-  res.json({ article: row, relations: { companies: relCompanies, trends: relTrends } });
+    .where(eq(articleTrends.articleId, article.id));
+  res.json({ article, coverUrl: row.coverUrl, relations: { companies: relCompanies, trends: relTrends } });
 });
 
 // POST /api/articles — author+; автор может только в черновики

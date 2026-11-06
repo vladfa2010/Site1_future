@@ -21,6 +21,13 @@ export default function ArticleEditPage() {
     type: 'novost', slug: '', title: '', excerpt: '', thesis: '', contentHtml: '', status: 'draft',
   });
   const [articleId, setArticleId] = useState<number | null>(null);
+  const [coverMediaId, setCoverMediaId] = useState<number | null>(null);
+  const [coverPreview, setCoverPreview] = useState<string | null>(null);
+  const [genOpen, setGenOpen] = useState(false);
+  const [genPrompt, setGenPrompt] = useState('');
+  const [genBusy, setGenBusy] = useState(false);
+  const [genError, setGenError] = useState<string | null>(null);
+  const [genMock, setGenMock] = useState(false);
   const [rels, setRels] = useState<Relations>(EMPTY);
   const [dicts, setDicts] = useState<{ companies: Option[]; tickers: Option[]; industries: Option[]; trends: Option[] }>({ companies: [], tickers: [], industries: [], trends: [] });
   const [notice, setNotice] = useState<string | null>(null);
@@ -38,10 +45,12 @@ export default function ArticleEditPage() {
       setDicts({ companies: companies.companies, tickers: tickers.tickers, industries: industries.industries, trends: trends.trends });
 
       if (!isNew && urlType && slug) {
-        const detail = await api<{ article: { id: number; type: string; slug: string; title: string; excerpt: string | null; thesis: string | null; contentHtml: string; status: string } }>(`/articles/${urlType}/${slug}`);
+        const detail = await api<{ article: { id: number; type: string; slug: string; title: string; excerpt: string | null; thesis: string | null; contentHtml: string; status: string; coverMediaId: number | null }; coverUrl: string | null }>(`/articles/${urlType}/${slug}`);
         const a = detail.article;
         setForm({ type: a.type, slug: a.slug, title: a.title, excerpt: a.excerpt ?? '', thesis: a.thesis ?? '', contentHtml: a.contentHtml, status: a.status });
         setArticleId(a.id);
+        setCoverMediaId(a.coverMediaId);
+        setCoverPreview(detail.coverUrl ? (detail.coverUrl.startsWith('/') ? `${window.location.origin}${detail.coverUrl}` : detail.coverUrl) : null);
         const r = await api<{ relations: Relations }>(`/articles/${a.id}/relations`);
         setRels(r.relations);
       }
@@ -60,12 +69,13 @@ export default function ArticleEditPage() {
     setNotice(null);
     try {
       let id = articleId;
+      const payload = { ...form, coverMediaId: coverMediaId ?? undefined };
       if (isNew) {
-        const created = await api<{ article: { id: number } }>('/articles', { method: 'POST', body: JSON.stringify(form) });
+        const created = await api<{ article: { id: number } }>('/articles', { method: 'POST', body: JSON.stringify(payload) });
         id = created.article.id;
         setArticleId(id);
       } else if (id) {
-        await api(`/articles/${id}`, { method: 'PATCH', body: JSON.stringify(form) });
+        await api(`/articles/${id}`, { method: 'PATCH', body: JSON.stringify(payload) });
       }
       if (id) {
         await api(`/articles/${id}/relations`, {
@@ -87,6 +97,44 @@ export default function ArticleEditPage() {
     await api(`/articles/${articleId}/publish`, { method: 'POST' });
     setForm((f) => ({ ...f, status: 'published' }));
     setNotice('Опубликовано ✓');
+  };
+
+  // ---- Генерация обложки через Kimi (mock без ключа) ----
+  const stripHtml = (html: string) => html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+
+  const buildPrompt = () => {
+    const context =
+      form.thesis || form.excerpt || stripHtml(form.contentHtml).slice(0, 300) || form.title;
+    const entityNames = [
+      ...rels.companyIds.map((id) => dicts.companies.find((c) => c.id === id)?.name).filter(Boolean),
+      ...rels.trendIds.map((id) => dicts.trends.find((t) => t.id === id)?.name).filter(Boolean),
+    ].join(', ');
+    return [
+      `Обложка для статьи инвестиционного медиа «${form.title}».`,
+      `Тема: ${context}.`,
+      entityNames ? `Ключевые сущности: ${entityNames}.` : '',
+      'Стиль: сдержанная венчурная иллюстрация в фирменной палитре сайта — тёмный графитовый фон, оранжевый акцент; абстрактно-технологичный образ темы; без текста, без лиц, без логотипов; вертикальный формат 3:4.',
+    ].filter(Boolean).join(' ');
+  };
+
+  const generateCover = async () => {
+    if (!articleId) return;
+    setGenBusy(true);
+    setGenError(null);
+    try {
+      const res = await api<{ url: string; mock: boolean; media: { id: number } }>('/media/generate', {
+        method: 'POST',
+        body: JSON.stringify({ prompt: genPrompt, articleId }),
+      });
+      setCoverMediaId(res.media.id);
+      setCoverPreview(`${window.location.origin}${res.url}`);
+      setGenMock(res.mock);
+      setNotice(res.mock ? 'Обложка-сгенерирована (mock-режим, ключ Kimi не задан) ✓' : 'Обложка сгенерирована через Kimi ✓');
+    } catch (e) {
+      setGenError(e instanceof Error ? e.message : 'Ошибка генерации');
+    } finally {
+      setGenBusy(false);
+    }
   };
 
   // Автоподстановка цепочки тикер→компания→индустрия (раздел 6.2)
@@ -163,6 +211,42 @@ export default function ArticleEditPage() {
           <label className="label">Контент (HTML — сюда ляжет TipTap, раздел 6.2)</label>
           <textarea className="input font-mono" rows={12} value={form.contentHtml} onChange={set('contentHtml')} />
         </div>
+      </div>
+
+      {/* Обложка: текущая + генерация через Kimi */}
+      <div className="card space-y-3">
+        <div className="flex items-center justify-between">
+          <h2 className="font-semibold">Обложка</h2>
+          {!isNew && (
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={() => {
+                setGenPrompt(buildPrompt());
+                setGenOpen(!genOpen);
+              }}
+            >
+              ✨ Сгенерировать обложку
+            </button>
+          )}
+        </div>
+        {isNew && <p className="text-sm text-zinc-500">Сохраните статью — затем появится генерация обложки.</p>}
+        {coverPreview && (
+          <div className="flex items-start gap-4">
+            <img src={coverPreview} alt="Обложка" className="h-48 w-36 rounded-lg border border-zinc-200 object-cover" />
+            {genMock && <span className="rounded-full bg-amber-100 px-2 py-1 text-xs text-amber-700">mock — без ключа Kimi</span>}
+          </div>
+        )}
+        {genOpen && (
+          <div className="space-y-2 rounded-lg border border-zinc-200 bg-zinc-50 p-3">
+            <label className="label">Промпт (собран из контекста статьи — можно редактировать)</label>
+            <textarea className="input font-mono" rows={5} value={genPrompt} onChange={(e) => setGenPrompt(e.target.value)} />
+            {genError && <p className="text-sm text-red-600">{genError}</p>}
+            <button type="button" className="btn" onClick={() => void generateCover()} disabled={genBusy || genPrompt.length < 10}>
+              {genBusy ? 'Генерируем…' : 'Сгенерировать'}
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="card space-y-4">
