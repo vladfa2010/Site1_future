@@ -4,7 +4,7 @@
 import { Router } from 'express';
 import bcrypt from 'bcrypt';
 import { z } from 'zod';
-import { db, users, articles } from '@newinvest/db';
+import { db, users, articles, tariffPlans } from '@newinvest/db';
 import { and, eq, sql } from 'drizzle-orm';
 import { signToken, authRequired } from '../middleware/auth.js';
 
@@ -58,7 +58,8 @@ authRouter.post('/register', async (req, res) => {
 authRouter.get('/me', authRequired, async (req, res) => {
   const [user] = await db.select({
     id: users.id, email: users.email, displayName: users.displayName, role: users.role, avatar: users.avatar,
-  }).from(users).where(eq(users.id, req.user!.id)).limit(1);
+    tariffId: users.tariffId, tariffExpiresAt: users.tariffExpiresAt, tariffName: tariffPlans.name,
+  }).from(users).leftJoin(tariffPlans, eq(users.tariffId, tariffPlans.id)).where(eq(users.id, req.user!.id)).limit(1);
   if (!user) {
     res.status(401).json({ error: 'unauthorized' });
     return;

@@ -6,6 +6,9 @@ export interface AuthUser {
   role: string;
   displayName: string | null;
   avatar?: string | null;
+  tariffId?: number | null;
+  tariffName?: string | null;
+  tariffExpiresAt?: string | null;
 }
 
 interface AuthState {

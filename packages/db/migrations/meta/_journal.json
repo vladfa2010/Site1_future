@@ -71,6 +71,13 @@
       "when": 1793980948684,
       "tag": "0009_nebulous_puck",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1793981983663,
+      "tag": "0010_perfect_spencer_smythe",
+      "breakpoints": true
     }
   ]
 }

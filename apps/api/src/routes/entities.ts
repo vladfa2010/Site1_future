@@ -161,26 +161,59 @@ entitiesRouter.post('/companies/:id/rounds', authRequired, requireRole('admin', 
   res.status(201).json({ round });
 });
 
-// ---------- Тарифные планы (пейволл) ----------
+// ---------- Тарифные планы (пейволл, модель PULSE PAYMENTS.md §3.1) ----------
+
+const planSchema = z.object({
+  slug: slugSchema,
+  name: z.string().min(1),
+  description: z.string().optional(),
+  priceMonthly: z.string().optional(), // NUMERIC строкой, точность
+  priceYearly: z.string().optional(),
+  yearlyDiscount: z.number().int().optional(),
+  features: z.record(z.unknown()).optional(), // {telegram,email,aiSummary,earlyAccess,...}
+  isActive: z.boolean().optional(),
+  comingSoonLabel: z.string().nullable().optional(),
+  sortOrder: z.number().int().optional(),
+});
 
 entitiesRouter.get('/tariff-plans', async (_req, res) => {
-  res.json({ plans: await db.select().from(tariffPlans).orderBy(tariffPlans.sortOrder) });
+  const plans = await db.select().from(tariffPlans).orderBy(tariffPlans.sortOrder);
+  res.json({ plans: plans.map((p) => ({ ...p, features: JSON.parse(p.features) })) });
 });
 
 entitiesRouter.post('/tariff-plans', authRequired, requireRole('admin', 'super_admin'), async (req, res) => {
-  const parsed = z.object({
-    slug: slugSchema,
-    name: z.string().min(1),
-    sortOrder: z.number().int().optional(),
-  }).safeParse(req.body);
+  const parsed = planSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: 'validation', details: parsed.error.flatten() });
     return;
   }
-  const [row] = await db.insert(tariffPlans).values(parsed.data)
-    .onConflictDoUpdate({ target: tariffPlans.slug, set: { name: parsed.data.name, sortOrder: parsed.data.sortOrder ?? 0 } })
+  const { features, slug, ...data } = parsed.data;
+  const values = { slug, ...data, features: JSON.stringify(features ?? {}) };
+  const [row] = await db.insert(tariffPlans).values(values)
+    .onConflictDoUpdate({
+      target: tariffPlans.slug,
+      set: { ...data, features: JSON.stringify(features ?? {}) }, // slug не трогаем
+    })
     .returning();
-  res.status(201).json({ plan: row });
+  res.status(201).json({ plan: { ...row, features: JSON.parse(row.features) } });
+});
+
+// PATCH /api/tariff-plans/:id — редактирование плана
+entitiesRouter.patch('/tariff-plans/:id', authRequired, requireRole('admin', 'super_admin'), async (req, res) => {
+  const parsed = planSchema.omit({ slug: true }).partial().safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'validation', details: parsed.error.flatten() });
+    return;
+  }
+  const { features, ...data } = parsed.data;
+  const updates: Record<string, unknown> = { ...data };
+  if (features) updates.features = JSON.stringify(features);
+  const [row] = await db.update(tariffPlans).set(updates).where(eq(tariffPlans.id, Number(req.params.id))).returning();
+  if (!row) {
+    res.status(404).json({ error: 'not found' });
+    return;
+  }
+  res.json({ plan: { ...row, features: JSON.parse(row.features) } });
 });
 
 // ---------- Тикеры ----------

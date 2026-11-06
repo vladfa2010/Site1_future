@@ -17,6 +17,7 @@ import MediaPage from './pages/MediaPage';
 import RedirectsPage from './pages/RedirectsPage';
 import UsersPage from './pages/UsersPage';
 import UserEditPage from './pages/UserEditPage';
+import TariffsPage from './pages/TariffsPage';
 import StatsPage from './pages/StatsPage';
 
 function RequireAdmin({ children }: { children: React.ReactNode }) {
@@ -57,6 +58,7 @@ export default function App() {
                   <Route path="/redirects" element={<RedirectsPage />} />
                   <Route path="/users" element={<UsersPage />} />
                   <Route path="/users/:id/edit" element={<UserEditPage />} />
+                  <Route path="/tariffs" element={<TariffsPage />} />
                   <Route path="/stats" element={<StatsPage />} />
                 </Routes>
               </Layout>

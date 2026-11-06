@@ -10,6 +10,7 @@ export interface AuthUser {
   id: number;
   role: string;
   tariffId?: number | null;
+  tariffExpiresAt?: string | null;
 }
 
 declare module 'express-serve-static-core' {
@@ -22,7 +23,12 @@ function verifyToken(token: string): AuthUser | null {
   try {
     const payload = jwt.verify(token, config.jwtSecret) as jwt.JwtPayload;
     if (typeof payload.sub !== 'string') return null;
-    return { id: Number(payload.sub), role: payload.role as string, tariffId: (payload.tariffId as number | null) ?? null };
+    return {
+      id: Number(payload.sub),
+      role: payload.role as string,
+      tariffId: (payload.tariffId as number | null) ?? null,
+      tariffExpiresAt: (payload.tariffExpiresAt as string | null) ?? null,
+    };
   } catch {
     return null;
   }
@@ -60,11 +66,12 @@ export function requireRole(...roles: string[]) {
   };
 }
 
-export function signToken(user: { id: number; role: string; tariffId?: number | null }): string {
-  return jwt.sign({ role: user.role, tariffId: user.tariffId ?? null }, config.jwtSecret, {
-    subject: String(user.id),
-    expiresIn: '7d',
-  });
+export function signToken(user: { id: number; role: string; tariffId?: number | null; tariffExpiresAt?: Date | string | null }): string {
+  return jwt.sign(
+    { role: user.role, tariffId: user.tariffId ?? null, tariffExpiresAt: user.tariffExpiresAt ? new Date(user.tariffExpiresAt).toISOString() : null },
+    config.jwtSecret,
+    { subject: String(user.id), expiresIn: '7d' },
+  );
 }
 
 export const ADMIN_ROLES = ['admin', 'super_admin'];

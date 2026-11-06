@@ -30,6 +30,7 @@ export const users = pgTable('users', {
   role: text('role').notNull().default('reader'), // super_admin | admin | author | reader
   avatar: text('avatar'),                                             // эмодзи-иконка из пресета (10 шт)
   tariffId: integer('tariff_id').references(() => tariffPlans.id), // пейволл: тариф юзера
+  tariffExpiresAt: timestamp('tariff_expires_at', { withTimezone: true }), // null = бессрочно (выдача админом)
   oldWpId: integer('old_wp_id'),                                    // миграция из Ultimate Member
   createdAt: createdAt(),
 });
@@ -378,11 +379,19 @@ export const tgLinkCodes = pgTable('tg_link_codes', {
   usedAt: timestamp('used_at', { withTimezone: true }),
 });
 
-// Тарифные планы (пейволл). Сейчас — справочник, в будущем подтягивается оплата
+// Тарифные планы (пейволл). Модель как в PULSE PAYMENTS.md §3.1: каталог
+// с ценами/фичами; оплата подтянет тарифы отсюда же.
 export const tariffPlans = pgTable('tariff_plans', {
   id: serial('id').primaryKey(),
   slug: text('slug').notNull().unique(),
   name: text('name').notNull(),
+  description: text('description'),
+  priceMonthly: numeric('price_monthly').notNull().default('0'),
+  priceYearly: numeric('price_yearly').notNull().default('0'),
+  yearlyDiscount: integer('yearly_discount').notNull().default(20),
+  features: text('features').notNull().default('{}'), // JSON: {telegram,email,aiSummary,push,earlyAccess,apiAccess,priority}
+  isActive: boolean('is_active').notNull().default(true),
+  comingSoonLabel: text('coming_soon_label'),
   sortOrder: integer('sort_order').notNull().default(0),
 });
 

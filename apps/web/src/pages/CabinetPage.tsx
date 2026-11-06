@@ -346,7 +346,7 @@ function SubscriptionsTab() {
   );
 }
 
-/* ---------- Тариф ---------- */
+/* ---------- Уведомления ---------- */
 function NotificationsTab() {
   const [settings, setSettings] = useState<{ emailDaily: boolean; emailWeekly: boolean } | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -430,29 +430,94 @@ function NotificationsTab() {
   );
 }
 
+/* ---------- Тариф: планы из БД (модель PULSE) ---------- */
+interface Plan {
+  id: number;
+  slug: string;
+  name: string;
+  description: string | null;
+  priceMonthly: string;
+  priceYearly: string;
+  yearlyDiscount: number;
+  features: Record<string, unknown>;
+  isActive: boolean;
+  comingSoonLabel: string | null;
+}
+
+const FEATURE_LABELS: Record<string, string> = {
+  telegram: 'Telegram-дайджесты', email: 'Email-дайджесты', aiSummary: 'AI-сводка',
+  push: 'Web-push', earlyAccess: 'Ранний доступ', apiAccess: 'API-доступ',
+};
+
 function TariffTab() {
+  const { user } = useAuth();
+  const [plans, setPlans] = useState<Plan[]>([]);
+
+  useEffect(() => {
+    void fetch('/api/tariff-plans')
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((d: { plans: Plan[] }) => setPlans(d.plans.filter((p) => p.isActive)))
+      .catch(() => {});
+  }, []);
+
+  const currentId = user?.tariffId ?? null;
+  const expires = user?.tariffExpiresAt ? new Date(user.tariffExpiresAt) : null;
+  const expired = expires ? expires < new Date() : false;
+
   return (
-    <div className="max-w-lg space-y-4">
-      <div className="rounded-lg border border-[#2a2a2a] bg-[#191919] p-5">
-        <div className="flex items-baseline justify-between">
-          <h2 className="text-lg font-bold">Free</h2>
-          <span className="text-sm text-zinc-500">текущий тариф</span>
+    <div className="space-y-4">
+      {currentId && !expired && (
+        <div className="rounded-lg border border-[#beff00]/40 bg-[#beff00]/5 p-4">
+          <p className="text-sm">
+            <span className="font-bold text-[#c9ff2a]">Ваш тариф: {user?.tariffName}</span>
+            <span className="ml-2 text-xs text-zinc-500">
+              {expires ? `до ${expires.toLocaleDateString('ru-RU')}` : 'бессрочно'}
+            </span>
+          </p>
         </div>
-        <ul className="mt-3 space-y-1.5 text-sm text-zinc-400">
-          <li>✓ Все открытые материалы</li>
-          <li>✓ Избранное и подписки</li>
-          <li>✓ Предложение материалов редакции</li>
-        </ul>
+      )}
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        {plans.map((p) => {
+          const isCurrent = p.id === currentId && !expired;
+          return (
+            <div key={p.id} className={`rounded-lg border p-5 ${isCurrent ? 'border-[#beff00]/50 bg-[#beff00]/5' : 'border-[#2a2a2a] bg-[#191919]'}`}>
+              <div className="flex items-baseline justify-between">
+                <h2 className="text-lg font-bold">{p.name}</h2>
+                {isCurrent && <span className="rounded-full bg-[#beff00] px-2 py-0.5 text-xs font-bold text-black">ваш</span>}
+              </div>
+              {p.description && <p className="mt-1 text-sm text-zinc-400">{p.description}</p>}
+              <p className="mt-3">
+                <span className="text-2xl font-bold">{Number(p.priceMonthly).toLocaleString('ru-RU')} ₽</span>
+                <span className="text-sm text-zinc-500">/мес</span>
+                {Number(p.priceYearly) > 0 && (
+                  <span className="ml-3 text-sm text-zinc-400">
+                    или {Number(p.priceYearly).toLocaleString('ru-RU')} ₽/год
+                    {p.yearlyDiscount > 0 && <span className="text-[#c9ff2a]"> −{p.yearlyDiscount}%</span>}
+                  </span>
+                )}
+              </p>
+              <ul className="mt-3 space-y-1 text-sm text-zinc-400">
+                {Object.entries(p.features)
+                  .filter(([, v]) => Boolean(v))
+                  .map(([k]) => (
+                    <li key={k}>✓ {FEATURE_LABELS[k] ?? k}</li>
+                  ))}
+              </ul>
+              <button
+                disabled
+                className="mt-4 w-full rounded-full bg-[#beff00] py-2 text-sm font-bold text-black opacity-50"
+                title="Оплата подключается"
+              >
+                Оформить — скоро
+              </button>
+            </div>
+          );
+        })}
       </div>
-      <div className="rounded-lg border border-[#beff00]/30 bg-[#191919] p-5">
-        <div className="flex items-baseline justify-between">
-          <h2 className="text-lg font-bold text-[#c9ff2a]">Клуб «Инсайдер»</h2>
-          <span className="rounded-full bg-[#beff00]/15 px-2 py-0.5 text-xs text-[#c9ff2a]">скоро</span>
-        </div>
-        <p className="mt-2 text-sm text-zinc-400">
-          Закрытые идеи, ранний доступ к материалам, участие в разборах сделок. История платежей появится здесь после подключения оплаты.
-        </p>
-      </div>
+      <p className="text-xs text-zinc-600">
+        Оплата появится с подключением ЮKassa. История платежей будет собираться здесь.
+      </p>
     </div>
   );
 }

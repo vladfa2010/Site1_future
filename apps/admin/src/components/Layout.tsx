@@ -14,6 +14,7 @@ const NAV = [
   { to: '/media', label: 'Медиатека' },
   { to: '/redirects', label: 'Редиректы' },
   { to: '/users', label: 'Пользователи' },
+  { to: '/tariffs', label: 'Тарифы' },
   { to: '/stats', label: 'Аналитика' },
 ];
 

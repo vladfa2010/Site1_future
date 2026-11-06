@@ -18,7 +18,7 @@ interface UserRow {
 export default function UserEditPage() {
   const { id } = useParams();
   const [user, setUser] = useState<UserRow | null>(null);
-  const [form, setForm] = useState({ email: '', displayName: '', role: 'reader', tariffId: '' });
+  const [form, setForm] = useState({ email: '', displayName: '', role: 'reader', tariffId: '', tariffExpiresAt: '' });
   const [plans, setPlans] = useState<{ id: number; name: string }[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -33,7 +33,7 @@ export default function UserEditPage() {
         return;
       }
       setUser(u);
-      setForm({ email: u.email, displayName: u.displayName ?? '', role: u.role, tariffId: u.tariffId ? String(u.tariffId) : '' });
+      setForm({ email: u.email, displayName: u.displayName ?? '', role: u.role, tariffId: u.tariffId ? String(u.tariffId) : '', tariffExpiresAt: (u as unknown as { tariffExpiresAt?: string | null }).tariffExpiresAt?.slice(0, 10) ?? '' });
     }).catch(() => setError('Ошибка загрузки'));
   }, [id]);
 
@@ -45,7 +45,7 @@ export default function UserEditPage() {
     try {
       const { user: updated } = await api<{ user: { id: number } }>(`/users/${id}`, {
         method: 'PATCH',
-        body: JSON.stringify({ ...form, tariffId: form.tariffId ? Number(form.tariffId) : null }),
+        body: JSON.stringify({ ...form, tariffId: form.tariffId ? Number(form.tariffId) : null, tariffExpiresAt: form.tariffExpiresAt ? new Date(form.tariffExpiresAt).toISOString() : null }),
       });
       setNotice(`Сохранено ✓ (id=${updated.id})`);
     } catch (err) {
@@ -101,6 +101,10 @@ export default function UserEditPage() {
               <option key={p.id} value={p.id}>{p.name}</option>
             ))}
           </select>
+        </div>
+        <div>
+          <label className="label">Тариф до (пусто — бессрочно)</label>
+          <input className="input" type="date" value={form.tariffExpiresAt} onChange={(e) => setForm({ ...form, tariffExpiresAt: e.target.value })} />
         </div>
         <div className="flex items-center gap-4 text-xs text-zinc-500">
           <span>id: {user?.id}</span>

@@ -36,14 +36,17 @@ const patchSchema = createSchema.partial();
 const isAdmin = (role?: string) => role !== undefined && ADMIN_ROLES.includes(role);
 
 // ---------- Пейволл: условие доступа к материалам ----------
-// public — всем; auth — залогиненным; tariff — юзерам с нужным тарифом. Админы видят всё.
+// public — всем; auth — залогиненным; tariff — юзерам с нужным НЕпросроченным тарифом.
+// Админы видят всё.
 export function accessCondition(
-  user?: { id: number; tariffId?: number | null } | null,
+  user?: { id: number; tariffId?: number | null; tariffExpiresAt?: string | null } | null,
   admin = false,
 ): SQL | null {
   if (admin) return null;
   const authOk = user ? sql`true` : sql`false`;
-  const tariffOk = user?.tariffId ? sql`${articles.accessTariffId} = ${user.tariffId}` : sql`false`;
+  const tariffValid =
+    user?.tariffId && (!user.tariffExpiresAt || new Date(user.tariffExpiresAt) > new Date());
+  const tariffOk = tariffValid ? sql`${articles.accessTariffId} = ${user!.tariffId}` : sql`false`;
   return sql`(${articles.accessLevel} = 'public' or (${articles.accessLevel} = 'auth' and ${authOk}) or (${articles.accessLevel} = 'tariff' and ${tariffOk}))`;
 }
 

@@ -36,7 +36,8 @@ const userPatchSchema = z.object({
   role: z.enum(['super_admin', 'admin', 'author', 'reader']).optional(),
   email: z.string().email().optional(),
   displayName: z.string().trim().min(2).max(40).optional(),
-  tariffId: z.number().int().nullable().optional(), // пейволл: тариф из БД (null — снять)
+  tariffId: z.number().int().nullable().optional(),        // пейволл: тариф из БД (null — снять)
+  tariffExpiresAt: z.string().nullable().optional(),      // ISO-дата; null = бессрочно
 });
 
 adminRouter.patch('/users/:id', authRequired, requireRole('super_admin'), async (req, res) => {
@@ -46,7 +47,7 @@ adminRouter.patch('/users/:id', authRequired, requireRole('super_admin'), async 
     res.status(400).json({ error: 'validation', details: parsed.error.flatten() });
     return;
   }
-  const { role, email, displayName, tariffId } = parsed.data;
+  const { role, email, displayName, tariffId, tariffExpiresAt } = parsed.data;
 
   // уникальность email/displayName при смене (case-insensitive), исключая самого юзера
   if (email) {
@@ -71,6 +72,7 @@ adminRouter.patch('/users/:id', authRequired, requireRole('super_admin'), async 
   if (email) updates.email = email;
   if (displayName) updates.displayName = displayName;
   if (tariffId !== undefined) updates.tariffId = tariffId;
+  if (tariffExpiresAt !== undefined) updates.tariffExpiresAt = tariffExpiresAt ? new Date(tariffExpiresAt) : null;
 
   const [row] = await db.update(users).set(updates).where(eq(users.id, id))
     .returning({ id: users.id, email: users.email, displayName: users.displayName, role: users.role });
