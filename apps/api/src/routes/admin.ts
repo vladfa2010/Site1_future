@@ -3,7 +3,8 @@
  */
 import { Router } from 'express';
 import { z } from 'zod';
-import { and, desc, eq, gte, sql, type SQL } from 'drizzle-orm';import { db, users, redirects, articleViews, articles } from '@newinvest/db';
+import { and, desc, eq, gte, sql, type SQL } from 'drizzle-orm';
+import { db, users, redirects, articleViews, articles, tariffPlans } from '@newinvest/db';
 import { authRequired, requireRole, ADMIN_ROLES } from '../middleware/auth.js';
 import { runDailyDigest, runWeeklyReport } from '../services/digest.js';
 
@@ -18,10 +19,13 @@ adminRouter.get('/users', authRequired, requireRole(...ADMIN_ROLES), async (_req
       email: users.email,
       displayName: users.displayName,
       role: users.role,
+      tariffId: users.tariffId,
+      tariffName: tariffPlans.name,
       createdAt: users.createdAt,
       views: sql<number>`(select count(*) from article_views where user_id = ${users.id})`,
     })
     .from(users)
+    .leftJoin(tariffPlans, eq(users.tariffId, tariffPlans.id))
     .orderBy(desc(users.createdAt))
     .limit(200);
   res.json({ users: rows });
@@ -32,6 +36,7 @@ const userPatchSchema = z.object({
   role: z.enum(['super_admin', 'admin', 'author', 'reader']).optional(),
   email: z.string().email().optional(),
   displayName: z.string().trim().min(2).max(40).optional(),
+  tariffId: z.number().int().nullable().optional(), // пейволл: тариф из БД (null — снять)
 });
 
 adminRouter.patch('/users/:id', authRequired, requireRole('super_admin'), async (req, res) => {
@@ -41,7 +46,7 @@ adminRouter.patch('/users/:id', authRequired, requireRole('super_admin'), async 
     res.status(400).json({ error: 'validation', details: parsed.error.flatten() });
     return;
   }
-  const { role, email, displayName } = parsed.data;
+  const { role, email, displayName, tariffId } = parsed.data;
 
   // уникальность email/displayName при смене (case-insensitive), исключая самого юзера
   if (email) {
@@ -65,6 +70,7 @@ adminRouter.patch('/users/:id', authRequired, requireRole('super_admin'), async 
   if (role) updates.role = role;
   if (email) updates.email = email;
   if (displayName) updates.displayName = displayName;
+  if (tariffId !== undefined) updates.tariffId = tariffId;
 
   const [row] = await db.update(users).set(updates).where(eq(users.id, id))
     .returning({ id: users.id, email: users.email, displayName: users.displayName, role: users.role });

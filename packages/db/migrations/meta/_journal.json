@@ -57,6 +57,13 @@
       "when": 1793978514659,
       "tag": "0007_low_peter_quill",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1793979390320,
+      "tag": "0008_parched_skaar",
+      "breakpoints": true
     }
   ]
 }

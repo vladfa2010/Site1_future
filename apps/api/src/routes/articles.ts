@@ -25,6 +25,8 @@ const createSchema = z.object({
   thesis: z.string().optional(), // тезис идеи
   coverMediaId: z.number().int().optional(),
   metaDescription: z.string().max(300).optional(), // SEO (meta_fields)
+  accessLevel: z.enum(['public', 'auth', 'tariff']).optional(), // пейволл
+  accessTariffId: z.number().int().optional(),
   sourceUrl: z.string().url().optional(),
   status: z.enum(['draft', 'published']).default('draft'),
 });
@@ -33,6 +35,18 @@ const patchSchema = createSchema.partial();
 
 const isAdmin = (role?: string) => role !== undefined && ADMIN_ROLES.includes(role);
 
+// ---------- Пейволл: условие доступа к материалам ----------
+// public — всем; auth — залогиненным; tariff — юзерам с нужным тарифом. Админы видят всё.
+export function accessCondition(
+  user?: { id: number; tariffId?: number | null } | null,
+  admin = false,
+): SQL | null {
+  if (admin) return null;
+  const authOk = user ? sql`true` : sql`false`;
+  const tariffOk = user?.tariffId ? sql`${articles.accessTariffId} = ${user.tariffId}` : sql`false`;
+  return sql`(${articles.accessLevel} = 'public' or (${articles.accessLevel} = 'auth' and ${authOk}) or (${articles.accessLevel} = 'tariff' and ${tariffOk}))`;
+}
+
 // GET /api/articles?type=novost&status=published&page=1&limit=20
 articlesRouter.get('/', optionalAuth, async (req, res) => {
   const type = req.query.type as ArticleType | undefined;
@@ -40,6 +54,9 @@ articlesRouter.get('/', optionalAuth, async (req, res) => {
   const limit = Math.min(100, Math.max(1, Number(req.query.limit ?? 20)));
 
   const conditions: SQL[] = [];
+  // пейволл: фильтр по уровню доступа (админы — всё)
+  const acc = accessCondition(req.user, isAdmin(req.user?.role));
+  if (acc) conditions.push(acc);
   if (type && (ARTICLE_TYPES as readonly string[]).includes(type)) {
     conditions.push(eq(articles.type, type));
   }
@@ -87,6 +104,16 @@ articlesRouter.get('/:type/:slug', optionalAuth, async (req, res) => {
     res.status(404).json({ error: 'not found' });
     return;
   }
+  // пейволл: 403 с уровнем доступа — фронт покажет экран «войдите / оформите тариф»
+  if (!isAdmin(req.user?.role)) {
+    const acc = accessCondition(req.user);
+    const [allowed] = await db.select({ ok: sql<boolean>`${acc}::boolean` })
+      .from(articles).where(eq(articles.id, article.id)).limit(1);
+    if (!allowed?.ok) {
+      res.status(403).json({ error: 'forbidden', access: article.accessLevel });
+      return;
+    }
+  }
   // Публичные связи — чипсы для навигации «проваливание из любой точки» (раздел 4.2)
   const relCompanies = await db
     .select({ slug: companies.slug, name: companies.name })
@@ -133,6 +160,10 @@ articlesRouter.post('/', authRequired, requireRole('author', 'admin', 'super_adm
   }
   const data = parsed.data;
   const { metaDescription, ...articleData } = data;
+  // тарифный уровень без тарифа бессмысленен — сбрасываем на public
+  if (articleData.accessLevel === 'tariff' && !articleData.accessTariffId) {
+    articleData.accessLevel = 'public';
+  }
   // автор не публикует напрямую — только через admin (раздел 6.3)
   const status = isAdmin(req.user!.role) ? data.status : 'draft';
 

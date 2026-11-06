@@ -28,7 +28,8 @@ export const users = pgTable('users', {
   passwordHash: text('password_hash').notNull(),
   displayName: text('display_name'),
   role: text('role').notNull().default('reader'), // super_admin | admin | author | reader
-  oldWpId: integer('old_wp_id'), // миграция из Ultimate Member
+  tariffId: integer('tariff_id').references(() => tariffPlans.id), // пейволл: тариф юзера
+  oldWpId: integer('old_wp_id'),                                    // миграция из Ultimate Member
   createdAt: createdAt(),
 });
 
@@ -180,6 +181,8 @@ export const articles = pgTable(
     coverMediaId: integer('cover_media_id').references(() => media.id),
     authorId: integer('author_id').references(() => users.id, { onDelete: 'set null' }), // удаление аккаунта не трогает контент
     status: text('status').notNull().default('draft'), // draft | pending | published
+    accessLevel: text('access_level').notNull().default('public'), // пейволл: public | auth | tariff
+    accessTariffId: integer('access_tariff_id').references(() => tariffPlans.id), // для tariff-уровня
     publishedAt: timestamp('published_at', { withTimezone: true }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
@@ -373,6 +376,18 @@ export const tgLinkCodes = pgTable('tg_link_codes', {
   expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
   usedAt: timestamp('used_at', { withTimezone: true }),
 });
+
+// Тарифные планы (пейволл). Сейчас — справочник, в будущем подтягивается оплата
+export const tariffPlans = pgTable('tariff_plans', {
+  id: serial('id').primaryKey(),
+  slug: text('slug').notNull().unique(),
+  name: text('name').notNull(),
+  sortOrder: integer('sort_order').notNull().default(0),
+});
+
+// Уровни доступа материалов
+export const ACCESS_LEVELS = ['public', 'auth', 'tariff'] as const;
+export type AccessLevel = (typeof ACCESS_LEVELS)[number];
 
 export const subscriptions = pgTable(
   'subscriptions',

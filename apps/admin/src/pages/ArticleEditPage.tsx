@@ -24,6 +24,7 @@ export default function ArticleEditPage() {
 
   const [form, setForm] = useState({
     type: 'novost', slug: '', title: '', excerpt: '', thesis: '', contentHtml: '', status: 'draft', metaDescription: '',
+    accessLevel: 'public', accessTariffId: '',
   });
   const [articleId, setArticleId] = useState<number | null>(null);
   const [coverMediaId, setCoverMediaId] = useState<number | null>(null);
@@ -38,6 +39,7 @@ export default function ArticleEditPage() {
   const [newTicker, setNewTicker] = useState('');
   const [tickerBusy, setTickerBusy] = useState(false);
   const [rels, setRels] = useState<Relations>(EMPTY);
+  const [tariffPlans, setTariffPlans] = useState<{ id: number; name: string }[]>([]);
   const [dicts, setDicts] = useState<{ companies: Option[]; tickers: Option[]; industries: Option[]; trends: Option[] }>({ companies: [], tickers: [], industries: [], trends: [] });
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -45,18 +47,24 @@ export default function ArticleEditPage() {
 
   useEffect(() => {
     void (async () => {
-      const [companies, tickers, industries, trends] = await Promise.all([
+      const [companies, tickers, industries, trends, plans] = await Promise.all([
         api<{ companies: Option[] }>('/companies').catch(() => ({ companies: [] })),
         api<{ tickers: Option[] }>('/tickers').catch(() => ({ tickers: [] })),
         api<{ industries: Option[] }>('/industries').catch(() => ({ industries: [] })),
         api<{ trends: Option[] }>('/trends').catch(() => ({ trends: [] })),
+        api<{ plans: { id: number; name: string }[] }>('/tariff-plans').catch(() => ({ plans: [] })),
       ]);
       setDicts({ companies: companies.companies, tickers: tickers.tickers, industries: industries.industries, trends: trends.trends });
+      setTariffPlans(plans.plans);
 
       if (!isNew && urlType && slug) {
-        const detail = await api<{ article: { id: number; type: string; slug: string; title: string; excerpt: string | null; thesis: string | null; contentHtml: string; status: string; coverMediaId: number | null }; coverUrl: string | null; meta: { description: string | null } }>(`/articles/${urlType}/${slug}`);
+        const detail = await api<{ article: { id: number; type: string; slug: string; title: string; excerpt: string | null; thesis: string | null; contentHtml: string; status: string; coverMediaId: number | null; accessLevel: string | null; accessTariffId: number | null }; coverUrl: string | null; meta: { description: string | null } }>(`/articles/${urlType}/${slug}`);
         const a = detail.article;
-        setForm({ type: a.type, slug: a.slug, title: a.title, excerpt: a.excerpt ?? '', thesis: a.thesis ?? '', contentHtml: a.contentHtml, status: a.status, metaDescription: detail.meta.description ?? '' });
+        setForm({
+          type: a.type, slug: a.slug, title: a.title, excerpt: a.excerpt ?? '', thesis: a.thesis ?? '',
+          contentHtml: a.contentHtml, status: a.status, metaDescription: detail.meta.description ?? '',
+          accessLevel: a.accessLevel ?? 'public', accessTariffId: a.accessTariffId ? String(a.accessTariffId) : '',
+        });
         setArticleId(a.id);
         setCoverMediaId(a.coverMediaId);
         setCoverPreview(detail.coverUrl ? (detail.coverUrl.startsWith('/') ? `${window.location.origin}${detail.coverUrl}` : detail.coverUrl) : null);
@@ -116,7 +124,11 @@ export default function ArticleEditPage() {
     setNotice(null);
     try {
       let id = articleId;
-      const payload = { ...form, coverMediaId: coverMediaId ?? undefined };
+      const payload = {
+        ...form,
+        coverMediaId: coverMediaId ?? undefined,
+        accessTariffId: form.accessLevel === 'tariff' && form.accessTariffId ? Number(form.accessTariffId) : undefined,
+      };
       if (isNew) {
         const created = await api<{ article: { id: number } }>('/articles', { method: 'POST', body: JSON.stringify(payload) });
         id = created.article.id;
@@ -288,6 +300,25 @@ export default function ArticleEditPage() {
             <option value="published">Опубликована</option>
           </select>
         </div>
+        <div>
+          <label className="label">Доступ (пейволл)</label>
+          <select className="input" value={form.accessLevel} onChange={set('accessLevel')}>
+            <option value="public">Без регистрации</option>
+            <option value="auth">Любой залогиненный</option>
+            <option value="tariff">По тарифу…</option>
+          </select>
+        </div>
+        {form.accessLevel === 'tariff' && (
+          <div>
+            <label className="label">Тариф</label>
+            <select className="input" value={form.accessTariffId} onChange={set('accessTariffId')}>
+              <option value="">— выберите тариф</option>
+              {tariffPlans.map((p) => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
 
       <div className="card space-y-4">

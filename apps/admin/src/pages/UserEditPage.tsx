@@ -10,6 +10,7 @@ interface UserRow {
   email: string;
   displayName: string | null;
   role: string;
+  tariffId: number | null;
   createdAt: string;
   views: number;
 }
@@ -17,12 +18,14 @@ interface UserRow {
 export default function UserEditPage() {
   const { id } = useParams();
   const [user, setUser] = useState<UserRow | null>(null);
-  const [form, setForm] = useState({ email: '', displayName: '', role: 'reader' });
+  const [form, setForm] = useState({ email: '', displayName: '', role: 'reader', tariffId: '' });
+  const [plans, setPlans] = useState<{ id: number; name: string }[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
+    void api<{ plans: { id: number; name: string }[] }>('/tariff-plans').then((d) => setPlans(d.plans)).catch(() => {});
     void api<{ users: UserRow[] }>('/users').then(({ users }) => {
       const u = users.find((x) => x.id === Number(id));
       if (!u) {
@@ -30,7 +33,7 @@ export default function UserEditPage() {
         return;
       }
       setUser(u);
-      setForm({ email: u.email, displayName: u.displayName ?? '', role: u.role });
+      setForm({ email: u.email, displayName: u.displayName ?? '', role: u.role, tariffId: u.tariffId ? String(u.tariffId) : '' });
     }).catch(() => setError('Ошибка загрузки'));
   }, [id]);
 
@@ -42,7 +45,7 @@ export default function UserEditPage() {
     try {
       const { user: updated } = await api<{ user: { id: number } }>(`/users/${id}`, {
         method: 'PATCH',
-        body: JSON.stringify(form),
+        body: JSON.stringify({ ...form, tariffId: form.tariffId ? Number(form.tariffId) : null }),
       });
       setNotice(`Сохранено ✓ (id=${updated.id})`);
     } catch (err) {
@@ -87,6 +90,15 @@ export default function UserEditPage() {
           <select className="input" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>
             {ROLES.map((r) => (
               <option key={r} value={r}>{ROLE_LABELS[r]}</option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="label">Тариф (пейволл)</label>
+          <select className="input" value={form.tariffId} onChange={(e) => setForm({ ...form, tariffId: e.target.value })}>
+            <option value="">Бесплатный</option>
+            {plans.map((p) => (
+              <option key={p.id} value={p.id}>{p.name}</option>
             ))}
           </select>
         </div>

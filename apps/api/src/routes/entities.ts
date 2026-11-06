@@ -17,6 +17,7 @@ import {
   articleTrends,
   fundingRounds,
   media,
+  tariffPlans,
 } from '@newinvest/db';
 import { authRequired, requireRole } from '../middleware/auth.js';
 
@@ -158,6 +159,28 @@ entitiesRouter.post('/companies/:id/rounds', authRequired, requireRole('admin', 
     .values({ ...rest, date: date ? date.toISOString().slice(0, 10) : undefined, companyId })
     .returning();
   res.status(201).json({ round });
+});
+
+// ---------- Тарифные планы (пейволл) ----------
+
+entitiesRouter.get('/tariff-plans', async (_req, res) => {
+  res.json({ plans: await db.select().from(tariffPlans).orderBy(tariffPlans.sortOrder) });
+});
+
+entitiesRouter.post('/tariff-plans', authRequired, requireRole('admin', 'super_admin'), async (req, res) => {
+  const parsed = z.object({
+    slug: slugSchema,
+    name: z.string().min(1),
+    sortOrder: z.number().int().optional(),
+  }).safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'validation', details: parsed.error.flatten() });
+    return;
+  }
+  const [row] = await db.insert(tariffPlans).values(parsed.data)
+    .onConflictDoUpdate({ target: tariffPlans.slug, set: { name: parsed.data.name, sortOrder: parsed.data.sortOrder ?? 0 } })
+    .returning();
+  res.status(201).json({ plan: row });
 });
 
 // ---------- Тикеры ----------

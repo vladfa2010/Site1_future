@@ -1,6 +1,10 @@
 async function get<T>(path: string): Promise<T> {
   const res = await fetch(`/api${path}`);
-  if (!res.ok) throw new Error(`${res.status} ${path}`);
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    // статус и тело ошибки нужны фронту (пейволл 403 и др.)
+    throw Object.assign(new Error(`${res.status} ${path}`), { status: res.status, body });
+  }
   return res.json() as Promise<T>;
 }
 

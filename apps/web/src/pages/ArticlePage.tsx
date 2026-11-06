@@ -5,6 +5,7 @@ import { EntityChips } from '../components/EntityChips';
 import { Breadcrumbs } from '../components/Breadcrumbs';
 import { sanitizeArticleHtml } from '../lib/sanitize';
 import { IdeaChart } from '../components/IdeaChart';
+import { Paywall } from '../components/Paywall';
 import { TYPE_LABELS } from '../components/ArticleCard';
 
 export default function ArticlePage() {
@@ -15,6 +16,11 @@ export default function ArticlePage() {
   });
 
   if (isLoading) return <p className="text-zinc-400">Загрузка…</p>;
+  // пейволл: 403 от API → экран «войдите / оформите тариф»
+  const err = error as { status?: number; body?: { access?: 'auth' | 'tariff' } } | null;
+  if (err?.status === 403 && err.body?.access) {
+    return <Paywall access={err.body.access} title="Закрытый материал" />;
+  }
   if (error || !data) return <p className="text-red-400">Статья не найдена</p>;
 
   const { article, relations, stages } = data;
