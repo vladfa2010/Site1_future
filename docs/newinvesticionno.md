@@ -132,6 +132,28 @@
 - «Карусели» = один тип запроса к графу, а не 9 отдельных механик.
 - Бонус: страница тикера → его компания → индустрия → все тренды, где фигурирует.
 
+### 4.1 Предметная модель: венчурный портфель (уточнено владельцем 2026-11-06)
+
+Стиль платформы — венчурный портфель со всем пайплайном, от глобального тренда до архива:
+
+```
+ТРЕНД (мега-тренд: квантовые компьютеры, CRISPR) — лонгрид-лендинг
+   └── ИДЕЯ (внутри тренда; может БЫТЬ компанией
+        │      или содержать несколько компаний;
+        │      может существовать БЕЗ компаний — идея опережает рынок)
+        └── КОМПАНИЯ (профиль-карточка) ← ТИКЕР
+              └── ПАЙПЛАЙН СДЕЛКИ: pipeline → портфель → архив
+ЖИВОЙ ПРОЦЕСС: СОБЫТИЕ («Прометей перешёл в оформление») — хронология через Сюжет
+КОНТЕКСТ: АНАЛИТИКА / ИНТЕРЕСНОЕ — обогащают тренды и компании
+```
+
+Ключевые свойства модели:
+
+- **Идея → сделка — одна сущность, движущаяся по фазам**: идея становится сделкой сменой `deal_phase`, потом попадает в портфель, затем в архив. Страницы `/pipeline`, `/portfel`, `/arhiv` — выборки по фазе
+- **Идея без компании — легальный случай**: тренд есть, идея ясна, компаний на рынке ещё нет. Привязки опциональны
+- **`articles.thesis`** — тезис идеи (2–3 предложения «почему это инвестиция»), отдельно от excerpt
+- **Карточка компании** — `one_liner` (строка для карточки портфеля), `logo_media_id`, `founded_year` (миграция 0001)
+
 ## 5. Схема БД новой платформы (PostgreSQL)
 
 ### 5.1 Справочники-сущности (граф знаний)
@@ -149,9 +171,12 @@ companies (                        -- Компании (73)
   id            SERIAL PRIMARY KEY,
   slug          TEXT UNIQUE NOT NULL,   -- 'spacex' → /kompaniya/spacex/
   name          TEXT NOT NULL,          -- 'SpaceX'
+  one_liner     TEXT,                   -- строка для карточки портфеля
   description   TEXT,
+  logo_media_id INT REFERENCES media(id),
   website       TEXT,
   country       TEXT,
+  founded_year  INT,
   is_public     BOOLEAN DEFAULT FALSE,  -- торгуется ли на бирже
   cover_media_id INT REFERENCES media(id),
   created_at, updated_at
@@ -228,6 +253,7 @@ articles (                         -- ОДНА таблица вместо 6 CPT
   title         TEXT NOT NULL,
   content_html  TEXT NOT NULL,
   excerpt       TEXT,
+  thesis        TEXT,                   -- тезис идеи (для type='ideya')
   source_url    TEXT,                   -- дедупликация (как в wptg)
   cover_media_id INT REFERENCES media(id),
   author_id     INT REFERENCES users(id),
@@ -530,3 +556,4 @@ investicionno_rf/
 | 2026-11-06 | Изучены репозитории PULSE (backend + frontend). Раздел 7: совпадение стека, TEI + Qwen3-Embedding-0.6B (dim 1024 = наш выбор), гибридный поиск, трёхзонная кластеризация каскадов → идеи для Сюжетов. Репозитории склонированы в reference/ (.gitignore) |
 | 2026-11-06 | Сверен TECH_STACK.md с package.json обоих репозиториев — факт совпадает. Фронтенд-наследие для apps/web: TanStack Query 5, TipTap 3, react-helmet-async, ECharts, Vitest/Playwright, DESIGN_SYSTEM.md как основа визуальной семьи |
 | 2026-11-06 | **apps/api работает**: Express + JWT + bcrypt, роли super_admin/admin/author/reader (раздел 6.3). Эндпоинты: register/login, список/просмотр статей (публично — только published), author → draft, публикация — admin. Сквозные curl-тесты пройдены. Запуск: npm run seed -w @newinvest/api, dev: npm run dev -w @newinvest/api |
+| 2026-11-06 | **Граф знаний в API**: карточки /companies/:slug (тикеры+индустрии+статьи), /trends/:slug (лендинг), /stories/:slug (хронология), автодополнение /tickers?q=. Привязки: PUT /articles/:id/relations (транзакционно), автоподстановка цепочки GET /articles/:id/bindings-suggest (тикер→компания→индустрия) — протестировано end-to-end |

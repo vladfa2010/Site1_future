@@ -70,9 +70,12 @@ entitiesRouter.get('/companies/:slug', async (req, res) => {
 const companySchema = z.object({
   slug: slugSchema,
   name: z.string().min(1),
+  oneLiner: z.string().optional(),
   description: z.string().optional(),
+  logoMediaId: z.number().int().optional(),
   website: z.string().url().optional(),
   country: z.string().optional(),
+  foundedYear: z.number().int().optional(),
   isPublic: z.boolean().optional(),
   industryIds: z.array(z.number().int()).optional(),
 });

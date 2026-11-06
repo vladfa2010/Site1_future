@@ -54,9 +54,12 @@ export const companies = pgTable('companies', {
   id: serial('id').primaryKey(),
   slug: text('slug').notNull().unique(), // 'spacex' → /kompaniya/spacex/
   name: text('name').notNull(),
+  oneLiner: text('one_liner'), // одна строка для карточки в портфеле
   description: text('description'),
+  logoMediaId: integer('logo_media_id').references(() => media.id),
   website: text('website'),
   country: text('country'),
+  foundedYear: integer('founded_year'),
   isPublic: boolean('is_public').notNull().default(false),
   coverMediaId: integer('cover_media_id').references(() => media.id),
   createdAt: createdAt(),
@@ -151,6 +154,7 @@ export const articles = pgTable(
     title: text('title').notNull(),
     contentHtml: text('content_html').notNull(),
     excerpt: text('excerpt'),
+    thesis: text('thesis'), // тезис идеи (2–3 предложения «почему это инвестиция»)
     sourceUrl: text('source_url'), // дедупликация (как в wptg)
     coverMediaId: integer('cover_media_id').references(() => media.id),
     authorId: integer('author_id').references(() => users.id),

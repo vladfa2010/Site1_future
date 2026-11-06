@@ -16,6 +16,7 @@ const createSchema = z.object({
   title: z.string().min(1),
   contentHtml: z.string().min(1),
   excerpt: z.string().optional(),
+  thesis: z.string().optional(), // тезис идеи
   sourceUrl: z.string().url().optional(),
   status: z.enum(['draft', 'published']).default('draft'),
 });
