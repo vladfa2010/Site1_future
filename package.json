@@ -1,0 +1,15 @@
+{
+  "name": "newinvesticionno",
+  "private": true,
+  "version": "0.0.1",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "db:generate": "npm run generate -w @newinvest/db",
+    "db:migrate": "npm run migrate -w @newinvest/db",
+    "db:studio": "npm run studio -w @newinvest/db",
+    "db:smoke": "npm run smoke -w @newinvest/db"
+  }
+}
