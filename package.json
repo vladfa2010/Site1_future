@@ -7,7 +7,7 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "concurrently -n api,web \"npm run dev -w @newinvest/api\" \"npm run dev -w @newinvest/web\"",
+    "dev": "concurrently -n api,web,admin \"npm run dev -w @newinvest/api\" \"npm run dev -w @newinvest/web\" \"npm run dev -w @newinvest/admin\"",
     "db:generate": "npm run generate -w @newinvest/db",
     "db:migrate": "npm run migrate -w @newinvest/db",
     "db:migrate:wp": "npm run migrate:wp -w @newinvest/db",
