@@ -10,6 +10,7 @@
     "dev": "concurrently -n api,web \"npm run dev -w @newinvest/api\" \"npm run dev -w @newinvest/web\"",
     "db:generate": "npm run generate -w @newinvest/db",
     "db:migrate": "npm run migrate -w @newinvest/db",
+    "db:migrate:wp": "npm run migrate:wp -w @newinvest/db",
     "db:studio": "npm run studio -w @newinvest/db",
     "db:smoke": "npm run smoke -w @newinvest/db"
   },

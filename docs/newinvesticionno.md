@@ -460,30 +460,75 @@ CREATE INDEX ON article_embeddings USING hnsw (embedding vector_cosine_ops);
 ```
 investicionno_rf/
 ├── apps/
-│   ├── api/                  # Express + TS: REST API, auth (JWT), cron-задачи
-│   │   └── src/routes/       # /articles /companies /tickers /trends /stories ...
-│   ├── web/                  # основной сайт: React 19 + Vite + Tailwind + shadcn/ui
-│   │   └── src/pages/        # /:type/:slug /trend/:slug /kompaniya/:slug ...
-│   └── admin/                # админка: Refine.dev поверх того же API
+│   ├── api/                  # Express + TS: REST API, auth (JWT + роли), все роуты
+│   │   └── src/routes/       # auth, articles, entities, stories, bindings, screener
+│   │   └── src/seed*.ts      # seed (super_admin), seed-test (test admin)
+│   ├── web/                  # основной сайт: React 19 + Vite + Tailwind (порт 5173)
+│   │   └── src/pages/        # главная (карусели), статья, компания, тренд, сюжет,
+│   │                           # скринер /portfolio, архивы типов, логин/регистрация
+│   │   └── src/components/   # Carousel, CoverThumb (3:4), ArticleCard, IdeaCard,
+│   │                           # EntityChips, RoundsTable, Layout
+│   └── admin/                # админка: React + Tailwind (порт 5174)
+│       └── src/pages/        # статьи (+привязки с «подставить цепочку»), компании,
+│                               # тренды, индустрии/тикеры
 ├── packages/
-│   ├── db/                   # Drizzle ORM: схема (раздел 5), миграции, seed
-│   │   └── migrations/       # SQL-миграции, pgvector-индексы
-│   ├── shared/               # общие TS-типы, DTO, константы (роли, типы статей)
-│   └── config/               # общие tsconfig, eslint
+│   ├── db/                   # Drizzle ORM: схема (раздел 5), миграции 0000–0003,
+│   │   └── src/migrate-wp.ts # импорт контента с донора (WP REST API)
+│   ├── shared/               # (зарезервировано) общие TS-типы, DTO, константы
+│   └── config/               # (зарезервировано) общие tsconfig, eslint
 ├── infra/
-│   ├── docker-compose.yml    # PostgreSQL 16 + pgvector (dev-окружение)
+│   ├── docker-compose.yml    # PostgreSQL + pgvector (для сервера; локально — Homebrew PG)
 │   └── docker/               # Dockerfile для api/web/admin
+├── reference/                # локальные копии репозиториев PULSE (в .gitignore)
 ├── docs/
 │   └── newinvesticionno.md   # этот документ
-└── package.json              # workspaces: apps/*, packages/*
+└── package.json              # workspaces: apps/*, packages/*; npm run dev = api+web
 ```
 
 Решения:
 
 - **npm workspaces** — одна установка зависимостей в корне, `packages/shared` подключается во все три приложения
 - **ORM — Drizzle** (а не Prisma): SQL-first, нативная работа с pgvector и полнотекстовым поиском, миграции — обычные .sql
-- **Миграции БД** — Drizzle-kit генерирует, плюс ручные SQL для векторных индексов
-- **dev-окружение**: `docker compose up` → Postgres+pgvector на localhost:5432, `.env.example` в каждом app
+- **Миграции БД** — Drizzle-kit генерирует (`npm run db:generate`), применяются `npm run db:migrate`
+- **dev-окружение**: локально Homebrew Postgres 17 + pgvector (Docker на машине нет); на сервере — docker-compose
+- **Три приложения на трёх портах**: api :4000 (проксируется через /api), web :5173, admin :5174
+
+### 6.5 Состояние прототипа и запуск (2026-11-06)
+
+**Построено:**
+
+| Слой | Что | Статус |
+|---|---|---|
+| `packages/db` | Схема 29 таблиц (раздел 5), миграции 0000–0003, смоук-тест pgvector | ✅ |
+| `apps/api` | JWT-авторизация, роли; статьи (CRUD+публикация); граф знаний (компании/тикеры/индустрии/тренды/сюжеты); привязки + автоподстановка цепочки; скринер `/screener`; раунды `funding_rounds` | ✅ |
+| миграция контента | 306 статей, 73 компании, 24 тикера, 26 индустрий, 16 трендов, связи (383/118/366/334), цепочки выведены | ✅ |
+| `apps/web` | Главная как у донора (карусели, обложки 3:4, баннеры), статья с чипсами-сущностями, карточка компании (раунды по наличию), тренд, сюжет-хронология, скринер `/portfolio`, архивы типов, логин/регистрация | ✅ |
+| `apps/admin` | Статьи (редактор+публикация+привязки с цепочкой), компании (карточка), тренды (лонгрид), справочники | ✅ |
+
+**Запуск с нуля:**
+
+```bash
+npm install
+createdb newinvest && psql -d newinvest -c "CREATE EXTENSION vector;"
+echo "DATABASE_URL=postgres://$(whoami)@localhost:5432/newinvest" > .env
+npm run db:migrate                      # применить схему
+npm run seed -w @newinvest/api          # супер-админ admin@local.dev / admin123
+npm run seed:test -w @newinvest/api     # тестовый админ test@test.ru / test
+npm run db:migrate:wp                   # контент с донора (опционально, ~30 с)
+npm run dev                             # api :4000 + web :5173
+npm run dev -w @newinvest/admin         # админка :5174 (второй терминал)
+```
+
+**Известные ограничения (бэклог):**
+
+- [ ] Обложки — hotlink с донора; скачать в медиатеку при переносе на прод
+- [ ] Редактор контента в админке — textarea HTML; TipTap 3 по решению раздела 6.2
+- [ ] Эмбеддинги не считаются (нужен TEI + Qwen3, раздел 7.2 — синергия с PULSE)
+- [ ] Сюжеты — таблицы пусты, конструктора и автопредложений нет
+- [ ] Панель «куда дальше» на странице статьи (эндпоинт /articles/:id/related — в плане, раздел 4.2)
+- [ ] SSO со вторым проектом; бот wptg не переподключён к новому API
+- [ ] Редиректы 301 и SEO-поля: таблицы есть, наполнение — при переезде (раздел 9→см. раздел про SEO)
+- [ ] `packages/shared` и `packages/config` — пустые (типы дублируются между web/admin)
 
 ## 7. PULSE — параллельный проект: стек, БД, вектора (изучено 2026-11-06)
 
@@ -622,3 +667,4 @@ investicionno_rf/
 | 2026-11-06 | **Миграция контента с донора** (migrate-wp.ts, WP REST API): 306 статей текстом + 73 компании + 24 тикера + 26 индустрий + 16 трендов + фазы/стадии; карточки kompaniya-p (5) и лендинги trends (6) слиты в description; обложки URL в media. Связи: 383/118/366/334 (компании/тикеры/индустрии/тренды), цепочки выведены по совместной встречаемости. Идемпотентно |
 | 2026-11-06 | **Скринер проектов**: /api/screener?phase&stage&industry (идеи с бейджами), словари /deal-phases, /deal-stages; web /portfolio — фильтры в URL, карточки с бейджами стадий/индустрий. Тесты: portfel=19, pre-IPO=15, portfel+pre-IPO=10, ai=14 |
 | 2026-11-06 | **apps/admin — админка** (порт 5174): статьи (список/редактор/публикация), привязки с «Подставить цепочку», компании (карточка+индустрии), тренды, справочники. Guard по роли admin. Refine.dev отложен (6.2, с причиной). Логин test@test.ru/test |
+| 2026-11-06 | **Документация приведена в порядок**: раздел 6.4 — актуальное дерево монорепо (apps/admin, migrate-wp.ts, reference/), раздел 6.5 — состояние прототипа, команды запуска с нуля, бэклог известных ограничений. Добавлен скрипт db:migrate:wp |
