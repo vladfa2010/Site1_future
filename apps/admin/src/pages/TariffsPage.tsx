@@ -20,23 +20,17 @@ interface Plan {
   sortOrder: number;
 }
 
-const FEATURE_LABELS: { key: string; label: string }[] = [
-  { key: 'telegram', label: 'Telegram-дайджесты' },
-  { key: 'email', label: 'Email-дайджесты' },
-  { key: 'aiSummary', label: 'AI-сводка' },
-  { key: 'push', label: 'Web-push' },
-  { key: 'earlyAccess', label: 'Ранний доступ' },
-  { key: 'apiAccess', label: 'API-доступ' },
-];
-
 const EMPTY_FORM = {
   slug: '', name: '', description: '', priceMonthly: '0', priceYearly: '0', yearlyDiscount: '20',
   isActive: true, comingSoonLabel: '', sortOrder: '0',
 };
-const EMPTY_FEATURES: Record<string, boolean> = { telegram: false, email: false, aiSummary: false, push: false, earlyAccess: false, apiAccess: false };
+const EMPTY_FEATURES: Record<string, boolean> = {};
+
+interface RegistryFeature { id: string; label: string; description: string | null; isActive: boolean }
 
 export default function TariffsPage() {
   const [plans, setPlans] = useState<Plan[]>([]);
+  const [registry, setRegistry] = useState<RegistryFeature[]>([]);
   const [editing, setEditing] = useState<Plan | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
@@ -44,8 +38,17 @@ export default function TariffsPage() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
-  const load = async () => setPlans((await api<{ plans: Plan[] }>('/tariff-plans')).plans);
+  const load = async () => {
+    const [p, f] = await Promise.all([
+      api<{ plans: Plan[] }>('/tariff-plans'),
+      api<{ features: RegistryFeature[] }>('/admin/features').catch(() => ({ features: [] as RegistryFeature[] })),
+    ]);
+    setPlans(p.plans);
+    setRegistry(f.features);
+  };
   useEffect(() => { void load().catch(() => setError('Ошибка загрузки')); }, []);
+
+  const featureLabel = (id: string) => registry.find((f) => f.id === id)?.label ?? id;
 
   const startEdit = (p: Plan) => {
     setEditing(p);
@@ -97,8 +100,16 @@ export default function TariffsPage() {
     }
   };
 
+  // фичи плана: подписи из реестра (порт PULSE — registry драйвит форму)
   const activeFeatures = (p: Plan) =>
-    FEATURE_LABELS.filter((f) => Boolean((p.features as Record<string, unknown>)[f.key])).map((f) => f.label);
+    Object.entries(p.features)
+      .filter(([, v]) => Boolean(v))
+      .map(([k]) => featureLabel(k));
+
+  // чекбоксы: активные фичи реестра + фичи, уже выбранные в плане (даже выключенные в реестре)
+  const checkboxFeatures = editing
+    ? [...registry.filter((f) => f.isActive), ...registry.filter((f) => !f.isActive && editing.features[f.id])]
+    : registry.filter((f) => f.isActive);
 
   return (
     <div className="space-y-4">
@@ -189,18 +200,20 @@ export default function TariffsPage() {
             </label>
           </div>
           <div>
-            <span className="label">Фичи тарифа</span>
+            <span className="label">Фичи тарифа (из реестра «Фичи»)</span>
             <div className="flex flex-wrap gap-3">
-              {FEATURE_LABELS.map((f) => (
-                <label key={f.key} className="flex items-center gap-1.5 text-sm text-zinc-300">
+              {checkboxFeatures.map((f) => (
+                <label key={f.id} className="flex items-center gap-1.5 text-sm text-zinc-300" title={f.description ?? f.id}>
                   <input
                     type="checkbox"
-                    checked={features[f.key] ?? false}
-                    onChange={(e) => setFeatures({ ...features, [f.key]: e.target.checked })}
+                    checked={features[f.id] ?? false}
+                    onChange={(e) => setFeatures({ ...features, [f.id]: e.target.checked })}
                   />
                   {f.label}
+                  {!f.isActive && <span className="text-xs text-zinc-600">(выкл. в реестре)</span>}
                 </label>
               ))}
+              {checkboxFeatures.length === 0 && <span className="text-sm text-zinc-500">Реестр фич пуст — добавьте в табе «Фичи»</span>}
             </div>
           </div>
           <div className="flex gap-3">

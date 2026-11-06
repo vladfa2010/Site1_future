@@ -469,21 +469,25 @@ interface Plan {
   comingSoonLabel: string | null;
 }
 
-const FEATURE_LABELS: Record<string, string> = {
-  telegram: 'Telegram-дайджесты', email: 'Email-дайджесты', aiSummary: 'AI-сводка',
-  push: 'Web-push', earlyAccess: 'Ранний доступ', apiAccess: 'API-доступ',
-};
+interface RegistryFeature { id: string; label: string; isActive: boolean }
 
 function TariffTab() {
   const { user } = useAuth();
   const [plans, setPlans] = useState<Plan[]>([]);
+  const [features, setFeatures] = useState<RegistryFeature[]>([]);
 
   useEffect(() => {
     void fetch('/api/tariff-plans')
       .then((r) => (r.ok ? r.json() : Promise.reject()))
       .then((d: { plans: Plan[] }) => setPlans(d.plans.filter((p) => p.isActive)))
       .catch(() => {});
+    void fetch('/api/features')
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((d: { features: RegistryFeature[] }) => setFeatures(d.features))
+      .catch(() => {});
   }, []);
+
+  const featureLabel = (id: string) => features.find((f) => f.id === id)?.label ?? id;
 
   const currentId = user?.tariffId ?? null;
   const expires = user?.tariffExpiresAt ? new Date(user.tariffExpiresAt) : null;
@@ -526,7 +530,7 @@ function TariffTab() {
                 {Object.entries(p.features)
                   .filter(([, v]) => Boolean(v))
                   .map(([k]) => (
-                    <li key={k}>✓ {FEATURE_LABELS[k] ?? k}</li>
+                    <li key={k}>✓ {featureLabel(k)}</li>
                   ))}
               </ul>
               <button

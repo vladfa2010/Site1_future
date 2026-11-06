@@ -15,6 +15,7 @@ const NAV = [
   { to: '/redirects', label: 'Редиректы' },
   { to: '/users', label: 'Пользователи' },
   { to: '/tariffs', label: 'Тарифы' },
+  { to: '/features', label: 'Фичи' },
   { to: '/stats', label: 'Аналитика' },
 ];
 

@@ -24,6 +24,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <nav className="flex items-center gap-5 text-sm">
           <Link to="/" className="text-zinc-400">Лента</Link>
           <Link to="/portfolio" className="text-zinc-400">Портфель</Link>
+          <Link to="/pricing" className="text-zinc-400">Тарифы</Link>
           {user ? (
             /* круглый аватар → кабинет («Выйти» живёт там) */
             <Link to="/cabinet" title="Личный кабинет" className="transition-transform hover:scale-105">

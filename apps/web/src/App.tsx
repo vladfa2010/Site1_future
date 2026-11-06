@@ -13,6 +13,7 @@ import ProposePage from './pages/ProposePage';
 import PrivacyPage from './pages/PrivacyPage';
 import TermsPage from './pages/TermsPage';
 import CabinetPage from './pages/CabinetPage';
+import PricingPage from './pages/PricingPage';
 
 export default function App() {
   return (
@@ -32,6 +33,7 @@ export default function App() {
         <Route path="/privacy" element={<PrivacyPage />} />
         <Route path="/terms" element={<TermsPage />} />
         <Route path="/cabinet" element={<CabinetPage />} />
+        <Route path="/pricing" element={<PricingPage />} />
         {/* «кто мы и зачем» — как у донора */}
         <Route path="/o-nas" element={<AboutPage slug="o-nas" />} />
         <Route path="/zachem" element={<AboutPage slug="zachem" />} />

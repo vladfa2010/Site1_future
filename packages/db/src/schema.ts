@@ -399,6 +399,18 @@ export const tariffPlans = pgTable('tariff_plans', {
 export const ACCESS_LEVELS = ['public', 'auth', 'tariff'] as const;
 export type AccessLevel = (typeof ACCESS_LEVELS)[number];
 
+// Реестр фич (порт features_registry PULSE): драйвит чекбоксы в редакторе
+// тарифов и подписи в Pricing. integration_status: pending | integrated | deprecated
+export const featuresRegistry = pgTable('features_registry', {
+  id: text('id').primaryKey(), // a-z0-9_
+  label: text('label').notNull(),
+  description: text('description'),
+  isActive: boolean('is_active').notNull().default(true),
+  integrationStatus: text('integration_status').notNull().default('pending'),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+});
+
 export const subscriptions = pgTable(
   'subscriptions',
   {
