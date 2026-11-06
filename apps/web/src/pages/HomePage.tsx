@@ -6,6 +6,7 @@ import { IdeaCard } from '../components/IdeaCard';
 import { Carousel, CAROUSEL_ITEM } from '../components/Carousel';
 import { CoverThumb } from '../components/CoverThumb';
 import { ABOUT_PAGES } from '../data/about';
+import { TelegramConnectBanner } from '../components/TelegramConnect';
 
 /** Секция с заголовком, ссылкой «все →» и каруселью. Пустые секции не рендерятся (4.3). */
 function Section({
@@ -213,6 +214,9 @@ export default function HomePage() {
           <div key={a.id} className={CAROUSEL_ITEM}><ArticleCard article={a} /></div>
         ))}
       </Section>
+
+      {/* Виджет подключения Telegram-бота (как в PULSE — на главной) */}
+      <TelegramConnectBanner />
     </div>
   );
 }

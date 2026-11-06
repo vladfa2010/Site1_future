@@ -11,9 +11,35 @@ import {
   notificationSettings,
 } from '@newinvest/db';
 import { authRequired } from '../middleware/auth.js';
+import { createLinkCode, tgStatus, disconnect, tgEnabled } from '../services/telegram.js';
 
 export const cabinetRouter = Router();
 cabinetRouter.use(authRequired); // весь роутер — только для залогиненных
+
+// ---------- Telegram-привязка ----------
+
+cabinetRouter.get('/telegram/status', async (req, res) => {
+  if (!tgEnabled()) {
+    res.json({ connected: false, chatId: null, tgUsername: null, enabled: false });
+    return;
+  }
+  res.json({ ...(await tgStatus(req.user!.id)), enabled: true });
+});
+
+// POST /api/telegram/link → deep-link для /start <code>
+cabinetRouter.post('/telegram/link', async (req, res) => {
+  const deepLink = await createLinkCode(req.user!.id);
+  if (!deepLink) {
+    res.status(503).json({ error: 'telegram not configured' });
+    return;
+  }
+  res.json({ deepLink });
+});
+
+cabinetRouter.delete('/telegram/disconnect', async (req, res) => {
+  await disconnect(req.user!.id);
+  res.json({ ok: true });
+});
 
 const FAV_TYPES = ['article', 'company', 'trend', 'story'] as const;
 const entitySchema = z.object({

@@ -5,8 +5,35 @@
 import { and, desc, eq, gte, inArray, sql, type SQL } from 'drizzle-orm';
 import {
   db, users, subscriptions, notificationSettings, articles, articleViews, media,
+  tgBindings,
 } from '@newinvest/db';
 import { sendEmail, emailEnabled, renderDailyDigest, renderWeeklyReport } from './email.js';
+import { sendTelegramMessage, tgEnabled } from './telegram.js';
+
+const anyChannel = () => emailEnabled() || tgEnabled();
+
+const SITE = () => process.env.PUBLIC_SITE_URL ?? 'http://localhost:5173';
+
+/** TG-дайджест дня: компактный текст со ссылками */
+function tgDigestText(items: { type: string; slug: string; title: string }[]): string {
+  if (items.length === 0) return 'Сегодня по вашим подпискам новых материалов не вышло.';
+  const lines = items.slice(0, 10).map((a) => `• <a href="${SITE()}/${a.type}/${a.slug}">${a.title}</a>`);
+  if (items.length > 10) lines.push(`…и ещё ${items.length - 10}`);
+  return `<b>Подборка дня — Инвестиционно.рф</b>\n\n${lines.join('\n')}`;
+}
+
+function tgWeeklyText(count: number, top: { type: string; slug: string; title: string }[], subscribed: { type: string; slug: string; title: string }[]): string {
+  const lines = [`<b>Итоги недели — Инвестиционно.рф</b>`, ``, `За неделю вышло ${count} материалов.`];
+  if (top.length) {
+    lines.push('', '<b>Топ недели:</b>');
+    top.forEach((a, i) => lines.push(`${i + 1}. <a href="${SITE()}/${a.type}/${a.slug}">${a.title}</a>`));
+  }
+  if (subscribed.length) {
+    lines.push('', '<b>По вашим подпискам:</b>');
+    subscribed.slice(0, 5).forEach((a) => lines.push(`• <a href="${SITE()}/${a.type}/${a.slug}">${a.title}</a>`));
+  }
+  return lines.join('\n');
+}
 
 const existsIn = (junction: string, fk: string, ids: number[]) =>
   sql`exists(select 1 from ${sql.identifier(junction)} j where j.${sql.identifier('article_id')} = ${sql.identifier('articles')}.${sql.identifier('id')} and j.${sql.identifier(fk)} in (${sql.join(ids.map((id) => sql`${id}`), sql`, `)}))`;
@@ -51,14 +78,20 @@ async function recipients(flag: 'emailDaily' | 'emailWeekly'): Promise<{ id: num
 }
 
 export async function runDailyDigest(): Promise<{ sent: number; skipped: string | null }> {
-  if (!emailEnabled()) return { sent: 0, skipped: 'RESEND_API_KEY/RESEND_FROM не заданы' };
+  if (!anyChannel()) return { sent: 0, skipped: 'ни RESEND_API_KEY, ни TG_BOT_TOKEN не заданы' };
   let sent = 0;
   for (const user of await recipients('emailDaily')) {
     try {
       const since = user.lastSent ?? new Date(Date.now() - 26 * 3600_000);
       const items = await subscribedArticles(user.id, since);
       if (items.length === 0 && user.lastSent) continue; // пустой день — не спамим (первый раз шлём для проверки)
-      await sendEmail(user.email, `Инвестиционно.рф — подборка дня (${items.length})`, renderDailyDigest(user.displayName ?? 'инвестор', items));
+      // email
+      if (emailEnabled()) {
+        await sendEmail(user.email, `Инвестиционно.рф — подборка дня (${items.length})`, renderDailyDigest(user.displayName ?? 'инвестор', items));
+      }
+      // telegram
+      const [tg] = await db.select().from(tgBindings).where(eq(tgBindings.userId, user.id)).limit(1);
+      if (tg) await sendTelegramMessage(tg.chatId, tgDigestText(items)).catch((e) => console.error('[tg digest]', e.message));
       await db.insert(notificationSettings)
         .values({ userId: user.id, emailDaily: true, lastDailySentAt: new Date() })
         .onConflictDoUpdate({ target: notificationSettings.userId, set: { lastDailySentAt: new Date() } });
@@ -71,7 +104,7 @@ export async function runDailyDigest(): Promise<{ sent: number; skipped: string 
 }
 
 export async function runWeeklyReport(): Promise<{ sent: number; skipped: string | null }> {
-  if (!emailEnabled()) return { sent: 0, skipped: 'RESEND_API_KEY/RESEND_FROM не заданы' };
+  if (!anyChannel()) return { sent: 0, skipped: 'ни RESEND_API_KEY, ни TG_BOT_TOKEN не заданы' };
   const weekAgo = new Date(Date.now() - 7 * 86400_000);
   let sent = 0;
 
@@ -89,11 +122,15 @@ export async function runWeeklyReport(): Promise<{ sent: number; skipped: string
         .limit(5);
       const subscribed = await subscribedArticles(user.id, weekAgo);
       const summary = await aiSummaryWeek(countRow.n, top, subscribed).catch(() => null);
-      await sendEmail(
-        user.email,
-        'Инвестиционно.рф — итоги недели',
-        renderWeeklyReport(user.displayName ?? 'инвестор', { articlesCount: countRow.n, top, subscribed, summary }),
-      );
+      if (emailEnabled()) {
+        await sendEmail(
+          user.email,
+          'Инвестиционно.рф — итоги недели',
+          renderWeeklyReport(user.displayName ?? 'инвестор', { articlesCount: countRow.n, top, subscribed, summary }),
+        );
+      }
+      const [tg] = await db.select().from(tgBindings).where(eq(tgBindings.userId, user.id)).limit(1);
+      if (tg) await sendTelegramMessage(tg.chatId, tgWeeklyText(countRow.n, top, subscribed)).catch((e) => console.error('[tg weekly]', e.message));
       await db.insert(notificationSettings)
         .values({ userId: user.id, emailWeekly: true, lastWeeklySentAt: new Date() })
         .onConflictDoUpdate({ target: notificationSettings.userId, set: { lastWeeklySentAt: new Date() } });

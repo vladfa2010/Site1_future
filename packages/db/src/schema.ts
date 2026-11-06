@@ -358,6 +358,22 @@ export const notificationSettings = pgTable('notification_settings', {
   lastWeeklySentAt: timestamp('last_weekly_sent_at', { withTimezone: true }),
 });
 
+// Привязка Telegram-аккаунта к юзеру (ЛС бота: chat_id)
+export const tgBindings = pgTable('tg_bindings', {
+  userId: integer('user_id').primaryKey().references(() => users.id, { onDelete: 'cascade' }),
+  chatId: text('chat_id').notNull().unique(),
+  tgUsername: text('tg_username'),
+  connectedAt: createdAt(),
+});
+
+// Одноразовые коды для deep-link привязки (/start <code>)
+export const tgLinkCodes = pgTable('tg_link_codes', {
+  code: text('code').primaryKey(),
+  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  usedAt: timestamp('used_at', { withTimezone: true }),
+});
+
 export const subscriptions = pgTable(
   'subscriptions',
   {

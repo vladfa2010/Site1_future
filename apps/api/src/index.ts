@@ -4,6 +4,7 @@ import cron from 'node-cron';
 import { config } from './config.js';
 import { securityHeaders, corsAllowlist, apiLimiter, loginLimiter, registerLimiter, generateLimiter } from './middleware/security.js';
 import { runDailyDigest, runWeeklyReport } from './services/digest.js';
+import { startTelegramPolling } from './services/telegram.js';
 import { authRouter } from './routes/auth.js';
 import { articlesRouter } from './routes/articles.js';
 import { entitiesRouter } from './routes/entities.js';
@@ -70,6 +71,7 @@ app.listen(config.port, () => {
     void runWeeklyReport().then((r) => console.log('[cron] weekly report:', r)).catch((e) => console.error('[cron] weekly', e));
   });
   if (!process.env.RESEND_API_KEY) {
-    console.log('[notifications] RESEND_API_KEY не задан — дайджесты отключены');
+    console.log('[notifications] RESEND_API_KEY не задан — email-дайджесты отключены');
   }
+  startTelegramPolling(); // no-op без TG_BOT_TOKEN
 });

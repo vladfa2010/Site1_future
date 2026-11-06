@@ -5,6 +5,7 @@ import { useAuthModal } from '../authModal';
 import { Breadcrumbs } from '../components/Breadcrumbs';
 import { ArticleCard } from '../components/ArticleCard';
 import { useFavorites } from '../favorites';
+import { TelegramConnect } from '../components/TelegramConnect';
 import type { ArticleListItem } from '../api';
 
 type Tab = 'favorites' | 'feed' | 'subscriptions' | 'tariff' | 'notifications';
@@ -283,13 +284,27 @@ function SubscriptionsTab() {
 function NotificationsTab() {
   const [settings, setSettings] = useState<{ emailDaily: boolean; emailWeekly: boolean } | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [tg, setTg] = useState<{ connected: boolean; tgUsername: string | null; enabled: boolean } | null>(null);
+
+  const loadTg = () => {
+    void fetch('/api/telegram/status', { headers: authed() })
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((d) => setTg({ connected: d.connected, tgUsername: d.tgUsername, enabled: d.enabled !== false }))
+      .catch(() => {});
+  };
 
   useEffect(() => {
     void fetch('/api/notification-settings', { headers: authed() })
       .then((r) => (r.ok ? r.json() : Promise.reject()))
       .then((d: { settings: { emailDaily: boolean; emailWeekly: boolean } }) => setSettings(d.settings))
       .catch(() => {});
+    loadTg();
   }, []);
+
+  const disconnectTg = async () => {
+    await fetch('/api/telegram/disconnect', { method: 'DELETE', headers: authed() });
+    loadTg();
+  };
 
   const save = async (patch: Partial<{ emailDaily: boolean; emailWeekly: boolean }>) => {
     const next = { emailDaily: settings?.emailDaily ?? true, emailWeekly: settings?.emailWeekly ?? true, ...patch };
@@ -327,9 +342,24 @@ function NotificationsTab() {
         </label>
       ))}
       <p className="text-xs text-zinc-600">
-        Уведомления в Telegram и push — подключим следующими. Письма отправляются на {''}
-        <span className="text-zinc-400">ваш email регистрации</span>.
+        Письма отправляются на <span className="text-zinc-400">ваш email регистрации</span>. Web-push — следующим каналом.
       </p>
+
+      {/* Telegram-контур */}
+      {tg && tg.enabled && (
+        tg.connected ? (
+          <div className="flex items-center justify-between rounded-lg border border-[#229ED9]/30 bg-[#191919] p-4">
+            <p className="text-sm">
+              <span className="font-semibold text-[#229ED9]">Telegram подключён</span>
+              {tg.tgUsername && <span className="text-zinc-500"> @{tg.tgUsername}</span>}
+              <span className="block text-xs text-zinc-500">Дайджесты приходят в личку бота. Отключиться можно командой /stop.</span>
+            </p>
+            <button onClick={() => void disconnectTg()} className="text-sm text-zinc-500 hover:text-red-400">отключить</button>
+          </div>
+        ) : (
+          <TelegramConnect compact />
+        )
+      )}
     </div>
   );
 }
