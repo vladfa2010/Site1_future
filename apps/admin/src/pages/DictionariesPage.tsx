@@ -76,7 +76,7 @@ export default function DictionariesPage() {
           <table className="w-full">
             <tbody>
               {industries.map((i) => (
-                <tr key={i.id} className="border-b border-zinc-100 last:border-0">
+                <tr key={i.id} className="border-b border-zinc-800 last:border-0">
                   <td className="td font-medium">{i.name}</td>
                   <td className="td text-zinc-500">{i.slug}</td>
                 </tr>
@@ -106,7 +106,7 @@ export default function DictionariesPage() {
           <table className="w-full">
             <tbody>
               {tickers.map((t) => (
-                <tr key={t.id} className="border-b border-zinc-100 last:border-0">
+                <tr key={t.id} className="border-b border-zinc-800 last:border-0">
                   <td className="td font-mono font-semibold">{t.symbol}</td>
                   <td className="td text-zinc-500">{t.companyName ?? '—'}</td>
                   <td className="td text-zinc-400">{t.exchange ?? ''}</td>

@@ -157,9 +157,9 @@ export default function ArticleEditPage() {
   const CheckGroup = ({ label, options, relKey, render }: { label: string; options: Option[]; relKey: keyof Relations; render?: (o: Option) => string }) => (
     <div>
       <span className="label">{label}</span>
-      <div className="flex max-h-36 flex-wrap gap-2 overflow-y-auto rounded-lg border border-zinc-200 p-2">
+      <div className="flex max-h-36 flex-wrap gap-2 overflow-y-auto rounded-lg border border-zinc-800 p-2">
         {options.map((o) => (
-          <label key={o.id} className={`cursor-pointer rounded-full px-2.5 py-1 text-xs ${rels[relKey].includes(o.id) ? 'bg-orange-100 text-orange-700' : 'bg-zinc-100 text-zinc-600'}`}>
+          <label key={o.id} className={`cursor-pointer rounded-full px-2.5 py-1 text-xs ${rels[relKey].includes(o.id) ? 'bg-orange-500/100/10 text-orange-400' : 'bg-zinc-800 text-zinc-400'}`}>
             <input type="checkbox" className="hidden" checked={rels[relKey].includes(o.id)} onChange={() => toggle(relKey, o.id)} />
             {render ? render(o) : o.name}
           </label>
@@ -171,8 +171,8 @@ export default function ArticleEditPage() {
   return (
     <div className="space-y-4">
       <h1 className="text-xl font-bold">{isNew ? 'Новая статья' : 'Редактирование статьи'}</h1>
-      {notice && <p className="rounded-lg bg-green-50 px-3 py-2 text-sm text-green-700">{notice}</p>}
-      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      {notice && <p className="rounded-lg bg-green-50 px-3 py-2 text-sm text-green-400">{notice}</p>}
+      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-400">{error}</p>}
 
       <div className="card grid gap-4 sm:grid-cols-3">
         <div>
@@ -233,15 +233,15 @@ export default function ArticleEditPage() {
         {isNew && <p className="text-sm text-zinc-500">Сохраните статью — затем появится генерация обложки.</p>}
         {coverPreview && (
           <div className="flex items-start gap-4">
-            <img src={coverPreview} alt="Обложка" className="h-48 w-36 rounded-lg border border-zinc-200 object-cover" />
-            {genMock && <span className="rounded-full bg-amber-100 px-2 py-1 text-xs text-amber-700">mock — без ключа Kimi</span>}
+            <img src={coverPreview} alt="Обложка" className="h-48 w-36 rounded-lg border border-zinc-800 object-cover" />
+            {genMock && <span className="rounded-full bg-amber-500/10 px-2 py-1 text-xs text-amber-400">mock — без ключа Kimi</span>}
           </div>
         )}
         {genOpen && (
-          <div className="space-y-2 rounded-lg border border-zinc-200 bg-zinc-50 p-3">
+          <div className="space-y-2 rounded-lg border border-zinc-800 bg-zinc-800/50 p-3">
             <label className="label">Промпт (собран из контекста статьи — можно редактировать)</label>
             <textarea className="input font-mono" rows={5} value={genPrompt} onChange={(e) => setGenPrompt(e.target.value)} />
-            {genError && <p className="text-sm text-red-600">{genError}</p>}
+            {genError && <p className="text-sm text-red-400">{genError}</p>}
             <button type="button" className="btn" onClick={() => void generateCover()} disabled={genBusy || genPrompt.length < 10}>
               {genBusy ? 'Генерируем…' : 'Сгенерировать'}
             </button>

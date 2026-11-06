@@ -50,12 +50,12 @@ export default function CompaniesPage() {
 
       <div className="card overflow-x-auto p-0">
         <table className="w-full">
-          <thead className="border-b border-zinc-200">
+          <thead className="border-b border-zinc-800">
             <tr><th className="th">Название</th><th className="th">Slug</th><th className="th">Страна</th><th className="th">Публичная</th><th className="th" /></tr>
           </thead>
           <tbody>
             {rows.map((c) => (
-              <tr key={c.id} className="border-b border-zinc-100 last:border-0">
+              <tr key={c.id} className="border-b border-zinc-800 last:border-0">
                 <td className="td font-medium">{c.name}</td>
                 <td className="td text-zinc-500">{c.slug}</td>
                 <td className="td text-zinc-500">{c.country ?? '—'}</td>

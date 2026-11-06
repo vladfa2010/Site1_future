@@ -50,12 +50,12 @@ export default function TrendsPage() {
 
       <div className="card overflow-x-auto p-0">
         <table className="w-full">
-          <thead className="border-b border-zinc-200">
+          <thead className="border-b border-zinc-800">
             <tr><th className="th">Название</th><th className="th">Slug</th><th className="th">Статус</th><th className="th">Лонгрид</th><th className="th" /></tr>
           </thead>
           <tbody>
             {rows.map((t) => (
-              <tr key={t.id} className="border-b border-zinc-100 last:border-0">
+              <tr key={t.id} className="border-b border-zinc-800 last:border-0">
                 <td className="td font-medium">{t.name}</td>
                 <td className="td text-zinc-500">{t.slug}</td>
                 <td className="td">{t.status === 'active' ? 'активен' : 'закрыт'}</td>

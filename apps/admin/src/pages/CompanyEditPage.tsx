@@ -56,8 +56,8 @@ export default function CompanyEditPage() {
   return (
     <div className="space-y-4">
       <h1 className="text-xl font-bold">Карточка компании</h1>
-      {notice && <p className="rounded-lg bg-green-50 px-3 py-2 text-sm text-green-700">{notice}</p>}
-      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      {notice && <p className="rounded-lg bg-green-50 px-3 py-2 text-sm text-green-400">{notice}</p>}
+      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-400">{error}</p>}
 
       <div className="card grid gap-4 sm:grid-cols-2">
         <div>
@@ -99,7 +99,7 @@ export default function CompanyEditPage() {
               key={i.id}
               type="button"
               onClick={() => toggleIndustry(i.id)}
-              className={`rounded-full px-3 py-1 text-xs ${selectedIndustries.includes(i.id) ? 'bg-orange-100 text-orange-700' : 'bg-zinc-100 text-zinc-600'}`}
+              className={`rounded-full px-3 py-1 text-xs ${selectedIndustries.includes(i.id) ? 'bg-orange-500/10 text-orange-400' : 'bg-zinc-800 text-zinc-400'}`}
             >
               {i.name}
             </button>

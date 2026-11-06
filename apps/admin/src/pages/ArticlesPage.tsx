@@ -55,26 +55,26 @@ export default function ArticlesPage() {
         </select>
       </div>
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p className="text-sm text-red-400">{error}</p>}
       <div className="card overflow-x-auto p-0">
         <table className="w-full">
-          <thead className="border-b border-zinc-200">
+          <thead className="border-b border-zinc-800">
             <tr>
               <th className="th">Тип</th><th className="th">Заголовок</th><th className="th">Статус</th><th className="th">Дата</th><th className="th" />
             </tr>
           </thead>
           <tbody>
             {rows.map((r) => (
-              <tr key={r.id} className="border-b border-zinc-100 last:border-0">
+              <tr key={r.id} className="border-b border-zinc-800 last:border-0">
                 <td className="td whitespace-nowrap text-zinc-500">{TYPE_LABELS[r.type] ?? r.type}</td>
                 <td className="td max-w-md truncate font-medium">{r.title}</td>
                 <td className="td">
-                  <span className={`rounded-full px-2 py-0.5 text-xs ${r.status === 'published' ? 'bg-green-100 text-green-700' : 'bg-zinc-100 text-zinc-600'}`}>
+                  <span className={`rounded-full px-2 py-0.5 text-xs ${r.status === 'published' ? 'bg-green-500/10 text-green-400' : 'bg-zinc-800 text-zinc-400'}`}>
                     {STATUS_LABELS[r.status] ?? r.status}
                   </span>
                 </td>
                 <td className="td whitespace-nowrap text-zinc-500">{r.publishedAt?.slice(0, 10) ?? '—'}</td>
-                <td className="td"><Link to={`/articles/${r.type}/${r.slug}/edit`} className="text-orange-600 hover:underline">ред.</Link></td>
+                <td className="td"><Link to={`/articles/${r.type}/${r.slug}/edit`} className="text-orange-400 hover:underline">ред.</Link></td>
               </tr>
             ))}
           </tbody>
