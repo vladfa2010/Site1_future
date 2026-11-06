@@ -31,6 +31,8 @@ export default function CabinetPage() {
   const { user, logout } = useAuth();
   const { open } = useAuthModal();
   const [tab, setTab] = useState<Tab>('favorites');
+  const isAdmin = user?.role === 'admin' || user?.role === 'super_admin';
+  const ADMIN_URL = import.meta.env.VITE_ADMIN_URL ?? 'http://localhost:5174';
 
   if (!user) {
     return (
@@ -55,9 +57,19 @@ export default function CabinetPage() {
           <h1 className="truncate text-2xl font-bold">{user.displayName ?? user.email}</h1>
           <p className="text-sm text-zinc-500">{user.email}</p>
         </div>
-        <button onClick={logout} className="shrink-0 rounded-full border border-[#2a2a2a] px-4 py-2 text-sm text-zinc-400 hover:border-red-500/50 hover:text-red-400">
-          Выйти
-        </button>
+        <div className="flex shrink-0 items-center gap-2">
+          {isAdmin && (
+            <a
+              href={`${ADMIN_URL}/?auth=${localStorage.getItem('token') ?? ''}`}
+              className="rounded-full border border-[#beff00]/50 px-4 py-2 text-sm text-[#c9ff2a] hover:bg-[#beff00]/10"
+            >
+              Админка
+            </a>
+          )}
+          <button onClick={logout} className="rounded-full border border-[#2a2a2a] px-4 py-2 text-sm text-zinc-400 hover:border-red-500/50 hover:text-red-400">
+            Выйти
+          </button>
+        </div>
       </header>
 
       <AvatarPicker current={user.avatar} />
