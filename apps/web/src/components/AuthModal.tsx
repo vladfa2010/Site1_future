@@ -452,8 +452,8 @@ export default function AuthModal() {
                                   />
                                   <span>
                                     Соглашаюсь с{' '}
-                                    <span className="text-[#00D4FF] underline">условиями использования</span> и{' '}
-                                    <span className="text-[#00D4FF] underline">политикой конфиденциальности</span>
+                                    <a href="/terms" target="_blank" rel="noreferrer" className="text-[#00D4FF] underline">условиями использования</a> и{' '}
+                                    <a href="/privacy" target="_blank" rel="noreferrer" className="text-[#00D4FF] underline">политикой конфиденциальности</a>
                                   </span>
                                 </motion.label>
                                 {agreeError && (

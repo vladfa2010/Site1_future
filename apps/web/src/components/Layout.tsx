@@ -63,6 +63,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
             ✉ Предложить новость или идею
           </button>
           <p className="text-sm text-zinc-500">Инвестиционно про будущее — тренды, идеи и сделки</p>
+          <p className="flex gap-4 text-xs text-zinc-600">
+            <Link to="/privacy" className="text-zinc-600 hover:text-[#c9ff2a]">Политика конфиденциальности</Link>
+            <Link to="/terms" className="text-zinc-600 hover:text-[#c9ff2a]">Условия использования</Link>
+          </p>
         </div>
       </footer>
     </div>

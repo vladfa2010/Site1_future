@@ -10,6 +10,8 @@ import TypePage from './pages/TypePage';
 import AuthModalOpener from './pages/AuthModalOpener';
 import AboutPage from './pages/AboutPage';
 import ProposePage from './pages/ProposePage';
+import PrivacyPage from './pages/PrivacyPage';
+import TermsPage from './pages/TermsPage';
 
 export default function App() {
   return (
@@ -26,6 +28,8 @@ export default function App() {
         <Route path="/login" element={<AuthModalOpener mode="login" />} />
         <Route path="/register" element={<AuthModalOpener mode="register" />} />
         <Route path="/propose" element={<ProposePage />} />
+        <Route path="/privacy" element={<PrivacyPage />} />
+        <Route path="/terms" element={<TermsPage />} />
         {/* «кто мы и зачем» — как у донора */}
         <Route path="/o-nas" element={<AboutPage slug="o-nas" />} />
         <Route path="/zachem" element={<AboutPage slug="zachem" />} />
