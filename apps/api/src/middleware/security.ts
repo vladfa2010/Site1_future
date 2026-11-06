@@ -63,3 +63,11 @@ export const generateLimiter = rateLimit({
   ...limiterDefaults,
   message: { error: 'generation limit reached' },
 });
+
+/** Telegram deep-link: создание кодов привязки — лимит на пользователя */
+export const telegramLinkLimiter = rateLimit({
+  windowMs: 3_600_000,
+  limit: 20,
+  ...limiterDefaults,
+  message: { error: 'link limit reached, try later' },
+});

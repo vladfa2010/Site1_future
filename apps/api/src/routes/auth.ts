@@ -10,10 +10,22 @@ import { signToken, authRequired } from '../middleware/auth.js';
 
 export const authRouter = Router();
 
+const passwordSchema = z.string()
+  .min(8, 'Минимум 8 символов')
+  .max(100)
+  .refine((p) => {
+    // минимум 2 класса символов из: буквы / цифры / спецсимволы; не все символы одинаковые
+    const hasLetters = /[a-zA-Zа-яА-ЯёЁ]/.test(p);
+    const hasDigits = /\d/.test(p);
+    const hasSpecial = /[^a-zA-Zа-яА-ЯёЁ0-9\s]/.test(p);
+    const classes = [hasLetters, hasDigits, hasSpecial].filter(Boolean).length;
+    return classes >= 2 && !/^(.)\1+$/.test(p);
+  }, 'Пароль должен содержать буквы и цифры (или спецсимволы)');
+
 const registerSchema = z.object({
   username: z.string().trim().min(2, 'Минимум 2 символа').max(40),
   email: z.string().email(),
-  password: z.string().min(8, 'Минимум 8 символов').max(100),
+  password: passwordSchema,
 });
 
 const loginSchema = z.object({
@@ -77,8 +89,12 @@ authRouter.delete('/me', authRequired, async (req, res) => {
     res.status(403).json({ error: 'Неверный пароль' });
     return;
   }
-  await db.delete(articles).where(and(eq(articles.authorId, user.id), eq(articles.status, 'draft')));
-  await db.delete(users).where(eq(users.id, user.id));
+  // транзакция: черновики и профиль удаляются атомарно (иначе падение между
+  // запросами = потерянные черновики или сиротский профиль)
+  await db.transaction(async (tx) => {
+    await tx.delete(articles).where(and(eq(articles.authorId, user.id), eq(articles.status, 'draft')));
+    await tx.delete(users).where(eq(users.id, user.id));
+  });
   res.json({ ok: true });
 });
 

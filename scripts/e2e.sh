@@ -76,7 +76,7 @@ curl -s -X DELETE "$B/api/redirects/%2Fe2e-old" -H "$A" | grep -q '"ok"' && ok |
 USRID=$(curl -s "$B/api/users" -H "$A" | jqget "[u['id'] for u in d['users'] if u['email']=='e2e@test.ru'][0]")
 curl -s -X PATCH "$B/api/users/$USRID" -H "Authorization: Bearer $SA" -H "$J" -d '{"role":"author","tariffId":1}' > /dev/null
 curl -s "$B/api/users" -H "$A" | grep -q '"role":"author"' && ok || bad "users: смена роли"
-curl -s -o /dev/null -w "%{http_code}" -X PATCH "$B/api/users/$USRID" -H "$A" -H "$J" -d '{"role":"admin"}' | grep -q 403 && ok || bad "users: не-super не меняет роли"
+curl -s -o /dev/null -w "%{http_code}" -X PATCH "$B/api/users/$USRID" -H "$UA" -H "$J" -d '{"role":"admin"}' | grep -q 403 && ok || bad "users: не-super не меняет роли"
 curl -s -X PATCH "$B/api/tariff-plans/1" -H "$A" -H "$J" -d '{"yearlyDiscount":21}' | grep -q '"yearlyDiscount":21' && ok || bad "tariffs: PATCH"
 curl -s "$B/api/stats/views?days=7" -H "$A" | grep -q '"total"' && ok || bad "stats: просмотры"
 curl -s -X POST "$B/api/notifications/send" -H "$A" -H "$J" -d '{"scope":"daily"}' | grep -q skipped && ok || bad "notifications: ручной запуск"

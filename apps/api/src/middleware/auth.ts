@@ -21,7 +21,8 @@ declare module 'express-serve-static-core' {
 
 function verifyToken(token: string): AuthUser | null {
   try {
-    const payload = jwt.verify(token, config.jwtSecret) as jwt.JwtPayload;
+    // алгоритм пиннется: защита от alg-confusion (RS256/None-атаки)
+    const payload = jwt.verify(token, config.jwtSecret, { algorithms: ['HS256'] }) as jwt.JwtPayload;
     if (typeof payload.sub !== 'string') return null;
     return {
       id: Number(payload.sub),

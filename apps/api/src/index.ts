@@ -2,7 +2,7 @@ import express from 'express';
 import path from 'node:path';
 import cron from 'node-cron';
 import { config } from './config.js';
-import { securityHeaders, corsAllowlist, apiLimiter, loginLimiter, registerLimiter, generateLimiter } from './middleware/security.js';
+import { securityHeaders, corsAllowlist, apiLimiter, loginLimiter, registerLimiter, generateLimiter, telegramLinkLimiter } from './middleware/security.js';
 import { runDailyDigest, runWeeklyReport } from './services/digest.js';
 import { startTelegramPolling } from './services/telegram.js';
 import { authRouter } from './routes/auth.js';
@@ -31,6 +31,7 @@ app.use('/api/', apiLimiter);
 app.use('/api/auth/login', loginLimiter);
 app.use('/api/auth/register', registerLimiter);
 app.use('/api/media/generate', generateLimiter);
+app.use('/api/telegram/link', telegramLinkLimiter);
 
 app.use(express.json({ limit: '2mb' }));
 
