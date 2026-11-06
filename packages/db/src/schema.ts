@@ -349,6 +349,15 @@ export const favorites = pgTable(
   (t) => [primaryKey({ columns: [t.userId, t.entityType, t.entityId] })],
 );
 
+// Настройки уведомлений (email-дайджесты; TG/push — позже)
+export const notificationSettings = pgTable('notification_settings', {
+  userId: integer('user_id').primaryKey().references(() => users.id, { onDelete: 'cascade' }),
+  emailDaily: boolean('email_daily').notNull().default(true), // дайджест в конце дня
+  emailWeekly: boolean('email_weekly').notNull().default(true), // недельный репорт
+  lastDailySentAt: timestamp('last_daily_sent_at', { withTimezone: true }),
+  lastWeeklySentAt: timestamp('last_weekly_sent_at', { withTimezone: true }),
+});
+
 export const subscriptions = pgTable(
   'subscriptions',
   {

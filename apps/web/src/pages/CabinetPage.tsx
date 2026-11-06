@@ -7,11 +7,12 @@ import { ArticleCard } from '../components/ArticleCard';
 import { useFavorites } from '../favorites';
 import type { ArticleListItem } from '../api';
 
-type Tab = 'favorites' | 'feed' | 'subscriptions' | 'tariff';
+type Tab = 'favorites' | 'feed' | 'subscriptions' | 'tariff' | 'notifications';
 const TABS: { id: Tab; label: string }[] = [
   { id: 'favorites', label: 'Избранное' },
   { id: 'feed', label: 'Моя лента' },
   { id: 'subscriptions', label: 'Подписки' },
+  { id: 'notifications', label: 'Уведомления' },
   { id: 'tariff', label: 'Тариф' },
 ];
 
@@ -62,6 +63,7 @@ export default function CabinetPage() {
         {tab === 'favorites' && <FavoritesTab />}
         {tab === 'feed' && <FeedTab />}
         {tab === 'subscriptions' && <SubscriptionsTab />}
+        {tab === 'notifications' && <NotificationsTab />}
         {tab === 'tariff' && <TariffTab />}
       </div>
 
@@ -278,6 +280,60 @@ function SubscriptionsTab() {
 }
 
 /* ---------- Тариф ---------- */
+function NotificationsTab() {
+  const [settings, setSettings] = useState<{ emailDaily: boolean; emailWeekly: boolean } | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  useEffect(() => {
+    void fetch('/api/notification-settings', { headers: authed() })
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((d: { settings: { emailDaily: boolean; emailWeekly: boolean } }) => setSettings(d.settings))
+      .catch(() => {});
+  }, []);
+
+  const save = async (patch: Partial<{ emailDaily: boolean; emailWeekly: boolean }>) => {
+    const next = { emailDaily: settings?.emailDaily ?? true, emailWeekly: settings?.emailWeekly ?? true, ...patch };
+    setSettings(next);
+    await fetch('/api/notification-settings', { method: 'PUT', headers: authed(), body: JSON.stringify(next) });
+    setNotice('Сохранено ✓');
+    setTimeout(() => setNotice(null), 2000);
+  };
+
+  if (!settings) return <p className="text-zinc-400">Загрузка…</p>;
+
+  const rows = [
+    { key: 'emailDaily' as const, title: 'Подборка дня', desc: 'Каждый вечер в 20:00 — материалы по вашим подпискам за день' },
+    { key: 'emailWeekly' as const, title: 'Недельный репорт', desc: 'Итоги недели: сводка, топ материалов, что вышло по подпискам' },
+  ];
+
+  return (
+    <div className="max-w-lg space-y-3">
+      {notice && <p className="text-sm text-[#c9ff2a]">{notice}</p>}
+      {rows.map((r) => (
+        <label key={r.key} className="flex cursor-pointer items-start justify-between gap-4 rounded-lg border border-[#2a2a2a] bg-[#191919] p-4">
+          <span>
+            <span className="block text-sm font-semibold">{r.title}</span>
+            <span className="mt-1 block text-xs text-zinc-500">{r.desc}</span>
+          </span>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={settings[r.key]}
+            onClick={() => void save({ [r.key]: !settings[r.key] })}
+            className={`mt-0.5 h-6 w-11 shrink-0 rounded-full transition-colors ${settings[r.key] ? 'bg-[#beff00]' : 'bg-zinc-700'}`}
+          >
+            <span className={`block h-5 w-5 rounded-full bg-black transition-transform ${settings[r.key] ? 'translate-x-5' : 'translate-x-0.5'}`} />
+          </button>
+        </label>
+      ))}
+      <p className="text-xs text-zinc-600">
+        Уведомления в Telegram и push — подключим следующими. Письма отправляются на {''}
+        <span className="text-zinc-400">ваш email регистрации</span>.
+      </p>
+    </div>
+  );
+}
+
 function TariffTab() {
   return (
     <div className="max-w-lg space-y-4">

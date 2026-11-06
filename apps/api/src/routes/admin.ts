@@ -5,6 +5,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { and, desc, eq, gte, sql, type SQL } from 'drizzle-orm';import { db, users, redirects, articleViews, articles } from '@newinvest/db';
 import { authRequired, requireRole, ADMIN_ROLES } from '../middleware/auth.js';
+import { runDailyDigest, runWeeklyReport } from '../services/digest.js';
 
 export const adminRouter = Router();
 
@@ -101,6 +102,14 @@ adminRouter.post('/redirects', authRequired, requireRole(...ADMIN_ROLES), async 
 adminRouter.delete('/redirects/:oldPath', authRequired, requireRole(...ADMIN_ROLES), async (req, res) => {
   await db.delete(redirects).where(eq(redirects.oldPath, decodeURIComponent(req.params.oldPath)));
   res.json({ ok: true });
+});
+
+// ---------- Уведомления: ручной запуск дайджестов ----------
+
+adminRouter.post('/notifications/send', authRequired, requireRole(...ADMIN_ROLES), async (req, res) => {
+  const scope = String(req.body?.scope ?? 'daily');
+  const result = scope === 'weekly' ? await runWeeklyReport() : await runDailyDigest();
+  res.json({ scope, ...result });
 });
 
 // ---------- Аналитика просмотров ----------

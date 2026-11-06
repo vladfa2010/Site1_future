@@ -19,6 +19,7 @@
     "express-rate-limit": "^8.7.3",
     "jsonwebtoken": "^9.0.2",
     "multer": "^2.5.0",
+    "node-cron": "^4.6.0",
     "zod": "^3.25.76"
   },
   "devDependencies": {
@@ -27,6 +28,7 @@
     "@types/express": "^4.17.21",
     "@types/jsonwebtoken": "^9.0.7",
     "@types/multer": "^2.3.0",
+    "@types/node-cron": "^3.0.11",
     "tsx": "^4.20.3",
     "typescript": "^5.8.3"
   }

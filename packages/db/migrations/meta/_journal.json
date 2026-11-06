@@ -43,6 +43,13 @@
       "when": 1793977274453,
       "tag": "0005_funny_zuras",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1793977631691,
+      "tag": "0006_glossy_spacker_dave",
+      "breakpoints": true
     }
   ]
 }

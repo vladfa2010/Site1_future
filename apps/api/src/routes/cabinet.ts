@@ -8,6 +8,7 @@ import { and, desc, eq, inArray, sql, type SQL } from 'drizzle-orm';
 import {
   db, favorites, subscriptions, articles, companies, trends, stories,
   articleCompanies, articleTrends, articleIndustries, articleTickers, media,
+  notificationSettings,
 } from '@newinvest/db';
 import { authRequired } from '../middleware/auth.js';
 
@@ -124,6 +125,29 @@ cabinetRouter.delete('/subscriptions/:type/:id', async (req, res) => {
 cabinetRouter.get('/subscriptions', async (req, res) => {
   const rows = await db.select().from(subscriptions).where(eq(subscriptions.userId, req.user!.id));
   res.json({ subscriptions: rows });
+});
+
+// ---------- Настройки уведомлений ----------
+
+cabinetRouter.get('/notification-settings', async (req, res) => {
+  const [row] = await db.select().from(notificationSettings).where(eq(notificationSettings.userId, req.user!.id)).limit(1);
+  res.json({ settings: row ?? { emailDaily: true, emailWeekly: true } });
+});
+
+cabinetRouter.put('/notification-settings', async (req, res) => {
+  const parsed = z.object({
+    emailDaily: z.boolean(),
+    emailWeekly: z.boolean(),
+  }).safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'validation' });
+    return;
+  }
+  const [row] = await db.insert(notificationSettings)
+    .values({ userId: req.user!.id, ...parsed.data })
+    .onConflictDoUpdate({ target: notificationSettings.userId, set: parsed.data })
+    .returning();
+  res.json({ settings: row });
 });
 
 // ---------- «Моя лента»: свежие материалы по моим подпискам ----------
