@@ -3,6 +3,9 @@ import cors from 'cors';
 import { config } from './config.js';
 import { authRouter } from './routes/auth.js';
 import { articlesRouter } from './routes/articles.js';
+import { entitiesRouter } from './routes/entities.js';
+import { storiesRouter } from './routes/stories.js';
+import { bindingsRouter } from './routes/bindings.js';
 
 const app = express();
 
@@ -14,7 +17,10 @@ app.get('/api/health', (_req, res) => {
 });
 
 app.use('/api/auth', authRouter);
+app.use('/api', bindingsRouter); // ПЕРЕД articlesRouter: пути /articles/:id/...
 app.use('/api/articles', articlesRouter);
+app.use('/api', entitiesRouter);   // /companies /tickers /industries /trends
+app.use('/api', storiesRouter);    // /stories
 
 app.use((_req, res) => {
   res.status(404).json({ error: 'not found' });
