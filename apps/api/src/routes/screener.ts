@@ -18,7 +18,7 @@ screenerRouter.get('/deal-stages', async (_req, res) => {
 });
 
 screenerRouter.get('/screener', async (req, res) => {
-  const { phase, stage, industry } = req.query as Record<string, string | undefined>;
+  const { phase, stage, industry, trend } = req.query as Record<string, string | undefined>;
 
   // квалифицированная ссылка на articles.id (иначе в подзапросе "id" биндится к внутренней таблице)
   const aid = sql`${sql.identifier('articles')}.${sql.identifier('id')}`;
@@ -32,6 +32,7 @@ screenerRouter.get('/screener', async (req, res) => {
   if (phase) conditions.push(existsFilter('article_deal_phases', 'deal_phases', 'phase_id', phase));
   if (stage) conditions.push(existsFilter('article_deal_stages', 'deal_stages', 'stage_id', stage));
   if (industry) conditions.push(existsFilter('article_industries', 'industries', 'industry_id', industry));
+  if (trend) conditions.push(existsFilter('article_trends', 'trends', 'trend_id', trend));
 
   const badges = (junction: string, dict: string, fk: string) => sql<string[]>`
     coalesce((

@@ -53,6 +53,7 @@ export default function PipelinePage() {
   const phase = params.get('phase') ?? '';
   const stage = params.get('stage') ?? '';
   const industry = params.get('industry') ?? '';
+  const trend = params.get('trend') ?? '';
 
   const setFilter = (key: string) => (v: string) => {
     const next = new URLSearchParams(params);
@@ -64,26 +65,29 @@ export default function PipelinePage() {
   const { data: phases } = useQuery({ queryKey: ['deal-phases'], queryFn: () => dict('/deal-phases') });
   const { data: stages } = useQuery({ queryKey: ['deal-stages'], queryFn: () => dict('/deal-stages') });
   const { data: industries } = useQuery({ queryKey: ['industries'], queryFn: () => dict('/industries') });
+  const { data: trends } = useQuery({ queryKey: ['trends'], queryFn: () => dict('/trends') });
 
   const qs = new URLSearchParams();
   if (phase) qs.set('phase', phase);
   if (stage) qs.set('stage', stage);
   if (industry) qs.set('industry', industry);
+  if (trend) qs.set('trend', trend);
   const { data, isLoading } = useQuery({
-    queryKey: ['screener', phase, stage, industry],
+    queryKey: ['screener', phase, stage, industry, trend],
     queryFn: async () => (await fetch(`/api/screener?${qs}`)).json() as Promise<{ ideas: Idea[] }>,
   });
 
   return (
     <div className="space-y-8">
-      <Breadcrumbs items={[{ label: 'Скринер проектов' }, ...(phase ? [{ label: PHASE_LABELS[phase] ?? phase }] : [])]} />
+      <Breadcrumbs items={[{ label: 'Скринер проектов' }, ...(phase ? [{ label: PHASE_LABELS[phase] ?? phase }] : []), ...(trend ? [{ label: trends?.trends?.find((t: { slug: string }) => t.slug === trend)?.name ?? trend }] : [])]} />
       <h1 className="text-2xl font-bold">Скринер проектов</h1>
 
-      {/* Фильтры: фаза/стадия/индустрия — состояние в URL */}
-      <div className="grid gap-4 rounded-lg border border-zinc-800 bg-zinc-900/50 p-4 sm:grid-cols-3">
+      {/* Фильтры: состояние в URL — можно делиться выборкой */}
+      <div className="grid gap-4 rounded-lg border border-zinc-800 bg-zinc-900/50 p-4 sm:grid-cols-2 lg:grid-cols-4">
         <FilterSelect label="Этап сделки" value={phase} options={phases?.phases ?? []} onChange={setFilter('phase')} labels={PHASE_LABELS} />
         <FilterSelect label="Стадия" value={stage} options={stages?.stages ?? []} onChange={setFilter('stage')} />
         <FilterSelect label="Индустрия" value={industry} options={industries?.industries ?? []} onChange={setFilter('industry')} />
+        <FilterSelect label="Тренд" value={trend} options={trends?.trends ?? []} onChange={setFilter('trend')} />
       </div>
 
       {isLoading && <p className="text-zinc-400">Загрузка…</p>}

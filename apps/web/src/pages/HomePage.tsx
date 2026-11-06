@@ -94,8 +94,23 @@ export default function HomePage() {
         </Carousel>
       </section>
 
-      {/* ТРЕНДЫ — карточки трендов */}
-      <Section title="Тренды" linkTo="/portfolio" itemsCount={trends?.trends.length ?? 0}>
+      {/* ТРЕНДЫ — спецкарточка «что такое тренд» + карточки трендов, как у донора */}
+      <Section title="Тренды" itemsCount={(trends?.trends.length ?? 0) + 1}>
+        <div className={CAROUSEL_ITEM}>
+          <div className="flex aspect-[3/4] w-full flex-col rounded-lg border border-orange-500/30 bg-gradient-to-br from-zinc-900 to-zinc-950 p-5">
+            <h3 className="text-xl font-bold uppercase tracking-wide text-orange-400">Тренды</h3>
+            <p className="mt-3 text-sm leading-relaxed text-zinc-300">
+              То, что уже меняет мир. Великие идеи, инновации, новые сектора в экономике. То, о чем
+              большинство узнают в будущем… а ты сейчас!
+            </p>
+            <Link
+              to="/portfolio"
+              className="mt-auto rounded-full bg-orange-500 px-4 py-2 text-center text-sm font-bold text-zinc-950 hover:bg-orange-400"
+            >
+              Посмотреть в будущее
+            </Link>
+          </div>
+        </div>
         {trends?.trends.slice(0, 12).map((t) => (
           <Link key={t.slug} to={`/trend/${t.slug}`} className={`group ${CAROUSEL_ITEM}`}>
             <div className="relative flex aspect-[3/4] w-full flex-col justify-end overflow-hidden rounded-lg border border-zinc-800 bg-gradient-to-br from-zinc-800 to-zinc-900 p-4 transition-colors group-hover:border-orange-500/50">
