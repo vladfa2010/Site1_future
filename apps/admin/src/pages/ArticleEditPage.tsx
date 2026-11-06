@@ -30,6 +30,8 @@ export default function ArticleEditPage() {
   const [genMock, setGenMock] = useState(false);
   const coverFileRef = useRef<HTMLInputElement>(null);
   const [uploadBusy, setUploadBusy] = useState(false);
+  const [newTicker, setNewTicker] = useState('');
+  const [tickerBusy, setTickerBusy] = useState(false);
   const [rels, setRels] = useState<Relations>(EMPTY);
   const [dicts, setDicts] = useState<{ companies: Option[]; tickers: Option[]; industries: Option[]; trends: Option[] }>({ companies: [], tickers: [], industries: [], trends: [] });
   const [notice, setNotice] = useState<string | null>(null);
@@ -163,6 +165,28 @@ export default function ArticleEditPage() {
     } finally {
       setUploadBusy(false);
       if (coverFileRef.current) coverFileRef.current.value = '';
+    }
+  };
+
+  // Тикер «на лету»: создаём и сразу привязываем к статье
+  const createTickerInline = async () => {
+    const symbol = newTicker.trim().toUpperCase();
+    if (!symbol) return;
+    setTickerBusy(true);
+    setError(null);
+    try {
+      const { ticker } = await api<{ ticker: { id: number; symbol: string } }>('/tickers', {
+        method: 'POST',
+        body: JSON.stringify({ slug: symbol.toLowerCase(), symbol }),
+      });
+      setDicts((d) => ({ ...d, tickers: [...d.tickers, { id: ticker.id, name: symbol, symbol }] }));
+      setRels((r) => (r.tickerIds.includes(ticker.id) ? r : { ...r, tickerIds: [...r.tickerIds, ticker.id] }));
+      setNewTicker('');
+      setNotice(`Тикер ${ticker.symbol} создан и привязан ✓ (компанию укажите позже в разделе «Тикеры»)`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Ошибка создания тикера');
+    } finally {
+      setTickerBusy(false);
     }
   };
 
@@ -301,7 +325,21 @@ export default function ArticleEditPage() {
         </div>
         {isNew && <p className="text-sm text-zinc-500">Сохраните статью — затем появится автоподстановка цепочки.</p>}
         <CheckGroup label="Компании" options={dicts.companies} relKey="companyIds" />
-        <CheckGroup label="Тикеры" options={dicts.tickers} relKey="tickerIds" render={(o) => `${o.symbol}${o.companyName ? ` · ${o.companyName}` : ''}`} />
+        <div>
+          <CheckGroup label="Тикеры" options={dicts.tickers} relKey="tickerIds" render={(o) => `${o.symbol}${o.companyName ? ` · ${o.companyName}` : ''}`} />
+          <div className="mt-2 flex items-center gap-2">
+            <input
+              className="input max-w-[180px] font-mono"
+              placeholder="Новый тикер, напр. SPCX"
+              value={newTicker}
+              onChange={(e) => setNewTicker(e.target.value.toUpperCase())}
+              onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), void createTickerInline())}
+            />
+            <button type="button" className="btn-secondary" disabled={tickerBusy || !newTicker.trim()} onClick={() => void createTickerInline()}>
+              {tickerBusy ? 'Создаём…' : '+ Создать и привязать'}
+            </button>
+          </div>
+        </div>
         <CheckGroup label="Индустрии" options={dicts.industries} relKey="industryIds" />
         <CheckGroup label="Тренды" options={dicts.trends} relKey="trendIds" />
       </div>
