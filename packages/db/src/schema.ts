@@ -178,7 +178,7 @@ export const articles = pgTable(
     thesis: text('thesis'), // тезис идеи (2–3 предложения «почему это инвестиция»)
     sourceUrl: text('source_url'), // дедупликация (как в wptg)
     coverMediaId: integer('cover_media_id').references(() => media.id),
-    authorId: integer('author_id').references(() => users.id),
+    authorId: integer('author_id').references(() => users.id, { onDelete: 'set null' }), // удаление аккаунта не трогает контент
     status: text('status').notNull().default('draft'), // draft | pending | published
     publishedAt: timestamp('published_at', { withTimezone: true }),
     createdAt: createdAt(),

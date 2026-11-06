@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router';
+import { Link, useNavigate } from 'react-router';
 import { useAuth } from '../auth';
 import { useAuthModal } from '../authModal';
 import { Breadcrumbs } from '../components/Breadcrumbs';
@@ -64,6 +64,77 @@ export default function CabinetPage() {
         {tab === 'subscriptions' && <SubscriptionsTab />}
         {tab === 'tariff' && <TariffTab />}
       </div>
+
+      <DeleteAccountBlock />
+    </div>
+  );
+}
+
+/* ---------- Удаление аккаунта ---------- */
+function DeleteAccountBlock() {
+  const { logout } = useAuth();
+  const navigate = useNavigate();
+  const [open, setOpen] = useState(false);
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const destroy = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await fetch('/api/auth/me', {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password }),
+      });
+      if (!r.ok) {
+        const body = await r.json().catch(() => ({}));
+        throw new Error(body.error ?? 'Ошибка удаления');
+      }
+      logout();
+      navigate('/', { replace: true });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Ошибка удаления');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="mt-12 rounded-lg border border-red-500/30 bg-red-500/5 p-5">
+      <h2 className="text-sm font-semibold uppercase tracking-wide text-red-400">Опасная зона</h2>
+      {!open ? (
+        <div className="mt-3 flex items-center justify-between gap-4">
+          <p className="text-sm text-zinc-400">
+            Удаление аккаунта необратимо: профиль, избранное и подписки будут удалены. Опубликованные материалы останутся на сайте.
+          </p>
+          <button onClick={() => setOpen(true)} className="shrink-0 rounded-full border border-red-500/50 px-4 py-2 text-sm font-semibold text-red-400 hover:bg-red-500/10">
+            Удалить аккаунт
+          </button>
+        </div>
+      ) : (
+        <div className="mt-3 space-y-3">
+          <p className="text-sm text-zinc-300">Введите пароль для подтверждения удаления аккаунта:</p>
+          <input
+            type="password"
+            className="input max-w-xs"
+            placeholder="Пароль"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            autoFocus
+          />
+          {error && <p className="text-sm text-red-400">{error}</p>}
+          <div className="flex gap-3">
+            <button onClick={() => void destroy()} disabled={busy || !password} className="rounded-full bg-red-500 px-5 py-2 text-sm font-bold text-black hover:opacity-85 disabled:opacity-50">
+              {busy ? 'Удаляем…' : 'Удалить навсегда'}
+            </button>
+            <button onClick={() => { setOpen(false); setPassword(''); setError(null); }} className="rounded-full border border-[#2a2a2a] px-5 py-2 text-sm text-zinc-400 hover:text-zinc-200">
+              Отмена
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

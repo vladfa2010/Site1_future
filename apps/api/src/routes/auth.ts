@@ -4,8 +4,8 @@
 import { Router } from 'express';
 import bcrypt from 'bcrypt';
 import { z } from 'zod';
-import { db, users } from '@newinvest/db';
-import { eq, sql } from 'drizzle-orm';
+import { db, users, articles } from '@newinvest/db';
+import { and, eq, sql } from 'drizzle-orm';
 import { signToken, authRequired } from '../middleware/auth.js';
 
 export const authRouter = Router();
@@ -64,6 +64,21 @@ authRouter.get('/me', authRequired, async (req, res) => {
     return;
   }
   res.json({ user });
+});
+
+// DELETE /api/auth/me — удаление аккаунта (подтверждение паролем).
+// Черновики автора удаляются; опубликованный контент остаётся (author_id → NULL,
+// см. миграцию 0005); избранное/подписки/просмотры — каскадом.
+authRouter.delete('/me', authRequired, async (req, res) => {
+  const password = String(req.body?.password ?? '');
+  const [user] = await db.select().from(users).where(eq(users.id, req.user!.id)).limit(1);
+  if (!user || !(await bcrypt.compare(password, user.passwordHash))) {
+    res.status(403).json({ error: 'Неверный пароль' });
+    return;
+  }
+  await db.delete(articles).where(and(eq(articles.authorId, user.id), eq(articles.status, 'draft')));
+  await db.delete(users).where(eq(users.id, user.id));
+  res.json({ ok: true });
 });
 
 authRouter.post('/login', async (req, res) => {  const parsed = loginSchema.safeParse(req.body);
