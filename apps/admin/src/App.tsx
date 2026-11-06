@@ -21,8 +21,12 @@ import StatsPage from './pages/StatsPage';
 
 function RequireAdmin({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
-  if (!user) return <Navigate to="/login" replace />;
-  if (!isAdminRole(user.role)) return <p className="p-6 text-red-600">Нужна роль admin или super_admin.</p>;
+  // токен есть, профиль ещё тянется (/auth/me) — ждём, а не сбрасываем на логин
+  if (!user) {
+    if (localStorage.getItem('token')) return <p className="p-6 text-zinc-400">Загрузка…</p>;
+    return <Navigate to="/login" replace />;
+  }
+  if (!isAdminRole(user.role)) return <p className="p-6 text-red-400">Нужна роль admin или super_admin.</p>;
   return <>{children}</>;
 }
 

@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import type { AdminUser } from './api';
 
 interface AuthState {
@@ -17,6 +17,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return null;
     }
   });
+
+  // SSO-проброс: сайт передаёт ?auth=<token> → сохраняем, убираем из URL,
+  // затем подтягиваем профиль через /auth/me
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    const handed = url.searchParams.get('auth');
+    if (handed) {
+      localStorage.setItem('token', handed);
+      url.searchParams.delete('auth');
+      window.history.replaceState(null, '', url.pathname + url.search);
+    }
+    const token = localStorage.getItem('token');
+    if (token && !user) {
+      void fetch('/api/auth/me', { headers: { Authorization: `Bearer ${token}` } })
+        .then((r) => (r.ok ? r.json() : Promise.reject()))
+        .then((data) => {
+          localStorage.setItem('user', JSON.stringify(data.user));
+          setUser(data.user);
+        })
+        .catch(() => {
+          localStorage.removeItem('token');
+        });
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const login = async (email: string, password: string) => {
     const res = await fetch('/api/auth/login', {

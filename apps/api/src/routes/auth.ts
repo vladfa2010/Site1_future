@@ -6,7 +6,7 @@ import bcrypt from 'bcrypt';
 import { z } from 'zod';
 import { db, users } from '@newinvest/db';
 import { eq, sql } from 'drizzle-orm';
-import { signToken } from '../middleware/auth.js';
+import { signToken, authRequired } from '../middleware/auth.js';
 
 export const authRouter = Router();
 
@@ -54,8 +54,19 @@ authRouter.post('/register', async (req, res) => {
   res.status(201).json({ user, token: signToken(user) });
 });
 
-authRouter.post('/login', async (req, res) => {
-  const parsed = loginSchema.safeParse(req.body);
+// GET /api/auth/me — текущий пользователь по токену (SSO-проброс между сайтом и админкой)
+authRouter.get('/me', authRequired, async (req, res) => {
+  const [user] = await db.select({
+    id: users.id, email: users.email, displayName: users.displayName, role: users.role,
+  }).from(users).where(eq(users.id, req.user!.id)).limit(1);
+  if (!user) {
+    res.status(401).json({ error: 'unauthorized' });
+    return;
+  }
+  res.json({ user });
+});
+
+authRouter.post('/login', async (req, res) => {  const parsed = loginSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: 'validation', details: parsed.error.flatten() });
     return;

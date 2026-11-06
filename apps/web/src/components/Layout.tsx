@@ -30,7 +30,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
           {user ? (
             <span className="flex items-center gap-3">
               {isAdmin && (
-                <a href={ADMIN_URL} className="rounded-full border border-[#beff00]/50 px-3 py-1 text-[#c9ff2a] hover:bg-[#beff00]/10">
+                <a
+                  href={`${ADMIN_URL}/?auth=${localStorage.getItem('token') ?? ''}`}
+                  className="rounded-full border border-[#beff00]/50 px-3 py-1 text-[#c9ff2a] hover:bg-[#beff00]/10"
+                >
                   Админка
                 </a>
               )}
