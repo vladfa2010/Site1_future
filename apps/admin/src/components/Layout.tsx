@@ -48,7 +48,14 @@ export function Layout({ children }: { children: React.ReactNode }) {
             ← На сайт
           </a>
           <span className="flex items-center gap-3 text-sm">
-            <span className="text-zinc-400">{user?.displayName ?? user?.email}</span>
+            <span className="flex items-center gap-2 text-zinc-400">
+              {user?.displayName ?? user?.email}
+              {user?.role && (
+                <span className="rounded-full bg-[#beff00]/15 px-2 py-0.5 text-xs text-[#c9ff2a]">
+                  {user.role === 'super_admin' ? 'супер-админ' : user.role === 'admin' ? 'админ' : user.role === 'author' ? 'автор' : 'читатель'}
+                </span>
+              )}
+            </span>
             <button onClick={logout} className="text-zinc-500 hover:text-zinc-300">Выйти</button>
           </span>
         </header>
