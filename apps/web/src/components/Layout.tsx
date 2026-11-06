@@ -1,8 +1,12 @@
 import { Link } from 'react-router';
 import { useAuth } from '../auth';
 
+// Админка — отдельное приложение (порт 5174 в dev; в проде — тот же origin, путь /admin)
+const ADMIN_URL = import.meta.env.VITE_ADMIN_URL ?? 'http://localhost:5174';
+
 export function Layout({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuth();
+  const isAdmin = user?.role === 'admin' || user?.role === 'super_admin';
   return (
     <div className="mx-auto flex min-h-screen max-w-5xl flex-col px-4">
       <header className="flex items-center justify-between border-b border-zinc-800 py-4">
@@ -14,9 +18,14 @@ export function Layout({ children }: { children: React.ReactNode }) {
           <Link to="/portfolio" className="text-zinc-400">Портфель</Link>
           {user ? (
             <span className="flex items-center gap-3">
+              {isAdmin && (
+                <a href={ADMIN_URL} className="rounded-full border border-orange-500/50 px-3 py-1 text-orange-400 hover:bg-orange-500/10">
+                  Админка
+                </a>
+              )}
               <span className="text-zinc-300">
                 {user.displayName ?? user.email}
-                {(user.role === 'admin' || user.role === 'super_admin') && (
+                {isAdmin && (
                   <span className="ml-2 rounded-full bg-orange-500/15 px-2 py-0.5 text-xs text-orange-400">{user.role === 'super_admin' ? 'супер-админ' : 'админ'}</span>
                 )}
               </span>
