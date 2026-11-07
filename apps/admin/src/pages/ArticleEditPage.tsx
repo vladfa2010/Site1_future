@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router';
 import { api } from '../api';
 import PreviewModal from '../components/PreviewModal';
 import MediaPickerModal from '../components/MediaPickerModal';
+import EntityCloud from '../components/EntityCloud';
 
 // TipTap тяжёлый (~450 KB) — грузим редактор лениво, только в редакторе статьи
 const RichTextEditor = lazy(() =>
@@ -46,8 +47,6 @@ export default function ArticleEditPage() {
   const [genMock, setGenMock] = useState(false);
   const coverFileRef = useRef<HTMLInputElement>(null);
   const [uploadBusy, setUploadBusy] = useState(false);
-  const [newTicker, setNewTicker] = useState('');
-  const [tickerBusy, setTickerBusy] = useState(false);
   const [rels, setRels] = useState<Relations>(EMPTY);
   const [tariffPlans, setTariffPlans] = useState<{ id: number; name: string }[]>([]);
   const [dicts, setDicts] = useState<{ companies: Option[]; tickers: Option[]; industries: Option[]; trends: Option[] }>({ companies: [], tickers: [], industries: [], trends: [] });
@@ -316,28 +315,6 @@ export default function ArticleEditPage() {
     }
   };
 
-  // Тикер «на лету»: создаём и сразу привязываем к статье
-  const createTickerInline = async () => {
-    const symbol = newTicker.trim().toUpperCase();
-    if (!symbol) return;
-    setTickerBusy(true);
-    setError(null);
-    try {
-      const { ticker } = await api<{ ticker: { id: number; symbol: string } }>('/tickers', {
-        method: 'POST',
-        body: JSON.stringify({ slug: symbol.toLowerCase(), symbol }),
-      });
-      setDicts((d) => ({ ...d, tickers: [...d.tickers, { id: ticker.id, name: symbol, symbol }] }));
-      setRels((r) => (r.tickerIds.includes(ticker.id) ? r : { ...r, tickerIds: [...r.tickerIds, ticker.id] }));
-      setNewTicker('');
-      setNotice(`Тикер ${ticker.symbol} создан и привязан ✓ (компанию укажите позже в разделе «Тикеры»)`);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Ошибка создания тикера');
-    } finally {
-      setTickerBusy(false);
-    }
-  };
-
   // Автоподстановка цепочки тикер→компания→индустрия (раздел 6.2)
   const suggest = async () => {
     if (!articleId) return;
@@ -354,20 +331,6 @@ export default function ArticleEditPage() {
     });
     setNotice(add.length ? `Подставлено: ${add.join(', ')}` : 'Новых подсказок нет');
   };
-
-  const CheckGroup = ({ label, options, relKey, render }: { label: string; options: Option[]; relKey: keyof Relations; render?: (o: Option) => string }) => (
-    <div>
-      <span className="label">{label}</span>
-      <div className="flex max-h-36 flex-wrap gap-2 overflow-y-auto rounded-lg border border-zinc-800 p-2">
-        {options.map((o) => (
-          <label key={o.id} className={`cursor-pointer rounded-full px-2.5 py-1 text-xs ${rels[relKey].includes(o.id) ? 'bg-orange-500/100/10 text-orange-400' : 'bg-zinc-800 text-zinc-400'}`}>
-            <input type="checkbox" className="hidden" checked={rels[relKey].includes(o.id)} onChange={() => toggle(relKey, o.id)} />
-            {render ? render(o) : o.name}
-          </label>
-        ))}
-      </div>
-    </div>
-  );
 
   return (
     <div className="space-y-4">
@@ -520,24 +483,68 @@ export default function ArticleEditPage() {
           {!isNew && <button type="button" onClick={() => void suggest()} className="btn-secondary">⚡ Подставить цепочку (тикер→компания→индустрия)</button>}
         </div>
         {isNew && <p className="text-sm text-zinc-500">Сохраните статью — затем появится автоподстановка цепочки.</p>}
-        <CheckGroup label="Компании" options={dicts.companies} relKey="companyIds" />
-        <div>
-          <CheckGroup label="Тикеры" options={dicts.tickers} relKey="tickerIds" render={(o) => `${o.symbol}${o.companyName ? ` · ${o.companyName}` : ''}`} />
-          <div className="mt-2 flex items-center gap-2">
-            <input
-              className="input max-w-[180px] font-mono"
-              placeholder="Новый тикер, напр. SPCX"
-              value={newTicker}
-              onChange={(e) => setNewTicker(e.target.value.toUpperCase())}
-              onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), void createTickerInline())}
-            />
-            <button type="button" className="btn-secondary" disabled={tickerBusy || !newTicker.trim()} onClick={() => void createTickerInline()}>
-              {tickerBusy ? 'Создаём…' : '+ Создать и привязать'}
-            </button>
-          </div>
-        </div>
-        <CheckGroup label="Индустрии" options={dicts.industries} relKey="industryIds" />
-        <CheckGroup label="Тренды" options={dicts.trends} relKey="trendIds" />
+
+        <EntityCloud
+          label="Компании"
+          options={dicts.companies}
+          selectedIds={rels.companyIds}
+          onToggle={(id) => toggle('companyIds', id)}
+          onCreated={(o) => {
+            setDicts((d) => ({ ...d, companies: [...d.companies, o] }));
+            setRels((r) => (r.companyIds.includes(o.id) ? r : { ...r, companyIds: [...r.companyIds, o.id] }));
+            setNotice(`Компания «${o.name}» создана и привязана ✓`);
+          }}
+          createEndpoint="/companies"
+          buildCreateBody={(raw) => ({ name: raw, slug: slugify(raw) || `c${Date.now()}` })}
+        />
+
+        <EntityCloud
+          label="Тикеры"
+          options={dicts.tickers}
+          selectedIds={rels.tickerIds}
+          onToggle={(id) => toggle('tickerIds', id)}
+          onCreated={(o) => {
+            setDicts((d) => ({ ...d, tickers: [...d.tickers, o] }));
+            setRels((r) => (r.tickerIds.includes(o.id) ? r : { ...r, tickerIds: [...r.tickerIds, o.id] }));
+            setNotice(`Тикер ${o.name} создан и привязан ✓ (компанию укажите позже в разделе «Тикеры»)`);
+          }}
+          createEndpoint="/tickers"
+          placeholder="Символ, напр. SPCX — Enter создаст"
+          validate={(raw) => (/^[A-Z0-9.-]{1,15}$/i.test(raw) ? null : 'Тикер: латиница/цифры, до 15 символов')}
+          buildCreateBody={(raw) => {
+            const symbol = raw.toUpperCase();
+            return { symbol, slug: symbol.toLowerCase() };
+          }}
+          renderOption={(o) => (o as Option).symbol ? `${(o as Option).symbol}${(o as Option).companyName ? ` · ${(o as Option).companyName}` : ''}` : o.name}
+        />
+
+        <EntityCloud
+          label="Индустрии"
+          options={dicts.industries}
+          selectedIds={rels.industryIds}
+          onToggle={(id) => toggle('industryIds', id)}
+          onCreated={(o) => {
+            setDicts((d) => ({ ...d, industries: [...d.industries, o] }));
+            setRels((r) => (r.industryIds.includes(o.id) ? r : { ...r, industryIds: [...r.industryIds, o.id] }));
+            setNotice(`Индустрия «${o.name}» создана и привязана ✓`);
+          }}
+          createEndpoint="/industries"
+          buildCreateBody={(raw) => ({ name: raw, slug: slugify(raw) || `i${Date.now()}` })}
+        />
+
+        <EntityCloud
+          label="Тренды"
+          options={dicts.trends}
+          selectedIds={rels.trendIds}
+          onToggle={(id) => toggle('trendIds', id)}
+          onCreated={(o) => {
+            setDicts((d) => ({ ...d, trends: [...d.trends, o] }));
+            setRels((r) => (r.trendIds.includes(o.id) ? r : { ...r, trendIds: [...r.trendIds, o.id] }));
+            setNotice(`Тренд «${o.name}» создан и привязан ✓`);
+          }}
+          createEndpoint="/trends"
+          buildCreateBody={(raw) => ({ name: raw, slug: slugify(raw) || `t${Date.now()}` })}
+        />
       </div>
 
       <div className="flex gap-3">
