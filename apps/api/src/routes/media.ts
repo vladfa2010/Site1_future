@@ -101,9 +101,10 @@ mediaRouter.post('/media/generate', authRequired, requireRole('admin', 'super_ad
 const generateTextSchema = z.object({
   prompt: z.string().min(10),
   maxChars: z.number().int().min(50).max(2000).default(400),
+  persona: z.enum(['editor', 'seo']).default('editor'), // системный промпт — только из этого списка (сервер)
 });
 
-// POST /api/media/generate-text {prompt, maxChars} — текст по промпту (клиент собирает контекст)
+// POST /api/media/generate-text {prompt, maxChars, persona} — текст по промпту (клиент собирает контекст)
 mediaRouter.post('/media/generate-text', authRequired, requireRole('admin', 'super_admin'), async (req, res) => {
   const parsed = generateTextSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -111,7 +112,7 @@ mediaRouter.post('/media/generate-text', authRequired, requireRole('admin', 'sup
     return;
   }
   try {
-    const text = await generateText(parsed.data.prompt, parsed.data.maxChars);
+    const text = await generateText(parsed.data.prompt, parsed.data.maxChars, parsed.data.persona);
     if (!text) {
       res.status(422).json({ error: 'empty result', message: 'Недостаточно контекста — заполните текст статьи' });
       return;

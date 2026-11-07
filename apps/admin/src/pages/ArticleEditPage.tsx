@@ -35,6 +35,9 @@ export default function ArticleEditPage() {
   const [excerptBusy, setExcerptBusy] = useState(false);
   const [excerptSize, setExcerptSize] = useState(250);
   const [excerptMock, setExcerptMock] = useState(false);
+  const [metaBusy, setMetaBusy] = useState(false);
+  const [metaSize, setMetaSize] = useState(200);
+  const [metaMock, setMetaMock] = useState(false);
   const [genError, setGenError] = useState<string | null>(null);
   const [genMock, setGenMock] = useState(false);
   const coverFileRef = useRef<HTMLInputElement>(null);
@@ -206,6 +209,41 @@ export default function ArticleEditPage() {
       setError(e instanceof Error ? e.message : 'Ошибка генерации');
     } finally {
       setExcerptBusy(false);
+    }
+  };
+
+  // ---- Генерация SEO meta description: та же механика, персона «seo» на сервере ----
+  const genMeta = async () => {
+    setMetaBusy(true);
+    setError(null);
+    setMetaMock(false);
+    try {
+      const plain = stripHtml(form.contentHtml);
+      if (plain.length < 50) {
+        setError('Сначала заполните текст статьи — генерация читает его целиком');
+        return;
+      }
+      const prompt = [
+        `Прочитай статью и всё, что есть ниже, и сгенерируй meta description длиной ${metaSize}±10% знаков.`,
+        `ЗАГОЛОВОК: ${form.title}`,
+        form.thesis ? `ТЕЗИС: ${form.thesis}` : '',
+        form.excerpt ? `ЛИД: ${form.excerpt}` : '',
+        form.metaDescription ? `ТЕКУЩИЙ META DESCRIPTION (можно улучшить): ${form.metaDescription}` : '',
+        `ТРЕБОВАНИЯ: ${metaSize}±10% знаков, ключевые слова из текста естественно, без кликбейта, одно предложение или два коротких, на русском.`,
+        `ТЕКСТ: ${plain.slice(0, 6000)}`,
+      ].filter(Boolean).join('\n');
+
+      const res = await api<{ text: string; mock: boolean }>('/media/generate-text', {
+        method: 'POST',
+        body: JSON.stringify({ prompt, maxChars: metaSize, persona: 'seo' }),
+      });
+      setForm((f) => ({ ...f, metaDescription: res.text.slice(0, 300) }));
+      setMetaMock(res.mock);
+      setNotice(res.mock ? 'Meta description собран из текста (mock — без ключа Kimi)' : 'Meta description сгенерирован ✓');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Ошибка генерации');
+    } finally {
+      setMetaBusy(false);
     }
   };
 
@@ -399,6 +437,17 @@ export default function ArticleEditPage() {
         <div>
           <label className="label">SEO meta description (до 300 символов)</label>
           <input className="input" maxLength={300} value={form.metaDescription} onChange={set('metaDescription')} />
+          <div className="mt-1.5 flex items-center gap-2">
+            <select className="input max-w-[130px] py-1 text-xs" value={metaSize} onChange={(e) => setMetaSize(Number(e.target.value))}>
+              <option value={150}>≈150 знаков</option>
+              <option value={200}>≈200 знаков</option>
+              <option value={300}>≈300 знаков</option>
+            </select>
+            <button type="button" className="btn-secondary py-1 text-xs" disabled={metaBusy} onClick={() => void genMeta()}>
+              {metaBusy ? 'Генерируем…' : '✨ Сгенерировать (SEO)'}
+            </button>
+            {metaMock && <span className="text-xs text-zinc-500">mock (без ключа)</span>}
+          </div>
         </div>
         <div>
           <label className="label">Контент</label>

@@ -6,12 +6,19 @@
 import { config } from '../config.js';
 
 /** Генерирует текст по промпту. maxChars — мягкое ограничение длины результата. */
-export async function generateText(prompt: string, maxChars = 400): Promise<string> {
+export async function generateText(prompt: string, maxChars = 400, persona: TextPersona = 'editor'): Promise<string> {
   if (!config.moonshotApiKey) return mockExtract(prompt);
-  return kimiText(prompt, maxChars);
+  return kimiText(prompt, maxChars, persona);
 }
 
-async function kimiText(prompt: string, maxChars: number): Promise<string> {
+export type TextPersona = 'editor' | 'seo';
+
+const PERSONA_PROMPTS: Record<TextPersona, string> = {
+  editor: 'Ты редактор инвестиционного медиа. Пишешь короткие ёмкие лиди на русском. Отвечаешь ТОЛЬКО готовым текстом без пояснений и кавычек.',
+  seo: 'Ты опытный SEO-специалист. Читаешь статью целиком и пишешь meta description: уникально, информативно, с ключевыми словами из текста, с призывом к действию где уместно. Без кликбейта и обещаний. Отвечаешь ТОЛЬКО готовым текстом без пояснений и кавычек.',
+};
+
+async function kimiText(prompt: string, maxChars: number, persona: TextPersona): Promise<string> {
   const res = await fetch(`${config.moonshotBaseUrl}/chat/completions`, {
     method: 'POST',
     headers: {
@@ -21,11 +28,11 @@ async function kimiText(prompt: string, maxChars: number): Promise<string> {
     body: JSON.stringify({
       model: config.moonshotTextModel,
       messages: [
-        { role: 'system', content: 'Ты редактор инвестиционного медиа. Пишешь короткие ёмкие лиди на русском. Отвечаешь ТОЛЬКО готовым текстом без пояснений и кавычек.' },
+        { role: 'system', content: PERSONA_PROMPTS[persona] },
         { role: 'user', content: prompt },
       ],
       max_tokens: Math.min(512, Math.ceil(maxChars / 2) + 80),
-      temperature: 0.4,
+      temperature: persona === 'seo' ? 0.3 : 0.4,
     }),
   });
   const data = (await res.json().catch(() => ({}))) as {
