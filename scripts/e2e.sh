@@ -146,6 +146,11 @@ curl -s -o /dev/null -w "%{http_code}" "$B/api/admin/kimi-settings" | grep -q 40
 curl -s -X POST "$B/api/admin/kimi-settings" -H "$A" -H "$J" -d '{"textModel":"kimi-k3"}' | grep -q '"ok":true' && ok || bad "kimi-settings: POST"
 curl -s "$B/api/admin/kimi-settings" -H "$A" | grep -q '"textModel":"kimi-k3"' && ok || bad "kimi-settings: persisted"
 curl -s "$B/api/admin/kimi-settings" -H "$UA" -o /dev/null -w "%{http_code}" | grep -q 403 && ok || bad "kimi-settings: reader 403"
+# события по идее: публично, только sobytie+published, не-идея → 404
+IDEAID=$(curl -s "$B/api/articles/ideya/proekt-prometej-sledujushhij-shag-razvitija-ii" | jqget "d['article']['id']")
+curl -s -o /dev/null -w "%{http_code}" "$B/api/articles/$IDEAID/events" | grep -q 200 && ok || bad "idea-events: 200"
+curl -s "$B/api/articles/263/events" | python3 -c "import json,sys; evs=json.load(sys.stdin).get('events',[]); assert all(e['type']=='sobytie' for e in evs); print(len(evs))" 2>/dev/null | grep -qE '^[0-9]+$' && ok || bad "idea-events: только тип sobytie"
+curl -s -o /dev/null -w "%{http_code}" "$B/api/articles/1/events" | grep -q 404 && ok || bad "idea-events: не-идея 404"
 
 echo ""
 echo "════════════════════════════════════════"

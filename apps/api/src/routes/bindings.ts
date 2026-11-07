@@ -6,7 +6,7 @@
  */
 import { Router } from 'express';
 import { z } from 'zod';
-import { eq, inArray } from 'drizzle-orm';
+import { eq, inArray, and, desc, sql } from 'drizzle-orm';
 import {
   db,
   tickers,
@@ -18,8 +18,11 @@ import {
   articleIndustries,
   articleTrends,
   articleStories,
+  articles,
+  media,
 } from '@newinvest/db';
-import { authRequired, requireRole } from '../middleware/auth.js';
+import { optionalAuth, authRequired, requireRole, ADMIN_ROLES } from '../middleware/auth.js';
+import { accessCondition } from './articles.js';
 
 export const bindingsRouter = Router();
 
@@ -87,6 +90,65 @@ bindingsRouter.get('/articles/:id/bindings-suggest', authRequired, requireRole('
       industries: suggestedIndustries.map((s) => ({ ...s, name: industryNames.get(s.id) ?? String(s.id) })),
     },
   });
+});
+
+// GET /api/articles/:id/events — события по этой идее (публично).
+// События = статьи типа sobytie, опубликованные, с общими привязками
+// (компании/тикеры/индустрии/тренды), пейволл-соблюдение, свежие первыми.
+bindingsRouter.get('/articles/:id/events', optionalAuth, async (req, res) => {
+  const articleId = Number(req.params.id);
+  const [idea] = await db.select({ id: articles.id }).from(articles)
+    .where(and(eq(articles.id, articleId), eq(articles.type, 'ideya'))).limit(1);
+  if (!idea) {
+    res.status(404).json({ error: 'not found' });
+    return;
+  }
+  const rels = await getRelations(articleId);
+
+  // собираем id событий с пересечением по любой связке — один UNION-запрос
+  // (ids — из своей БД, числа, sql.raw безопасен)
+  const parts = [
+    rels.companyIds.length ? sql`select article_id from article_companies where company_id in (${sql.raw(rels.companyIds.join(','))})` : null,
+    rels.tickerIds.length ? sql`select article_id from article_tickers where ticker_id in (${sql.raw(rels.tickerIds.join(','))})` : null,
+    rels.industryIds.length ? sql`select article_id from article_industries where industry_id in (${sql.raw(rels.industryIds.join(','))})` : null,
+    rels.trendIds.length ? sql`select article_id from article_trends where trend_id in (${sql.raw(rels.trendIds.join(','))})` : null,
+  ].filter((p): p is NonNullable<typeof p> => p !== null);
+
+  let candidateIds: number[] = [];
+  if (parts.length > 0) {
+    const union = parts.reduce((acc, p, i) => (i === 0 ? p : sql`${acc} union ${p}`));
+    const rows = await db.execute<{ article_id: number }>(sql`select distinct article_id from (${union}) t where article_id <> ${articleId}`);
+    candidateIds = rows.rows.map((r) => r.article_id);
+  }
+
+  if (candidateIds.length === 0) {
+    res.json({ events: [] });
+    return;
+  }
+
+  const admin = req.user?.role !== undefined && ADMIN_ROLES.includes(req.user.role);
+  const acc = accessCondition(req.user, admin);
+  const events = await db
+    .select({
+      id: articles.id,
+      type: articles.type,
+      slug: articles.slug,
+      title: articles.title,
+      excerpt: articles.excerpt,
+      publishedAt: articles.publishedAt,
+      coverUrl: media.filePath,
+    })
+    .from(articles)
+    .leftJoin(media, eq(articles.coverMediaId, media.id))
+    .where(and(
+      inArray(articles.id, [...candidateIds]),
+      eq(articles.type, 'sobytie'),
+      eq(articles.status, 'published'),
+      acc ?? sql`true`,
+    ))
+    .orderBy(desc(sql`coalesce(${articles.publishedAt}, ${articles.createdAt})`))
+    .limit(10);
+  res.json({ events });
 });
 
 const putSchema = z.object({

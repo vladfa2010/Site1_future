@@ -1,12 +1,36 @@
 import { useParams } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
-import { api } from '../api';
+import { api, type ArticleListItem } from '../api';
 import { EntityChips } from '../components/EntityChips';
 import { Breadcrumbs } from '../components/Breadcrumbs';
 import { sanitizeArticleHtml } from '../lib/sanitize';
 import { IdeaChart } from '../components/IdeaChart';
 import { Paywall } from '../components/Paywall';
-import { TYPE_LABELS } from '../components/ArticleCard';
+import { ArticleCard, TYPE_LABELS } from '../components/ArticleCard';
+import { Carousel, CAROUSEL_ITEM } from '../components/Carousel';
+
+/** Карусель «События по идее» — события с общими привязками (компании/тикеры/индустрии/тренды) */
+function IdeaEvents({ articleId }: { articleId: number }) {
+  const { data } = useQuery({
+    queryKey: ['idea-events', articleId],
+    queryFn: () => api.ideaEvents(articleId),
+    staleTime: 60_000,
+  });
+  const events = data?.events ?? [];
+  if (events.length === 0) return null; // принцип 4.3: показываем только внесённое
+  return (
+    <section className="mt-6">
+      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-zinc-500">События по идее</h2>
+      <Carousel>
+        {events.map((a) => (
+          <div key={a.id} className={CAROUSEL_ITEM}>
+            <ArticleCard article={a} />
+          </div>
+        ))}
+      </Carousel>
+    </section>
+  );
+}
 
 export default function ArticlePage() {
   const { type = '', slug = '' } = useParams();
@@ -52,6 +76,9 @@ export default function ArticlePage() {
       <div className="mt-4">
         <EntityChips relations={relations} />
       </div>
+
+      {/* События по этой идее — общие привязки (компании/тикеры/индустрии/тренды) */}
+      {article.type === 'ideya' && <IdeaEvents articleId={article.id} />}
 
       <div
         className="prose-invert mt-6 space-y-4 leading-relaxed [&_h2]:mt-8 [&_h2]:text-xl [&_h2]:font-bold [&_a]:text-[#c9ff2a] [&_p]:text-zinc-300 [&_ul]:list-disc [&_ul]:pl-6"

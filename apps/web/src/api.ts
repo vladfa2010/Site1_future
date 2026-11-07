@@ -78,6 +78,8 @@ export const api = {
   company: (slug: string) => get<CompanyDetail>(`/companies/${slug}`),
   trend: (slug: string) => get<TrendDetail>(`/trends/${slug}`),
   story: (slug: string) => get<StoryDetail>(`/stories/${slug}`),
+  ideaEvents: (articleId: number) =>
+    get<{ events: ArticleListItem[] }>(`/articles/${articleId}/events`),
   trends: () => get<{ trends: { slug: string; name: string; description: string | null }[] }>('/trends'),
   screener: (params: Record<string, string> = {}) => {
     const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v)).toString();
