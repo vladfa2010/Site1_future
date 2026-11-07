@@ -9,13 +9,14 @@ import { TelegramConnect } from '../components/TelegramConnect';
 import { Avatar, AVATAR_PRESET } from '../components/Avatar';
 import type { ArticleListItem } from '../api';
 
-type Tab = 'favorites' | 'feed' | 'subscriptions' | 'tariff' | 'notifications';
+type Tab = 'favorites' | 'feed' | 'subscriptions' | 'tariff' | 'notifications' | 'danger';
 const TABS: { id: Tab; label: string }[] = [
   { id: 'favorites', label: 'Избранное' },
   { id: 'feed', label: 'Моя лента' },
   { id: 'subscriptions', label: 'Подписки' },
   { id: 'notifications', label: 'Уведомления' },
   { id: 'tariff', label: 'Тариф' },
+  { id: 'danger', label: 'Опасная зона' },
 ];
 
 const authed = () => ({ Authorization: `Bearer ${localStorage.getItem('token')}`, 'Content-Type': 'application/json' });
@@ -88,7 +89,17 @@ export default function CabinetPage() {
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
-            className={`rounded-full px-4 py-1.5 text-sm font-semibold ${tab === t.id ? 'bg-[#beff00] text-black' : 'bg-[#191919] text-zinc-400 hover:text-zinc-200'}`}
+            className={
+              t.id === 'danger'
+                ? `rounded-full px-4 py-1.5 text-sm font-semibold ${
+                    tab === t.id
+                      ? 'bg-red-500/90 text-white'
+                      : 'bg-[#191919] text-red-400/80 hover:bg-red-500/10 hover:text-red-400'
+                  }`
+                : `rounded-full px-4 py-1.5 text-sm font-semibold ${
+                    tab === t.id ? 'bg-[#beff00] text-black' : 'bg-[#191919] text-zinc-400 hover:text-zinc-200'
+                  }`
+            }
           >
             {t.label}
           </button>
@@ -101,9 +112,8 @@ export default function CabinetPage() {
         {tab === 'subscriptions' && <SubscriptionsTab />}
         {tab === 'notifications' && <NotificationsTab />}
         {tab === 'tariff' && <TariffTab />}
+        {tab === 'danger' && <DeleteAccountBlock />}
       </div>
-
-      <DeleteAccountBlock />
 
       {avatarEdit && (
         <AvatarPickerModal current={user.avatar} onClose={() => setAvatarEdit(false)} />
