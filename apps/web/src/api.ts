@@ -101,4 +101,7 @@ export interface Idea {
   phases: string[];
   stages: string[];
   industries: string[];
+  companies: string[];
+  trends: string[];
+  fundingStage: string | null; // стадия последнего раунда (из funding_rounds)
 }

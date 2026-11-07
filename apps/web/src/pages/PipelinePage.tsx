@@ -11,6 +11,9 @@ interface Idea {
   phases: string[];
   stages: string[];
   industries: string[];
+  companies: string[];
+  trends: string[];
+  fundingStage: string | null;
 }
 
 const dict = async (path: string) => (await fetch(`/api${path}`)).json();
@@ -103,14 +106,23 @@ export default function PipelinePage() {
             <h3 className="font-semibold leading-snug">{idea.title}</h3>
             {idea.thesis && <p className="mt-2 line-clamp-3 text-sm text-zinc-400">{idea.thesis}</p>}
 
-            {/* бейджи — только если есть (принцип 4.3) */}
-            {(idea.stages.length > 0 || idea.industries.length > 0 || idea.phases.length > 0) && (
+            {/* бейджи — только если есть (принцип 4.3): фаза → компания → тренд → стадия финансирования → стадия → индустрия */}
+            {(idea.stages.length > 0 || idea.industries.length > 0 || idea.phases.length > 0 || idea.companies.length > 0 || idea.trends.length > 0 || idea.fundingStage) && (
               <div className="mt-3 flex flex-wrap gap-1.5 text-xs">
                 {idea.phases.map((p) => (
                   <span key={p} className="rounded-full bg-[#beff00]/15 px-2 py-0.5 text-[#c9ff2a]">{p}</span>
                 ))}
+                {idea.companies.slice(0, 2).map((c) => (
+                  <span key={c} className="rounded-full bg-zinc-800 px-2 py-0.5 font-medium text-zinc-200">{c}</span>
+                ))}
+                {idea.trends.slice(0, 2).map((t) => (
+                  <span key={t} className="rounded-full bg-zinc-800 px-2 py-0.5 text-zinc-300">{t}</span>
+                ))}
+                {idea.fundingStage && (
+                  <span className="rounded-full bg-zinc-800 px-2 py-0.5 text-zinc-300">💰 {idea.fundingStage}</span>
+                )}
                 {idea.stages.map((s) => (
-                  <span key={s} className="rounded-full bg-zinc-800 px-2 py-0.5 text-zinc-300">{s}</span>
+                  <span key={s} className="rounded-full bg-zinc-800 px-2 py-0.5 text-zinc-400">{s}</span>
                 ))}
                 {idea.industries.map((i) => (
                   <span key={i} className="rounded-full bg-zinc-800 px-2 py-0.5 text-zinc-500">{i}</span>

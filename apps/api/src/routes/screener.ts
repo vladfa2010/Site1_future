@@ -55,6 +55,13 @@ screenerRouter.get('/screener', async (req, res) => {
       phases: badges('article_deal_phases', 'deal_phases', 'phase_id'),
       stages: badges('article_deal_stages', 'deal_stages', 'stage_id'),
       industries: badges('article_industries', 'industries', 'industry_id'),
+      companies: badges('article_companies', 'companies', 'company_id'),
+      trends: badges('article_trends', 'trends', 'trend_id'),
+      // стадия финансирования — последний раунд компаний идеи (по дате)
+      fundingStage: sql<string | null>`
+        (select r.stage from funding_rounds r
+         where r.company_id in (select company_id from article_companies where article_id = ${aid})
+         order by r.date desc nulls last, r.id desc limit 1)`,
     })
     .from(articles)
     .leftJoin(media, eq(articles.coverMediaId, media.id))

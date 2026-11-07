@@ -22,6 +22,15 @@ export function IdeaCard({ idea }: { idea: Idea }) {
       {(idea.thesis || idea.stages.length > 1 || idea.industries.length > 0) && (
         <div className="mt-2 flex flex-wrap items-start gap-1.5 text-xs">
           {idea.thesis && <p className="line-clamp-2 w-full text-sm text-zinc-400 group-hover:text-zinc-300">{idea.thesis}</p>}
+          {idea.companies.slice(0, 1).map((c) => (
+            <span key={c} className="rounded-full bg-[#beff00]/10 px-2 py-0.5 font-medium text-[#c9ff2a]">{c}</span>
+          ))}
+          {idea.trends.slice(0, 1).map((t) => (
+            <span key={t} className="rounded-full bg-zinc-800 px-2 py-0.5 text-zinc-200">{t}</span>
+          ))}
+          {idea.fundingStage && (
+            <span key={idea.fundingStage} className="rounded-full bg-zinc-800 px-2 py-0.5 text-zinc-300">💰 {idea.fundingStage}</span>
+          )}
           {idea.stages.slice(0, 2).map((s) => (
             <span key={s} className="rounded-full bg-zinc-800 px-2 py-0.5 text-zinc-300">{s}</span>
           ))}
