@@ -190,6 +190,8 @@ export const articles = pgTable(
     updatedAt: updatedAt(),
     oldWpId: integer('old_wp_id'), // миграция: сверка и 1:1 URL
     oldWpType: text('old_wp_type'),
+    // search_tsv (tsvector, russian) и эмбеддинги живут вне Drizzle-схемы:
+    // FTS — сырой SQL в routes/search.ts, векторы — таблица article_embeddings ниже
   },
   (t) => [uniqueIndex('articles_type_slug_idx').on(t.type, t.slug)],
 );

@@ -2,7 +2,7 @@ import express from 'express';
 import path from 'node:path';
 import cron from 'node-cron';
 import { config } from './config.js';
-import { securityHeaders, corsAllowlist, apiLimiter, loginLimiter, registerLimiter, generateLimiter, telegramLinkLimiter } from './middleware/security.js';
+import { securityHeaders, corsAllowlist, apiLimiter, loginLimiter, registerLimiter, generateLimiter, telegramLinkLimiter, searchLimiter } from './middleware/security.js';
 import { runDailyDigest, runWeeklyReport } from './services/digest.js';
 import { startTelegramPolling } from './services/telegram.js';
 import { authRouter } from './routes/auth.js';
@@ -16,6 +16,7 @@ import { adminRouter } from './routes/admin.js';
 import { marketRouter } from './routes/market.js';
 import { cabinetRouter } from './routes/cabinet.js';
 import { featuresRouter } from './routes/features.js';
+import { searchRouter } from './routes/search.js';
 
 // В production запрет на дефолтный секрет — fail fast
 if (process.env.NODE_ENV === 'production' && config.jwtSecret === 'dev-secret-change-me') {
@@ -32,6 +33,7 @@ app.use('/api/auth/login', loginLimiter);
 app.use('/api/auth/register', registerLimiter);
 app.use('/api/media/generate', generateLimiter);
 app.use('/api/telegram/link', telegramLinkLimiter);
+app.use('/api/search', searchLimiter);
 
 app.use(express.json({ limit: '2mb' }));
 
@@ -45,6 +47,7 @@ app.get('/api/health', (_req, res) => {
 app.use('/api/auth', authRouter);
 app.use('/api', bindingsRouter); // ПЕРЕД articlesRouter: пути /articles/:id/...
 app.use('/api/articles', articlesRouter);
+app.use('/api/search', searchRouter);
 app.use('/api', entitiesRouter);   // /companies /tickers /industries /trends
 app.use('/api', storiesRouter);    // /stories
 app.use('/api', screenerRouter);   // /screener /deal-phases /deal-stages

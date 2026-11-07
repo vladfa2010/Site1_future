@@ -14,6 +14,7 @@ import PrivacyPage from './pages/PrivacyPage';
 import TermsPage from './pages/TermsPage';
 import CabinetPage from './pages/CabinetPage';
 import PricingPage from './pages/PricingPage';
+import SearchPage from './pages/SearchPage';
 import StaticPage from './pages/StaticPage';
 import { RedirectHandler } from './components/RedirectHandler';
 
@@ -37,6 +38,7 @@ export default function App() {
         <Route path="/terms" element={<TermsPage />} />
         <Route path="/cabinet" element={<CabinetPage />} />
         <Route path="/pricing" element={<PricingPage />} />
+        <Route path="/search" element={<SearchPage />} />
         {/* служебные страницы донора (мигрированный контент) */}
         <Route path="/kak-tut-vsyo-ustroeno" element={<StaticPage />} />
         <Route path="/portfel-kak-ispolzovat" element={<StaticPage />} />

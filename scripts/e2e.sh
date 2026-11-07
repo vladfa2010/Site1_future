@@ -123,6 +123,13 @@ curl -s -o /dev/null -w "%{http_code}" -H "Origin: http://evil.example" "$B/api/
 curl -s -o /dev/null -w "%{http_code}" "$B/api/users" | grep -q 401 && ok || bad "users: anon 401"
 curl -s -o /dev/null -w "%{http_code}" "$B/api/articles/1/relations" -X PUT -H "$J" -d '{}' | grep -q 401 && ok || bad "relations: anon 401"
 curl -s "$B/api/health" -D - -o /dev/null | grep -qi "x-frame-options" && ok || bad "security headers"
+# поиск: FTS + пейволл + валидация
+curl -s "$B/api/search?q=%D0%BA%D0%BE%D1%81%D0%BC%D0%BE%D1%81&limit=3" | grep -q '"results"' && ok || bad "search: FTS находит материалы"
+curl -s -o /dev/null -w "%{http_code}" "$B/api/search?q=a" | grep -q 400 && ok || bad "search: короткий запрос 400"
+curl -s -o /dev/null -w "%{http_code}" "$B/api/search" | grep -q 400 && ok || bad "search: пустой запрос 400"
+curl -s "$B/api/search?q=e2e&limit=5" | grep -q e2e-novost && bad "search: anon видит draft (ПРОБЛЕМА)" || ok
+TOKEN=$(curl -s -X POST $B/api/auth/login -H "$J" -d '{"email":"test@test.ru","password":"test"}' | jqget "d['token']")
+curl -s "$B/api/search?q=e2e&limit=5" -H "Authorization: Bearer $TOKEN" | grep -q e2e-novost && ok || bad "search: админ видит draft"
 
 echo ""
 echo "════════════════════════════════════════"

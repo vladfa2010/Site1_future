@@ -71,3 +71,11 @@ export const telegramLinkLimiter = rateLimit({
   ...limiterDefaults,
   message: { error: 'link limit reached, try later' },
 });
+
+/** Поиск: каждый запрос с эмбеддингом — платный вызов API */
+export const searchLimiter = rateLimit({
+  windowMs: 60_000,
+  limit: 20,
+  ...limiterDefaults,
+  message: { error: 'search limit reached, try later' },
+});

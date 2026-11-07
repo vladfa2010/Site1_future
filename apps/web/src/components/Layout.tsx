@@ -22,6 +22,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
           Инвестиционно<span className="text-[#beff00]">.рф</span>
         </Link>
         <nav className="flex items-center gap-5 text-sm">
+          <Link to="/search" title="Поиск" className="text-zinc-400 hover:text-[#beff00]">
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <circle cx="11" cy="11" r="7" /><path strokeLinecap="round" d="m20 20-3.5-3.5" />
+            </svg>
+          </Link>
           <Link to="/" className="text-zinc-400">Лента</Link>
           <Link to="/portfolio" className="text-zinc-400">Портфель</Link>
           <Link to="/pricing" className="text-zinc-400">Тарифы</Link>

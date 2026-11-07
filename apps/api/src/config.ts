@@ -14,6 +14,9 @@ export const config = {
   moonshotApiKey: process.env.MOONSHOT_API_KEY ?? '',
   moonshotBaseUrl: process.env.MOONSHOT_BASE_URL ?? 'https://api.moonshot.ai/v1',
   moonshotImageModel: process.env.MOONSHOT_IMAGE_MODEL ?? 'kimi-image-preview',
+  // Векторный поиск: модель эмбеддингов (1024-мерная, под article_embeddings).
+  // Пусто — поиск работает в FTS-режиме без векторной части.
+  moonshotEmbedModel: process.env.MOONSHOT_EMBED_MODEL ?? '',
   uploadDir: process.env.UPLOAD_DIR ?? 'uploads',
   // CORS: доверенные origin'ы (через запятую)
   corsOrigins: (process.env.CORS_ORIGINS ?? 'http://localhost:5173,http://localhost:5174').split(','),
