@@ -177,14 +177,26 @@ articlesRouter.post('/', authRequired, requireRole('author', 'admin', 'super_adm
   // автор не публикует напрямую — только через admin (раздел 6.3)
   const status = isAdmin(req.user!.role) ? data.status : 'draft';
 
-  const [row] = await db
-    .insert(articles)
-    .values({ ...articleData, status, authorId: req.user!.id })
-    .returning();
-  if (metaDescription) {
-    await saveMetaDescription(row.id, metaDescription);
+  // дубль (type, slug) → 409, а не 500
+  try {
+    const [row] = await db
+      .insert(articles)
+      .values({ ...articleData, status, authorId: req.user!.id })
+      .returning();
+    if (metaDescription) {
+      await saveMetaDescription(row.id, metaDescription);
+    }
+    res.status(201).json({ article: row });
+  } catch (e) {
+    // pg unique violation = code 23505 (constraint может быть в e или в e.cause)
+    const code = (e as { code?: string; cause?: { code?: string } })?.code
+      ?? (e as { cause?: { code?: string } })?.cause?.code;
+    if (code === '23505') {
+      res.status(409).json({ error: 'Такой slug уже есть у статьи этого типа', code: 'SLUG_EXISTS' });
+      return;
+    }
+    throw e;
   }
-  res.status(201).json({ article: row });
 });
 
 // SEO meta description для статьи (meta_fields, раздел 5.4)

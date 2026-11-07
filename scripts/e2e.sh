@@ -37,6 +37,7 @@ echo "  E2E: АДМИНКА — СТАТЬИ"
 echo "════════════════════════════════════════"
 ART=$(curl -s -X POST "$B/api/articles" -H "$A" -H "$J" -d '{"type":"novost","slug":"e2e-novost","title":"E2E новость","contentHtml":"<p>Текст</p>","status":"draft"}' | jqget "d['article']['id']")
 [ -n "$ART" ] && ok || bad "admin: создать статью"
+curl -s -o /dev/null -w "%{http_code}" -X POST "$B/api/articles" -H "$A" -H "$J" -d '{"type":"novost","slug":"e2e-novost","title":"дубль","contentHtml":"<p>x</p>"}' | grep -q 409 && ok || bad "articles: дубль slug → 409 (не 500)"
 curl -s "$B/api/articles?limit=5" -H "$A" | grep -q e2e-novost && ok || bad "admin: статья в списке (админ видит draft)"
 curl -s "$B/api/articles?limit=5" | grep -q e2e-novost && bad "список: anon видит draft (ПРОБЛЕМА)" || ok
 curl -s -X PATCH "$B/api/articles/$ART" -H "$A" -H "$J" -d '{"title":"E2E новость v2","accessLevel":"auth"}' | grep -q "v2" && ok || bad "admin: PATCH статьи"
@@ -151,6 +152,86 @@ IDEAID=$(curl -s "$B/api/articles/ideya/proekt-prometej-sledujushhij-shag-razvit
 curl -s -o /dev/null -w "%{http_code}" "$B/api/articles/$IDEAID/events" | grep -q 200 && ok || bad "idea-events: 200"
 curl -s "$B/api/articles/263/events" | python3 -c "import json,sys; evs=json.load(sys.stdin).get('events',[]); assert all(e['type']=='sobytie' for e in evs); print(len(evs))" 2>/dev/null | grep -qE '^[0-9]+$' && ok || bad "idea-events: только тип sobytie"
 curl -s -o /dev/null -w "%{http_code}" "$B/api/articles/1/events" | grep -q 404 && ok || bad "idea-events: не-идея 404"
+curl -s -o /dev/null -w "%{http_code}" "$B/api/articles/263/events?type=bogus" | grep -q 400 && ok || bad "idea-events: невалидный тип 400"
+curl -s "$B/api/articles/263/events?type=novost" | python3 -c "import json,sys; evs=json.load(sys.stdin).get('events',[]); assert all(e['type']=='novost' for e in evs); print(len(evs))" 2>/dev/null | grep -qE '^[0-9]+$' && ok || bad "idea-events: ?type=novost только новости"
+
+echo "════════════════════════════════════════"
+echo "  E2E: КАБИНЕТ — ПОДПИСКИ/ИЗБРАННОЕ/НАСТРОЙКИ"
+echo "════════════════════════════════════════"
+# подписка на идею (article): появляется в ленте
+curl -s -o /dev/null -w "%{http_code}" -X PUT "$B/api/subscriptions" -H "$UA" -H "$J" -d "{\"entityType\":\"article\",\"entityId\":$IDEAID}" | grep -q 201 && ok || bad "subs: подписка на идею"
+curl -s "$B/api/feed" -H "$UA" | grep -q "\"id\":$IDEAID" && ok || bad "subs: идея в ленте"
+curl -s "$B/api/subscriptions" -H "$UA" | grep -q '"entityType":"article"' && ok || bad "subs: список содержит article"
+curl -s -X DELETE "$B/api/subscriptions/article/$IDEAID" -H "$UA" | grep -q '"ok"' && ok || bad "subs: отписка"
+# избранное: развёрнутый список
+curl -s -X PUT "$B/api/favorites" -H "$UA" -H "$J" -d '{"entityType":"trend","entityId":3}' -o /dev/null
+curl -s "$B/api/favorites" -H "$UA" | grep -q '"data"' && ok || bad "favorites: развёрнутый список"
+curl -s -o /dev/null -w "%{http_code}" -X PUT "$B/api/favorites" -H "$UA" -H "$J" -d '{"entityType":"bogus","entityId":1}' | grep -q 400 && ok || bad "favorites: невалидный тип 400"
+curl -s -X DELETE "$B/api/favorites/trend/3" -H "$UA" > /dev/null
+# настройки уведомлений читаются
+curl -s "$B/api/notification-settings" -H "$UA" | grep -q emailDaily && ok || bad "notification-settings: GET"
+# telegram-контур: статус / link без бота / disconnect
+curl -s "$B/api/telegram/status" -H "$UA" | grep -q '"connected":false' && ok || bad "tg: статус (не подключён)"
+curl -s -o /dev/null -w "%{http_code}" -X POST "$B/api/telegram/link" -H "$UA" | grep -q 503 && ok || bad "tg: link без бота 503"
+curl -s -X DELETE "$B/api/telegram/disconnect" -H "$UA" | grep -q '"ok"' && ok || bad "tg: disconnect идемпотентно"
+# удаление аккаунта: регистрируем → удаляем → токен мёртв
+curl -s -X POST $B/api/auth/register -H "$J" -d '{"username":"E2EGone","email":"e2e-gone@test.ru","password":"E2ePass123"}' > /dev/null
+GT2=$(curl -s -X POST $B/api/auth/login -H "$J" -d '{"email":"e2e-gone@test.ru","password":"E2ePass123"}' | jqget "d['token']")
+[ -n "$GT2" ] && ok || bad "delete-account: рег+логин временного"
+curl -s -o /dev/null -w "%{http_code}" -X DELETE "$B/api/auth/me" -H "Authorization: Bearer $GT2" -H "$J" -d '{"password":"E2ePass123"}' | grep -q 200 && ok || bad "delete-account: DELETE /auth/me"
+curl -s -o /dev/null -w "%{http_code}" "$B/api/auth/me" -H "Authorization: Bearer $GT2" | grep -qE '401|404' && ok || bad "delete-account: токен отозван"
+psql -d newinvest -tAc "SELECT count(*) FROM users WHERE email='e2e-gone@test.ru'" 2>/dev/null | grep -q ^0$ && ok || bad "delete-account: юзер удалён из БД"
+
+echo "════════════════════════════════════════"
+echo "  E2E: АДМИНКА — ТАРИФЫ/ФИЧИ/РЕДАКТИРОВАНИЕ"
+echo "════════════════════════════════════════"
+# создание тарифа (priceMonthly строкой — NUMERIC)
+curl -s -X POST "$B/api/tariff-plans" -H "$A" -H "$J" -d '{"slug":"e2e-tariff","name":"E2E Тариф","priceMonthly":"990","yearlyDiscount":15,"features":{"telegram":true}}' | grep -q e2e-tariff && ok || bad "tariffs: создать"
+curl -s "$B/api/tariff-plans" | grep -q e2e-tariff && ok || bad "tariffs: публичный список"
+curl -s -o /dev/null -w "%{http_code}" -X POST "$B/api/tariff-plans" -H "$A" -H "$J" -d '{"slug":"x","name":"x","priceMonthly":100}' | grep -q 400 && ok || bad "tariffs: priceMonthly числом 400"
+# фичи: публичный список + админ-тоггл
+curl -s "$B/api/features" | grep -q '"id":"telegram"' && ok || bad "features: публичный список"
+curl -s -X PUT "$B/api/admin/features/telegram" -H "$A" -H "$J" -d '{"isActive":true}' | grep -q '"isActive":true' && ok || bad "features: админ-тоггл"
+curl -s -o /dev/null -w "%{http_code}" "$B/api/admin/features" | grep -q 401 && ok || bad "features: anon 401"
+# редактирование карточек компании/тренда
+curl -s -X PATCH "$B/api/companies/$CID" -H "$A" -H "$J" -d '{"oneLiner":"E2E лайнер"}' | grep -q "E2E лайнер" && ok || bad "companies: PATCH карточки"
+TID=$(curl -s "$B/api/trends" | jqget "[t['id'] for t in d['trends'] if t['slug']=='e2e-trend'][0]")
+curl -s -X PATCH "$B/api/trends/$TID" -H "$A" -H "$J" -d '{"description":"<p>E2E лонгрид</p>"}' | grep -q "E2E лонгрид" && ok || bad "trends: PATCH лонгрида"
+
+echo "════════════════════════════════════════"
+echo "  E2E: МЕДИАТЕКА / ПОИСК / ПРОЧЕЕ"
+echo "════════════════════════════════════════"
+# upload: настоящий PNG проходит, подделка отсечена магическими байтами
+printf '\x89PNG\r\n\x1a\n' > /tmp/e2e-real.png; head -c 200 /dev/urandom >> /tmp/e2e-real.png
+UP=$(curl -s -X POST "$B/api/media/upload" -H "$A" -F "file=@/tmp/e2e-real.png;type=image/png")
+echo "$UP" | grep -q '"url":"/uploads/' && ok || bad "media: upload PNG"
+echo "not an image at all" > /tmp/e2e-fake.png
+curl -s -o /dev/null -w "%{http_code}" -X POST "$B/api/media/upload" -H "$A" -F "file=@/tmp/e2e-fake.png;type=image/png" | grep -q 400 && ok || bad "media: подделка 400 (magic bytes)"
+rm -f /tmp/e2e-real.png /tmp/e2e-fake.png
+# поиск: режим fts явно
+curl -s "$B/api/search?q=%D0%BA%D0%BE%D1%81%D0%BC%D0%BE%D1%81&mode=fts&limit=2" | grep -q '"mode":"fts"' && ok || bad "search: mode=fts"
+# редиректы: список публичен для админа
+curl -s "$B/api/redirects" -H "$A" | grep -q oldPath && ok || bad "redirects: список"
+# график: не-MOEX тикер → 404
+curl -s -o /dev/null -w "%{http_code}" "$B/api/market/chart?symbol=TSLA" | grep -q 404 && ok || bad "market: не-MOEX 404"
+# фиксация просмотра: article_views растёт после открытия статьи
+SPXID=$(curl -s "$B/api/articles/novost/spacex-lider-po-kolichestvu-sputnikov" | jqget "d['article']['id']")
+V1=$(psql -d newinvest -tAc "SELECT count(*) FROM article_views WHERE article_id=$SPXID" 2>/dev/null)
+curl -s -o /dev/null "$B/api/articles/novost/spacex-lider-po-kolichestvu-sputnikov"
+V2=$(psql -d newinvest -tAc "SELECT count(*) FROM article_views WHERE article_id=$SPXID" 2>/dev/null)
+[ "$V2" -gt "$V1" ] 2>/dev/null && ok || bad "views: просмотр зафиксирован ($V1→$V2)"
+# kimi: ключ маскируется в ответе, не отдаётся целиком
+curl -s -X POST "$B/api/admin/kimi-settings" -H "$A" -H "$J" -d '{"apiKey":"sk-e2e-secret-9999"}' > /dev/null
+KMASK=$(curl -s "$B/api/admin/kimi-settings" -H "$A")
+echo "$KMASK" | grep -q '"hasKey":true' && ok || bad "kimi: hasKey после ввода"
+echo "$KMASK" | grep -q "sk-e2e-secret-9999" && bad "kimi: КЛЮЧ ОТДАЁТСЯ ЦЕЛИКОМ (ПРОБЛЕМА)" || ok
+echo "$KMASK" | grep -q apiKeyMasked && ok || bad "kimi: маскированное поле"
+curl -s -X POST "$B/api/admin/kimi-settings" -H "$A" -H "$J" -d '{"apiKey":""}' > /dev/null # стёрли ключ обратно
+# пейволл: просроченный тариф не открывает материал
+psql -d newinvest -q -c "UPDATE users SET tariff_expires_at=now() - interval '1 day' WHERE id=$USRID" 2>/dev/null
+UTX=$(curl -s -X POST $B/api/auth/login -H "$J" -d '{"email":"e2e@test.ru","password":"E2ePass123"}' | jqget "d['token']")
+curl -s -o /dev/null -w "%{http_code}" "$B/api/articles/analitika/e2e-insider" -H "Authorization: Bearer $UTX" | grep -q 403 && ok || bad "paywall: просроченный тариф 403"
+psql -d newinvest -q -c "UPDATE users SET tariff_expires_at=NULL WHERE id=$USRID" 2>/dev/null
 
 echo ""
 echo "════════════════════════════════════════"
@@ -166,11 +247,14 @@ DELETE FROM companies WHERE slug='e2e-corp';
 DELETE FROM trends WHERE slug='e2e-trend';
 DELETE FROM industries WHERE slug='e2e-ind';
 DELETE FROM tickers WHERE slug='e2e';
-DELETE FROM favorites WHERE user_id IN (SELECT id FROM users WHERE email='e2e@test.ru');
-DELETE FROM subscriptions WHERE user_id IN (SELECT id FROM users WHERE email='e2e@test.ru');
-DELETE FROM notification_settings WHERE user_id IN (SELECT id FROM users WHERE email='e2e@test.ru');
-DELETE FROM tg_bindings WHERE user_id IN (SELECT id FROM users WHERE email='e2e@test.ru');
-DELETE FROM users WHERE email='e2e@test.ru';
+DELETE FROM tariff_plans WHERE slug='e2e-tariff';
+DELETE FROM media WHERE source_url='upload' AND created_at > now() - interval '30 minutes';
+DELETE FROM favorites WHERE user_id IN (SELECT id FROM users WHERE email IN ('e2e@test.ru','e2e-gone@test.ru'));
+DELETE FROM subscriptions WHERE user_id IN (SELECT id FROM users WHERE email IN ('e2e@test.ru','e2e-gone@test.ru'));
+DELETE FROM notification_settings WHERE user_id IN (SELECT id FROM users WHERE email IN ('e2e@test.ru','e2e-gone@test.ru'));
+DELETE FROM tg_bindings WHERE user_id IN (SELECT id FROM users WHERE email IN ('e2e@test.ru','e2e-gone@test.ru'));
+DELETE FROM users WHERE email IN ('e2e@test.ru','e2e-gone@test.ru');
 UPDATE tariff_plans SET yearly_discount=20 WHERE slug='insider';
+UPDATE meta_fields SET value='' WHERE owner_type='app' AND owner_id=0 AND key='kimi_api_key';
 " 2>/dev/null
 exit $FAIL
