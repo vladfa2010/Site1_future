@@ -8,6 +8,8 @@ import { IdeaChart } from '../components/IdeaChart';
 import { Paywall } from '../components/Paywall';
 import { ArticleCard, TYPE_LABELS } from '../components/ArticleCard';
 import { Carousel, CAROUSEL_ITEM } from '../components/Carousel';
+import { FavoriteButton } from '../components/FavoriteButton';
+import { SubscribeButton } from '../components/SubscribeButton';
 
 /** Карусель «материалы по этой идее» — общие привязки (компании/тикеры/индустрии/тренды) */
 function IdeaEvents({ articleId, type, title }: { articleId: number; type: string; title: string }) {
@@ -90,7 +92,16 @@ export default function ArticlePage() {
       <span className="text-xs uppercase tracking-wide text-zinc-500">
         {TYPE_LABELS[article.type] ?? article.type}
       </span>
-      <h1 className="mt-2 text-3xl font-bold leading-tight">{article.title}</h1>
+      <div className="flex items-start justify-between gap-4">
+        <h1 className="mt-2 text-3xl font-bold leading-tight">{article.title}</h1>
+        {/* избранное + подписка на идею */}
+        {article.type === 'ideya' && (
+          <span className="flex shrink-0 gap-2 pt-2">
+            <FavoriteButton entityType="article" entityId={article.id} />
+            <SubscribeButton entityType="article" entityId={article.id} label="Подписаться на идею" />
+          </span>
+        )}
+      </div>
 
       {/* тезис идеи — только если внесён (4.3) */}
       {article.thesis && (

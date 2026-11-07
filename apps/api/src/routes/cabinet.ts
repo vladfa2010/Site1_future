@@ -124,7 +124,7 @@ cabinetRouter.get('/favorites', async (req, res) => {
 
 // ---------- Подписки на сущности ----------
 
-const SUB_TYPES = ['ticker', 'company', 'trend', 'industry'] as const;
+const SUB_TYPES = ['ticker', 'company', 'trend', 'industry', 'article'] as const;
 
 cabinetRouter.put('/subscriptions', async (req, res) => {
   const parsed = z.object({ entityType: z.enum(SUB_TYPES), entityId: z.number().int() }).safeParse(req.body);
@@ -197,6 +197,7 @@ cabinetRouter.get('/feed', async (req, res) => {
   const trendIds = byType('trend');
   const industryIds = byType('industry');
   const tickerIds = byType('ticker');
+  const articleIds = byType('article');
 
   const existsIn = (junction: string, fk: string, ids: number[]) =>
     ids.length
@@ -209,6 +210,14 @@ cabinetRouter.get('/feed', async (req, res) => {
     existsIn('article_trends', 'trend_id', trendIds),
     existsIn('article_industries', 'industry_id', industryIds),
     existsIn('article_tickers', 'ticker_id', tickerIds),
+    // подписка на статью (идею): сама статья + материалы с общими привязками
+    articleIds.length ? inArray(articles.id, articleIds) : null,
+    articleIds.length
+      ? sql`exists(select 1 from article_trends at2 where at2.article_id = articles.id and at2.trend_id in (select trend_id from article_trends where article_id in (${sql.join(articleIds.map((id) => sql`${id}`), sql`, `)})))`
+      : null,
+    articleIds.length
+      ? sql`exists(select 1 from article_companies ac2 where ac2.article_id = articles.id and ac2.company_id in (select company_id from article_companies where article_id in (${sql.join(articleIds.map((id) => sql`${id}`), sql`, `)})))`
+      : null,
   ].filter((x): x is SQL => x !== null);
 
   if (ors.length === 0) {
