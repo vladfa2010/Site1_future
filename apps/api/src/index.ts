@@ -2,7 +2,7 @@ import express from 'express';
 import path from 'node:path';
 import cron from 'node-cron';
 import { config } from './config.js';
-import { securityHeaders, corsAllowlist, apiLimiter, loginLimiter, registerLimiter, generateLimiter, telegramLinkLimiter, searchLimiter } from './middleware/security.js';
+import { securityHeaders, corsAllowlist, apiLimiter, loginLimiter, registerLimiter, generateLimiter, generateTextLimiter, telegramLinkLimiter, searchLimiter } from './middleware/security.js';
 import { runDailyDigest, runWeeklyReport } from './services/digest.js';
 import { startTelegramPolling } from './services/telegram.js';
 import { authRouter } from './routes/auth.js';
@@ -32,6 +32,7 @@ app.use('/api/', apiLimiter);
 app.use('/api/auth/login', loginLimiter);
 app.use('/api/auth/register', registerLimiter);
 app.use('/api/media/generate', generateLimiter);
+app.use('/api/media/generate-text', generateTextLimiter);
 app.use('/api/telegram/link', telegramLinkLimiter);
 app.use('/api/search', searchLimiter);
 

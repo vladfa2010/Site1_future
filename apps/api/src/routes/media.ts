@@ -13,6 +13,7 @@ import { desc, eq } from 'drizzle-orm';
 import { db, media, articles } from '@newinvest/db';
 import { authRequired, requireRole } from '../middleware/auth.js';
 import { generateImage } from '../services/mediaGen.js';
+import { generateText } from '../services/textGen.js';
 import { config } from '../config.js';
 
 export const mediaRouter = Router();
@@ -90,6 +91,32 @@ mediaRouter.post('/media/generate', authRequired, requireRole('admin', 'super_ad
     }
 
     res.status(201).json({ media: row, url, mock: !config.moonshotApiKey });
+  } catch (e) {
+    res.status(502).json({ error: 'generation failed', message: e instanceof Error ? e.message : 'unknown' });
+  }
+});
+
+// ---------- Генерация текста (лиды, выжимки) ----------
+
+const generateTextSchema = z.object({
+  prompt: z.string().min(10),
+  maxChars: z.number().int().min(50).max(2000).default(400),
+});
+
+// POST /api/media/generate-text {prompt, maxChars} — текст по промпту (клиент собирает контекст)
+mediaRouter.post('/media/generate-text', authRequired, requireRole('admin', 'super_admin'), async (req, res) => {
+  const parsed = generateTextSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'validation', details: parsed.error.flatten() });
+    return;
+  }
+  try {
+    const text = await generateText(parsed.data.prompt, parsed.data.maxChars);
+    if (!text) {
+      res.status(422).json({ error: 'empty result', message: 'Недостаточно контекста — заполните текст статьи' });
+      return;
+    }
+    res.json({ text, mock: !config.moonshotApiKey });
   } catch (e) {
     res.status(502).json({ error: 'generation failed', message: e instanceof Error ? e.message : 'unknown' });
   }

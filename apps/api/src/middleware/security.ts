@@ -64,6 +64,14 @@ export const generateLimiter = rateLimit({
   message: { error: 'generation limit reached' },
 });
 
+/** Генерация текстов (лиды): отдельный лимит */
+export const generateTextLimiter = rateLimit({
+  windowMs: 3_600_000,
+  limit: 60,
+  ...limiterDefaults,
+  message: { error: 'text generation limit reached' },
+});
+
 /** Telegram deep-link: создание кодов привязки — лимит на пользователя */
 export const telegramLinkLimiter = rateLimit({
   windowMs: 3_600_000,

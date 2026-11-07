@@ -32,6 +32,9 @@ export default function ArticleEditPage() {
   const [genOpen, setGenOpen] = useState(false);
   const [genPrompt, setGenPrompt] = useState('');
   const [genBusy, setGenBusy] = useState(false);
+  const [excerptBusy, setExcerptBusy] = useState(false);
+  const [excerptSize, setExcerptSize] = useState(250);
+  const [excerptMock, setExcerptMock] = useState(false);
   const [genError, setGenError] = useState<string | null>(null);
   const [genMock, setGenMock] = useState(false);
   const coverFileRef = useRef<HTMLInputElement>(null);
@@ -163,6 +166,47 @@ export default function ArticleEditPage() {
     await api(`/articles/${articleId}`, { method: 'PATCH', body: JSON.stringify({ status: 'draft' }) });
     setForm((f) => ({ ...f, status: 'draft' }));
     setNotice('Возвращено в черновики ✓');
+  };
+
+  // ---- Генерация лидa: промпт читает ВСЕ поля формы ----
+  const genExcerpt = async () => {
+    setExcerptBusy(true);
+    setError(null);
+    setExcerptMock(false);
+    try {
+      const entityNames = [
+        ...rels.companyIds.map((id) => dicts.companies.find((c) => c.id === id)?.name).filter(Boolean),
+        ...rels.tickerIds.map((id) => dicts.tickers.find((t) => t.id === id)?.symbol).filter(Boolean),
+        ...rels.trendIds.map((id) => dicts.trends.find((t) => t.id === id)?.name).filter(Boolean),
+      ].join(', ');
+      const plain = stripHtml(form.contentHtml);
+      if (plain.length < 50) {
+        setError('Сначала заполните текст статьи — генерация читает его целиком');
+        return;
+      }
+      const prompt = [
+        `Напиши лид (краткое описание) для статьи инвестиционного медиа.`,
+        `ЗАГОЛОВОК: ${form.title}`,
+        form.thesis ? `ТЕЗИС: ${form.thesis}` : '',
+        form.excerpt ? `ТЕКУЩИЙ ЛИД (можно улучшить, не копировать): ${form.excerpt}` : '',
+        entityNames ? `УПОМИНАЮТСЯ: ${entityNames}` : '',
+        `ТИП МАТЕРИАЛА: ${{ novost: 'новость', ideya: 'инвестиционная идея', analitika: 'аналитика', sobytie: 'событие', interesnoe: 'интересный разбор' }[form.type] ?? form.type}`,
+        `ТРЕБОВАНИЯ: ${excerptSize}±20% знаков, без воды, без «в этой статье мы расскажем», информативно, на русском.`,
+        `ТЕКСТ: ${plain.slice(0, 6000)}`,
+      ].filter(Boolean).join('\n');
+
+      const res = await api<{ text: string; mock: boolean }>('/media/generate-text', {
+        method: 'POST',
+        body: JSON.stringify({ prompt, maxChars: excerptSize }),
+      });
+      setForm((f) => ({ ...f, excerpt: res.text }));
+      setExcerptMock(res.mock);
+      setNotice(res.mock ? 'Лид собран из текста (mock — без ключа Kimi)' : 'Лид сгенерирован ✓');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Ошибка генерации');
+    } finally {
+      setExcerptBusy(false);
+    }
   };
 
   // ---- Генерация обложки через Kimi (mock без ключа) ----
@@ -340,6 +384,17 @@ export default function ArticleEditPage() {
         <div>
           <label className="label">Excerpt</label>
           <textarea className="input" rows={2} value={form.excerpt} onChange={set('excerpt')} />
+          <div className="mt-1.5 flex items-center gap-2">
+            <select className="input max-w-[130px] py-1 text-xs" value={excerptSize} onChange={(e) => setExcerptSize(Number(e.target.value))}>
+              <option value={150}>≈150 знаков</option>
+              <option value={250}>≈250 знаков</option>
+              <option value={400}>≈400 знаков</option>
+            </select>
+            <button type="button" className="btn-secondary py-1 text-xs" disabled={excerptBusy} onClick={() => void genExcerpt()}>
+              {excerptBusy ? 'Генерируем…' : '✨ Сгенерировать из текста'}
+            </button>
+            {excerptMock && <span className="text-xs text-zinc-500">mock (без ключа)</span>}
+          </div>
         </div>
         <div>
           <label className="label">SEO meta description (до 300 символов)</label>

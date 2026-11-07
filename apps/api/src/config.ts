@@ -14,6 +14,8 @@ export const config = {
   moonshotApiKey: process.env.MOONSHOT_API_KEY ?? '',
   moonshotBaseUrl: process.env.MOONSHOT_BASE_URL ?? 'https://api.moonshot.ai/v1',
   moonshotImageModel: process.env.MOONSHOT_IMAGE_MODEL ?? 'kimi-image-preview',
+  // Текстовая генерация (лиды/выжимки) — Chat Completions
+  moonshotTextModel: process.env.MOONSHOT_TEXT_MODEL ?? 'kimi-k2-0711-preview',
   // Векторный поиск: модель эмбеддингов (1024-мерная, под article_embeddings).
   // Пусто — поиск работает в FTS-режиме без векторной части.
   moonshotEmbedModel: process.env.MOONSHOT_EMBED_MODEL ?? '',
