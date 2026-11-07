@@ -27,7 +27,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
               <circle cx="11" cy="11" r="7" /><path strokeLinecap="round" d="m20 20-3.5-3.5" />
             </svg>
           </Link>
-          <Link to="/" className="text-zinc-400">Лента</Link>
+          <Link to="/feed" className="text-zinc-400">Лента</Link>
           <Link to="/portfolio" className="text-zinc-400">Портфель</Link>
           <Link to="/pricing" className="text-zinc-400">Тарифы</Link>
           {user ? (
