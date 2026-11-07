@@ -158,6 +158,13 @@ export default function ArticleEditPage() {
     setNotice('Опубликовано ✓');
   };
 
+  const unpublish = async () => {
+    if (!articleId) return;
+    await api(`/articles/${articleId}`, { method: 'PATCH', body: JSON.stringify({ status: 'draft' }) });
+    setForm((f) => ({ ...f, status: 'draft' }));
+    setNotice('Возвращено в черновики ✓');
+  };
+
   // ---- Генерация обложки через Kimi (mock без ключа) ----
   const stripHtml = (html: string) => html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
 
@@ -295,7 +302,7 @@ export default function ArticleEditPage() {
         </div>
         <div>
           <label className="label">Статус</label>
-          <select className="input" value={form.status} onChange={set('status')} disabled={form.status === 'published'}>
+          <select className="input" value={form.status} onChange={set('status')}>
             <option value="draft">Черновик</option>
             <option value="published">Опубликована</option>
           </select>
@@ -423,6 +430,7 @@ export default function ArticleEditPage() {
       <div className="flex gap-3">
         <button className="btn" onClick={() => void save()} disabled={busy}>{busy ? 'Сохранение…' : 'Сохранить'}</button>
         {!isNew && form.status !== 'published' && <button className="btn-secondary" onClick={() => void publish()}>Опубликовать</button>}
+        {!isNew && form.status === 'published' && <button className="btn-secondary" onClick={() => void unpublish()}>Вернуть в черновик</button>}
       </div>
     </div>
   );

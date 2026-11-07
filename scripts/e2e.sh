@@ -41,6 +41,11 @@ curl -s "$B/api/articles?limit=5" -H "$A" | grep -q e2e-novost && ok || bad "adm
 curl -s "$B/api/articles?limit=5" | grep -q e2e-novost && bad "список: anon видит draft (ПРОБЛЕМА)" || ok
 curl -s -X PATCH "$B/api/articles/$ART" -H "$A" -H "$J" -d '{"title":"E2E новость v2","accessLevel":"auth"}' | grep -q "v2" && ok || bad "admin: PATCH статьи"
 curl -s -X POST "$B/api/articles/$ART/publish" -H "$A" | grep -q published && ok || bad "admin: публикация"
+# возврат в черновик: статус меняется, дата публикации очищается, anon перестаёт видеть
+curl -s -X PATCH "$B/api/articles/$ART" -H "$A" -H "$J" -d '{"status":"draft"}' | grep -q '"status":"draft"' && ok || bad "admin: возврат в черновик"
+psql -d newinvest -tAc "SELECT published_at IS NULL FROM articles WHERE id=$ART" 2>/dev/null | grep -q t && ok || bad "unpublish: published_at очищен"
+curl -s -o /dev/null -w "%{http_code}" "$B/api/articles/novost/e2e-novost" | grep -q 404 && ok || bad "unpublish: anon 404"
+curl -s -X POST "$B/api/articles/$ART/publish" -H "$A" > /dev/null # вернули published для дальнейших тестов
 
 echo "──────────────── интеграционно: детали по правильному пути"
 PUB=$(curl -s -o /dev/null -w "%{http_code}" "$B/api/articles/novost/e2e-novost")

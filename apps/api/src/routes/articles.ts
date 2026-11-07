@@ -215,6 +215,13 @@ articlesRouter.patch('/:id', authRequired, requireRole('author', 'admin', 'super
   const { metaDescription, ...updates } = parsed.data;
   if (!admin) delete updates.status; // автор не меняет статус
 
+  // Переходы статуса: снятие с публикации очищает дату, публикация через PATCH ставит её, если пусто
+  if (updates.status === 'draft') {
+    (updates as Record<string, unknown>).publishedAt = null;
+  } else if (updates.status === 'published' && !existing.publishedAt) {
+    (updates as Record<string, unknown>).publishedAt = new Date();
+  }
+
   const [row] = await db.update(articles).set(updates).where(eq(articles.id, id)).returning();
   if (metaDescription) {
     await saveMetaDescription(id, metaDescription);
