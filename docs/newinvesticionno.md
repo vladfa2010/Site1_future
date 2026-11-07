@@ -375,23 +375,27 @@ meta_fields (                      -- перенос Yoast: description, canonic
 )
 ```
 
-### 5.5 Векторный поиск (pgvector — без отдельного сервиса)
+### 5.5 Векторный поиск (pgvector — без отдельного сервиса) — РЕАЛИЗОВАН 2026-11-07
 
 ```sql
 CREATE EXTENSION vector;
 
 article_embeddings (
   article_id  INT PRIMARY KEY REFERENCES articles(id) ON DELETE CASCADE,
-  embedding   VECTOR(1024),         -- зависит от выбранной модели
-  model       TEXT,                 -- какой моделью посчитано
+  embedding   VECTOR(1024),         -- под Moonshot embeddings (1024-мерные)
+  model       TEXT,                 -- какой моделью посчитано (миграции моделей без пересчёта)
   updated_at  TIMESTAMPTZ
 )
 CREATE INDEX ON article_embeddings USING hnsw (embedding vector_cosine_ops);
+
+-- Полнотекстовый слой: tsvector GENERATED ALWAYS (russian-стемминг:
+-- title + thesis + excerpt + content без HTML) + GIN (миграция 0012)
 ```
 
-- Эмбеддинг считается при публикации (title + excerpt + первые ~2000 символов контента), пересчёт при редактировании
-- Модель: мультиязычная (RU+EN важны — тикеры/новости на англ.), например multilingual-e5-large или аналог; финальный выбор под бюджет
-- Поиск: гибридный = векторный (смысл) + полнотекстовый GIN (точные тикеры/названия)
+- **Гибридный поиск** (`GET /api/search?q=&mode=auto|fts|vector`): FTS (ts_rank, websearch_to_tsquery russian) + косинусное расстояние pgvector, слияние **RRF** (k=60); векторная часть включается при заданном ключе и наличии эмбеддингов, иначе честный FTS; пейволл соблюдается (accessCondition); лимит 20/мин
+- **Бэкфилл**: `npm run embed -w @newinvest/db` (батчи 20, идемпотентно, --force; требует MOONSHOT_API_KEY + MOONSHOT_EMBED_MODEL или настройки из /kimi)
+- **Авто-пересчёт при публикации** — в бэклоге
+- Модель: Moonshot embeddings (настраивается в админке /kimi), 1024-мерная под колонку vector(1024)
 
 Где используем:
 
@@ -455,35 +459,56 @@ CREATE INDEX ON article_embeddings USING hnsw (embedding vector_cosine_ops);
 - связка с вторым проектом: регистрация единая, роль `author` присваивает admin
 - `articles.author_id` уже в схеме — авторство привязываем к юзеру
 
-### 6.4 Структура монорепозитория (npm workspaces)
+### 6.4 Структура монорепозитория (npm workspaces) — актуально на 2026-11-07
 
 ```
 investicionno_rf/
 ├── apps/
 │   ├── api/                  # Express + TS: REST API, auth (JWT + роли), все роуты
-│   │   └── src/routes/       # auth, articles, entities, stories, bindings, screener, media
-│   │   └── src/services/     # mediaGen.ts — генерация обложек (Moonshot/mock)
+│   │   └── src/routes/       # auth, articles, entities, stories, bindings, screener,
+│   │                         # media (+generate-text), admin (users/redirects/stats),
+│   │                         # market (MOEX ISS), cabinet (favorites/subscriptions/feed/
+│   │                         # tg-link/propose), features, tariffs, search (hybrid FTS+
+│   │                         # vector), kimiSettings
+│   │   └── src/services/     # mediaGen (обложки), textGen (лиды/SEO, персоны editor|seo),
+│   │                         # embeddings (Moonshot /embeddings), kimiSettings (ключ+модели
+│   │                         # из meta_fields, кэш), digest+email (Resend), telegram
+│   │                         # (polling), marketData (MOEX)
+│   │   └── src/middleware/   # auth (JWT, alg pinning), security (заголовки, CORS, лимиты)
 │   │   └── src/seed*.ts      # seed (super_admin), seed-test (test admin)
 │   ├── web/                  # основной сайт: React 19 + Vite + Tailwind (порт 5173)
 │   │   └── src/pages/        # главная (карусели), статья, компания, тренд, сюжет,
-│   │                           # скринер /portfolio, архивы типов, логин/регистрация
-│   │   └── src/components/   # Carousel, CoverThumb (3:4), ArticleCard, IdeaCard,
-│   │                           # EntityChips, RoundsTable, Layout
+│   │                           # скринер /portfolio, архивы типов, /search, /pricing,
+│   │                           # /cabinet (избранное/подписки/лента/настройки уведомлений),
+│   │                           # /propose, /privacy, /terms, StaticPage, AuthModalOpener
+│   │   └── src/components/   # Carousel, CoverThumb (3:4), ArticleCard, IdeaCard(+IdeaChart),
+│   │                           # EntityChips, RoundsTable, Layout, Breadcrumbs, AuthModal
+│   │                           # (1:1 PULSE), Paywall, FavoriteButton, SubscribeButton,
+│   │                           # TelegramConnect, Avatar (пресет 10)
 │   └── admin/                # админка: React + Tailwind (порт 5174)
-│       └── src/pages/        # статьи (+привязки с «подставить цепочку»), компании,
-│                               # тренды, индустрии/тикеры
+│       └── src/pages/        # статьи (+редактор), компании, тренды, индустрии, тикеры,
+│       │                       # сюжеты, медиатека, редиректы, пользователи, тарифы,
+│       │                       # фичи, аналитика, /kimi (настройки API)
+│       └── src/components/   # RichTextEditor (TipTap, лениво), PreviewModal (десктоп/
+│                               # планшет/мобайл+масштаб), MediaPickerModal (выбор обложки
+│                               # из медиатеки), EntityCloud (облака тегов: дроплист+создание
+│                               # по Enter), SearchInput (дебаунс), Layout
 ├── packages/
-│   ├── db/                   # Drizzle ORM: схема (раздел 5), миграции 0000–0003,
+│   ├── db/                   # Drizzle ORM: схема (раздел 5), миграции 0000–0012,
 │   │   └── src/migrate-wp.ts # импорт контента с донора (WP REST API)
+│   │   └── src/embed.ts      # бэкфилл эмбеддингов (npm run embed)
 │   ├── shared/               # (зарезервировано) общие TS-типы, DTO, константы
 │   └── config/               # (зарезервировано) общие tsconfig, eslint
 ├── infra/
 │   ├── docker-compose.yml    # PostgreSQL + pgvector (для сервера; локально — Homebrew PG)
 │   └── docker/               # Dockerfile для api/web/admin
+├── scripts/
+│   └── e2e.sh                # E2E-сьют (77 проверок: auth, админка, юзер-сценарии, поиск,
+│                             # безопасность) — API_URL=http://localhost:4000 bash scripts/e2e.sh
 ├── reference/                # локальные копии репозиториев PULSE (в .gitignore)
 ├── docs/
 │   └── newinvesticionno.md   # этот документ
-└── package.json              # workspaces: apps/*, packages/*; npm run dev = api+web
+└── package.json              # workspaces: apps/*, packages/*; npm run dev = api+web+admin
 ```
 
 Решения:
@@ -494,18 +519,18 @@ investicionno_rf/
 - **dev-окружение**: локально Homebrew Postgres 17 + pgvector (Docker на машине нет); на сервере — docker-compose
 - **Три приложения на трёх портах**: api :4000 (проксируется через /api), web :5173, admin :5174
 
-### 6.5 Состояние прототипа и запуск (2026-11-06)
+### 6.5 Состояние прототипа и запуск (2026-11-07)
 
 **Построено:**
 
 | Слой | Что | Статус |
 |---|---|---|
-| `packages/db` | Схема 29 таблиц (раздел 5), миграции 0000–0003, смоук-тест pgvector | ✅ |
-| `apps/api` | JWT-авторизация, роли; статьи (CRUD+публикация); граф знаний (компании/тикеры/индустрии/тренды/сюжеты); привязки + автоподстановка цепочки; скринер `/screener`; раунды `funding_rounds` | ✅ |
-| миграция контента | 306 статей, 73 компании, 24 тикера, 26 индустрий, 16 трендов, связи (383/118/366/334), цепочки выведены | ✅ |
-| `apps/web` | Главная как у донора (карусели, обложки 3:4, баннеры, «Кто мы и зачем», «Лента событий»), статья с чипсами + график котировок при стадии «Торги на бирже», страница тренда (секции по типам), сюжет-хронология, скринер `/portfolio` (фильтры в URL), архивы типов, AuthModal 1:1 PULSE, «Предложить идею». **Палитра донора: чёрный #000 + лайм #beff00** | ✅ |
-| `apps/admin` | **Все 8 экранов 6.2**: статьи (редактор: авто-slug из заголовка, тикер «на лету», обложка — генерация/загрузка, привязки с цепочкой, SEO description, публикация), сюжеты (конструктор+главная), компании (карточка), тренды (лонгрид), индустрии, тикеры, медиатека (загрузка), редиректы, пользователи (роли), аналитика. Тёмная тема | ✅ |
-| генерация обложек | `POST /api/media/generate` — Moonshot Images API; без ключа фирменная SVG-заглушка; файлы в `uploads/`, отдача `/uploads`; в редакторе — «✨ Сгенерировать обложку» с редактируемым промптом из контекста статьи | ✅ (mock до ключа) |
+| `packages/db` | Схема 29+ таблиц (раздел 5), миграции 0000–0012 (FTS search_tsv + pgvector), смоук-тест pgvector | ✅ |
+| `apps/api` | JWT-авторизация, роли (super_admin/admin/author/reader); статьи (CRUD+публикация+возврат в черновик, paywall public/auth/tariff); граф знаний + привязки + автоподстановка цепочки; скринер; раунды; тарифы (каталог+фичи, из PULSE); поиск гибридный FTS+vector (RRF); генерация: обложки (Kimi Images), тексты/лиды/SEO (Chat Completions, персоны), эмбеддинги; email-дайджесты (Resend: день 20:00 + недельный вс 20:00); TG-контур (deep-link + polling + дайджесты); настройки Kimi API из БД; аудит безопасности 2 раунда (XSS/CORS/лимиты/alg-pinning/транзакции/magic bytes) | ✅ |
+| миграция контента | 306 статей, 73 компании, 24 тикера, 26 индустрий, 16 трендов, связи (383/118/366/334) | ✅ |
+| `apps/web` | Главная как у донора (палитра чёрный #000 + лайм #beff00), статья (thesis, чипсы, график MOEX при «Торги на бирже», breadcrumbs), тренд-лендинг, сюжет-хронология, скринер, **/search** (гибридный, бейдж «векторный+текстовый»), /pricing (тарифы из БД), /cabinet (избранное, подписки→лента, настройки уведомлений email/TG, удаление аккаунта), AuthModal 1:1 PULSE, «Предложить идею» | ✅ |
+| `apps/admin` | Все экраны: статьи (TipTap, авто-slug, обложка — генерация/загрузка/выбор из медиатеки, привязки EntityCloud с созданием по Enter, генерация лида и SEO-description, превью десктоп/планшет/мобайл, публикация/возврат в черновик, paywall-уровни), компании, тренды, индустрии, тикеры, сюжеты, медиатека, редиректы, пользователи (роли), тарифы, фичи, аналитика, **настройки Kimi API** (/kimi) | ✅ |
+| E2E | scripts/e2e.sh — 77 проверок, зелёные | ✅ |
 
 **Запуск с нуля:**
 
@@ -517,20 +542,23 @@ npm run db:migrate                      # применить схему
 npm run seed -w @newinvest/api          # супер-админ admin@local.dev / admin123
 npm run seed:test -w @newinvest/api     # тестовый админ test@test.ru / test
 npm run db:migrate:wp                   # контент с донора (опционально, ~30 с)
-npm run dev                             # api :4000 + web :5173
-npm run dev -w @newinvest/admin         # админка :5174 (второй терминал)
+npm run dev                             # api :4000 + web :5173 + admin :5174
+API_URL=http://localhost:4000 bash scripts/e2e.sh   # E2E-регрессия (77 проверок)
+# векторный поиск после ввода ключа в /kimi:
+MOONSHOT_API_KEY=… MOONSHOT_EMBED_MODEL=… npm run embed -w @newinvest/db
 ```
 
 **Известные ограничения (бэклог):**
 
 - [ ] Обложки — hotlink с донора; скачать в медиатеку при переносе на прод
-- [x] ~~Редактор контента в админке — textarea HTML; TipTap 3 по решению раздела 6.2~~ → RichTextEditor: StarterKit+Image+Table, ленивая загрузка (e00657f)
-- [ ] Эмбеддинги не считаются (нужен TEI + Qwen3, раздел 7.2 — синергия с PULSE)
-- [x] ~~Сюжеты — таблицы пусты, конструктора и автопредложений нет~~ → конструктор есть (состав + главная); автопредложения через эмбеддинги — ждут TEI
-- [ ] Панель «куда дальше» на странице статьи (эндпоинт /articles/:id/related — в плане, раздел 4.2)
+- [x] ~~Редактор контента — textarea HTML~~ → TipTap 3 (e00657f)
+- [x] ~~Эмбеддинги не считаются (нужен TEI + Qwen3)~~ → контур на Moonshot embeddings: таблица article_embeddings + FTS search_tsv (миграция 0012), бэкфилл `npm run embed`, гибридный поиск с RRF (47cbe0e); авто-пересчёт при публикации — не подключён
+- [x] ~~Сюжеты — автопредложения через эмбеддинги~~ → появится после бэкфилла эмбеддингов (косинусная близость готова в smoke.ts)
+- [ ] Панель «куда дальше» на странице статьи (related через эмбеддинги)
 - [ ] SSO со вторым проектом; бот wptg не переподключён к новому API
-- [ ] Редиректы 301 и SEO-поля: таблицы есть, наполнение — при переезде (раздел 9→см. раздел про SEO)
+- [ ] Редиректы 301 и SEO-поля: таблицы есть, наполнение — при переезде
 - [ ] `packages/shared` и `packages/config` — пустые (типы дублируются между web/admin)
+- [ ] Прод-бэклог безопасности (из аудита раунда 2): trust proxy за реверс-прокси, HSTS+CSP для SPA, httpOnly-cookie вместо localStorage JWT, one-click unsubscribe в email, верификация email, ротация/отзыв JWT, ротация article_views
 
 ## 7. PULSE — параллельный проект: стек, БД, вектора (изучено 2026-11-06)
 
