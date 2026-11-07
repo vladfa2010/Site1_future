@@ -1,6 +1,8 @@
 import { useEffect, useState, useRef, lazy, Suspense } from 'react';
 import { useParams, useNavigate } from 'react-router';
 import { api } from '../api';
+import PreviewModal from '../components/PreviewModal';
+import MediaPickerModal from '../components/MediaPickerModal';
 
 // TipTap тяжёлый (~450 KB) — грузим редактор лениво, только в редакторе статьи
 const RichTextEditor = lazy(() =>
@@ -38,6 +40,8 @@ export default function ArticleEditPage() {
   const [metaBusy, setMetaBusy] = useState(false);
   const [metaSize, setMetaSize] = useState(200);
   const [metaMock, setMetaMock] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [genError, setGenError] = useState<string | null>(null);
   const [genMock, setGenMock] = useState(false);
   const coverFileRef = useRef<HTMLInputElement>(null);
@@ -461,30 +465,35 @@ export default function ArticleEditPage() {
       <div className="card space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="font-semibold">Обложка</h2>
-          {!isNew && (
-            <span className="flex items-center gap-2">
-              <input
-                ref={coverFileRef}
-                type="file"
-                accept="image/jpeg,image/png,image/webp,image/svg+xml"
-                className="hidden"
-                onChange={(e) => e.target.files?.[0] && void uploadCover(e.target.files[0])}
-              />
-              <button type="button" className="btn-secondary" disabled={uploadBusy} onClick={() => coverFileRef.current?.click()}>
-                {uploadBusy ? 'Загружаем…' : '⬆ Загрузить картинку'}
-              </button>
-              <button
-                type="button"
-                className="btn-secondary"
-                onClick={() => {
-                  setGenPrompt(buildPrompt());
-                  setGenOpen(!genOpen);
-                }}
-              >
-                ✨ Сгенерировать обложку
-              </button>
-            </span>
-          )}
+          <span className="flex items-center gap-2">
+            <button type="button" className="btn-secondary" onClick={() => setPickerOpen(true)}>
+              🗂 Из медиатеки
+            </button>
+            {!isNew && (
+              <>
+                <input
+                  ref={coverFileRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/svg+xml"
+                  className="hidden"
+                  onChange={(e) => e.target.files?.[0] && void uploadCover(e.target.files[0])}
+                />
+                <button type="button" className="btn-secondary" disabled={uploadBusy} onClick={() => coverFileRef.current?.click()}>
+                  {uploadBusy ? 'Загружаем…' : '⬆ Загрузить картинку'}
+                </button>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => {
+                    setGenPrompt(buildPrompt());
+                    setGenOpen(!genOpen);
+                  }}
+                >
+                  ✨ Сгенерировать обложку
+                </button>
+              </>
+            )}
+          </span>
         </div>
         {isNew && <p className="text-sm text-zinc-500">Сохраните статью — затем появится генерация обложки.</p>}
         {coverPreview && (
@@ -535,7 +544,34 @@ export default function ArticleEditPage() {
         <button className="btn" onClick={() => void save()} disabled={busy}>{busy ? 'Сохранение…' : 'Сохранить'}</button>
         {!isNew && form.status !== 'published' && <button className="btn-secondary" onClick={() => void publish()}>Опубликовать</button>}
         {!isNew && form.status === 'published' && <button className="btn-secondary" onClick={() => void unpublish()}>Вернуть в черновик</button>}
+        <button type="button" className="btn-secondary" onClick={() => setPreviewOpen(true)}>👁 Превью</button>
       </div>
+
+      {previewOpen && (
+        <PreviewModal
+          title={form.title}
+          type={form.type}
+          thesis={form.thesis}
+          excerpt={form.excerpt}
+          contentHtml={form.contentHtml}
+          coverUrl={coverPreview}
+          onClose={() => setPreviewOpen(false)}
+        />
+      )}
+
+      {pickerOpen && (
+        <MediaPickerModal
+          selectedId={coverMediaId}
+          onSelect={(m) => {
+            setCoverMediaId(m.id);
+            setCoverPreview(m.filePath.startsWith('/') ? `${window.location.origin}${m.filePath}` : m.filePath);
+            setGenMock(false);
+            setPickerOpen(false);
+            setNotice(`Обложка выбрана из медиатеки (#${m.id}) — не забудьте сохранить`);
+          }}
+          onClose={() => setPickerOpen(false)}
+        />
+      )}
     </div>
   );
 }
