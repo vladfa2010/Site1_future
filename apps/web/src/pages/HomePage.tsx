@@ -2,6 +2,7 @@ import { Link } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../api';
 import { ArticleCard, TYPE_LABELS } from '../components/ArticleCard';
+import { NewsCard } from '../components/NewsCard';
 import { IdeaCard } from '../components/IdeaCard';
 import { Carousel, CAROUSEL_ITEM } from '../components/Carousel';
 import { CoverThumb } from '../components/CoverThumb';
@@ -148,9 +149,9 @@ export default function HomePage() {
         </section>
       )}
 
-      {/* Свежие новости — карусель с обложками */}
+      {/* Свежие новости — широкие карточки как у донора (картинка сверху, лид снизу) */}
       <Section title="Свежие новости" linkTo="/novost" itemsCount={news?.articles.length ?? 0}>        {news?.articles.slice(0, 12).map((a) => (
-          <div key={a.id} className={CAROUSEL_ITEM}><ArticleCard article={a} /></div>
+          <div key={a.id} className={CAROUSEL_ITEM}><NewsCard article={a} /></div>
         ))}
       </Section>
 

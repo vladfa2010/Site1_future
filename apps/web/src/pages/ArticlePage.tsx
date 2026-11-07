@@ -7,6 +7,7 @@ import { sanitizeArticleHtml } from '../lib/sanitize';
 import { IdeaChart } from '../components/IdeaChart';
 import { Paywall } from '../components/Paywall';
 import { ArticleCard, TYPE_LABELS } from '../components/ArticleCard';
+import { NewsCard } from '../components/NewsCard';
 import { Carousel, CAROUSEL_ITEM } from '../components/Carousel';
 import { FavoriteButton } from '../components/FavoriteButton';
 import { SubscribeButton } from '../components/SubscribeButton';
@@ -20,13 +21,14 @@ function IdeaEvents({ articleId, type, title }: { articleId: number; type: strin
   });
   const events = data?.events ?? [];
   if (events.length === 0) return null; // принцип 4.3: показываем только внесённое
+  const Card = type === 'novost' ? NewsCard : ArticleCard;
   return (
     <section className="mt-10">
       <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-zinc-500">{title}</h2>
       <Carousel>
         {events.map((a) => (
           <div key={a.id} className={CAROUSEL_ITEM}>
-            <ArticleCard article={a} />
+            <Card article={a} />
           </div>
         ))}
       </Carousel>
@@ -43,6 +45,7 @@ function TypeCarousel({ type, title, excludeId }: { type: string; title: string;
   });
   const items = (data?.articles ?? []).filter((a) => a.id !== excludeId).slice(0, 10);
   if (items.length === 0) return null;
+  const Card = type === 'novost' ? NewsCard : ArticleCard;
   return (
     <section className="mt-10">
       <div className="mb-3 flex items-baseline justify-between">
@@ -52,7 +55,7 @@ function TypeCarousel({ type, title, excludeId }: { type: string; title: string;
       <Carousel>
         {items.map((a) => (
           <div key={a.id} className={CAROUSEL_ITEM}>
-            <ArticleCard article={a} />
+            <Card article={a} />
           </div>
         ))}
       </Carousel>
