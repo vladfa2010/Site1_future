@@ -20,6 +20,7 @@ import {
   articleStories,
   articles,
   media,
+  ARTICLE_TYPES,
 } from '@newinvest/db';
 import { optionalAuth, authRequired, requireRole, ADMIN_ROLES } from '../middleware/auth.js';
 import { accessCondition } from './articles.js';
@@ -92,11 +93,17 @@ bindingsRouter.get('/articles/:id/bindings-suggest', authRequired, requireRole('
   });
 });
 
-// GET /api/articles/:id/events — события по этой идее (публично).
-// События = статьи типа sobytie, опубликованные, с общими привязками
-// (компании/тикеры/индустрии/тренды), пейволл-соблюдение, свежие первыми.
+// GET /api/articles/:id/events — материалы по этой идее (публично).
+// ?type=sobytie|novost|analitika|interesnoe|ideya (по умолчанию sobytie).
+// Фильтр: тот же тип + опубликованные + общие привязки (компании/тикеры/индустрии/тренды),
+// пейволл-соблюдение, свежие первыми.
 bindingsRouter.get('/articles/:id/events', optionalAuth, async (req, res) => {
   const articleId = Number(req.params.id);
+  const type = String(req.query.type ?? 'sobytie');
+  if (!ARTICLE_TYPES.includes(type as (typeof ARTICLE_TYPES)[number])) {
+    res.status(400).json({ error: 'invalid type' });
+    return;
+  }
   const [idea] = await db.select({ id: articles.id }).from(articles)
     .where(and(eq(articles.id, articleId), eq(articles.type, 'ideya'))).limit(1);
   if (!idea) {
@@ -105,7 +112,7 @@ bindingsRouter.get('/articles/:id/events', optionalAuth, async (req, res) => {
   }
   const rels = await getRelations(articleId);
 
-  // собираем id событий с пересечением по любой связке — один UNION-запрос
+  // собираем id материалов с пересечением по любой связке — один UNION-запрос
   // (ids — из своей БД, числа, sql.raw безопасен)
   const parts = [
     rels.companyIds.length ? sql`select article_id from article_companies where company_id in (${sql.raw(rels.companyIds.join(','))})` : null,
@@ -142,7 +149,7 @@ bindingsRouter.get('/articles/:id/events', optionalAuth, async (req, res) => {
     .leftJoin(media, eq(articles.coverMediaId, media.id))
     .where(and(
       inArray(articles.id, [...candidateIds]),
-      eq(articles.type, 'sobytie'),
+      eq(articles.type, type),
       eq(articles.status, 'published'),
       acc ?? sql`true`,
     ))

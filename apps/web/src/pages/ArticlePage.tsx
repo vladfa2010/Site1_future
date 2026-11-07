@@ -9,20 +9,46 @@ import { Paywall } from '../components/Paywall';
 import { ArticleCard, TYPE_LABELS } from '../components/ArticleCard';
 import { Carousel, CAROUSEL_ITEM } from '../components/Carousel';
 
-/** Карусель «События по идее» — события с общими привязками (компании/тикеры/индустрии/тренды) */
-function IdeaEvents({ articleId }: { articleId: number }) {
+/** Карусель «материалы по этой идее» — общие привязки (компании/тикеры/индустрии/тренды) */
+function IdeaEvents({ articleId, type, title }: { articleId: number; type: string; title: string }) {
   const { data } = useQuery({
-    queryKey: ['idea-events', articleId],
-    queryFn: () => api.ideaEvents(articleId),
+    queryKey: ['idea-events', articleId, type],
+    queryFn: () => api.ideaEvents(articleId, type),
     staleTime: 60_000,
   });
   const events = data?.events ?? [];
   if (events.length === 0) return null; // принцип 4.3: показываем только внесённое
   return (
-    <section className="mt-6">
-      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-zinc-500">События по идее</h2>
+    <section className="mt-10">
+      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-zinc-500">{title}</h2>
       <Carousel>
         {events.map((a) => (
+          <div key={a.id} className={CAROUSEL_ITEM}>
+            <ArticleCard article={a} />
+          </div>
+        ))}
+      </Carousel>
+    </section>
+  );
+}
+
+/** Карусель «все материалы типа» — для каруселей «аналитика (все)», «интересное (все)», «все идеи» */
+function TypeCarousel({ type, title, excludeId }: { type: string; title: string; excludeId?: number }) {
+  const { data } = useQuery({
+    queryKey: ['articles-by-type', type],
+    queryFn: () => api.byType(type, 12),
+    staleTime: 60_000,
+  });
+  const items = (data?.articles ?? []).filter((a) => a.id !== excludeId).slice(0, 10);
+  if (items.length === 0) return null;
+  return (
+    <section className="mt-10">
+      <div className="mb-3 flex items-baseline justify-between">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">{title}</h2>
+        <a href={`/${type}`} className="text-sm">все →</a>
+      </div>
+      <Carousel>
+        {items.map((a) => (
           <div key={a.id} className={CAROUSEL_ITEM}>
             <ArticleCard article={a} />
           </div>
@@ -78,7 +104,7 @@ export default function ArticlePage() {
       </div>
 
       {/* События по этой идее — общие привязки (компании/тикеры/индустрии/тренды) */}
-      {article.type === 'ideya' && <IdeaEvents articleId={article.id} />}
+      {article.type === 'ideya' && <IdeaEvents articleId={article.id} type="sobytie" title="События по идее" />}
 
       <div
         className="prose-invert mt-6 space-y-4 leading-relaxed [&_h2]:mt-8 [&_h2]:text-xl [&_h2]:font-bold [&_a]:text-[#c9ff2a] [&_p]:text-zinc-300 [&_ul]:list-disc [&_ul]:pl-6"
@@ -99,6 +125,16 @@ export default function ArticlePage() {
             {article.sourceUrl}
           </a>
         </p>
+      )}
+
+      {/* Нижний блок каруселей — только на странице идеи (как у донора) */}
+      {article.type === 'ideya' && (
+        <>
+          <IdeaEvents articleId={article.id} type="novost" title="Новости по идее" />
+          <TypeCarousel type="analitika" title="Аналитика" />
+          <TypeCarousel type="interesnoe" title="Интересное" />
+          <TypeCarousel type="ideya" title="Все идеи" excludeId={article.id} />
+        </>
       )}
     </article>
   );

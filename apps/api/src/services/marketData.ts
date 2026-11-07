@@ -17,13 +17,23 @@ const CACHE_TTL = 15 * 60_000;
 async function moexCandles(symbol: string): Promise<{ points: ChartPoint[]; currency: string } | null> {
   const till = new Date().toISOString().slice(0, 10);
   const from = new Date(Date.now() - 190 * 86400_000).toISOString().slice(0, 10); // ~6 мес
-  const url = `https://iss.moex.com/iss/engines/stock/markets/shares/securities/${encodeURIComponent(symbol)}/candles.json?interval=24&from=${from}&till=${till}`;
-  const res = await fetch(url, { signal: AbortSignal.timeout(10_000) });
-  if (!res.ok) throw new Error(`MOEX ISS: ${res.status}`);
-  const json = (await res.json()) as {
-    candles: { columns: string[]; data: unknown[][] };
-    'candles:currency'?: string;
-  };
+  // MOEX ISS периодически падает 500 на запросах с from/till — fallback на без дат
+  const urls = [
+    `https://iss.moex.com/iss/engines/stock/markets/shares/securities/${encodeURIComponent(symbol)}/candles.json?interval=24&from=${from}&till=${till}`,
+    `https://iss.moex.com/iss/engines/stock/markets/shares/securities/${encodeURIComponent(symbol)}/candles.json?interval=24`,
+  ];
+  let json: { candles: { columns: string[]; data: unknown[][] } } | null = null;
+  for (const url of urls) {
+    try {
+      const res = await fetch(url, { signal: AbortSignal.timeout(10_000) });
+      if (!res.ok) continue;
+      json = (await res.json()) as { candles: { columns: string[]; data: unknown[][] } };
+      break;
+    } catch {
+      continue;
+    }
+  }
+  if (!json) return null;
   const cols = json.candles.columns;
   const iClose = cols.indexOf('close');
   const iBegin = cols.indexOf('begin');

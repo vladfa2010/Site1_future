@@ -78,13 +78,16 @@ export const api = {
   company: (slug: string) => get<CompanyDetail>(`/companies/${slug}`),
   trend: (slug: string) => get<TrendDetail>(`/trends/${slug}`),
   story: (slug: string) => get<StoryDetail>(`/stories/${slug}`),
-  ideaEvents: (articleId: number) =>
-    get<{ events: ArticleListItem[] }>(`/articles/${articleId}/events`),
+  ideaEvents: (articleId: number, type = 'sobytie') =>
+    get<{ events: ArticleListItem[] }>(`/articles/${articleId}/events?type=${type}`),
   trends: () => get<{ trends: { slug: string; name: string; description: string | null }[] }>('/trends'),
   screener: (params: Record<string, string> = {}) => {
     const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v)).toString();
     return get<{ ideas: Idea[]; total: number }>(`/screener${qs ? `?${qs}` : ''}`);
   },
+  // лента по типу (для каруселей «все …» на странице идеи)
+  byType: (type: string, limit = 10) =>
+    get<{ articles: ArticleListItem[] }>(`/articles?type=${type}&limit=${limit}`),
 };
 
 export interface Idea {
