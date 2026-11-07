@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router';
+import { Link, useSearchParams } from 'react-router';
 import { api } from '../api';
 import SearchInput from '../components/SearchInput';
 
@@ -14,7 +14,13 @@ interface Row {
 }
 
 export default function ArticlesPage() {
-  const [type, setType] = useState('');
+  const [params, setParams] = useSearchParams();
+  const type = params.get('type') ?? '';
+  const setType = (t: string) => setParams((p) => {
+    const next = new URLSearchParams(p);
+    if (t) next.set('type', t); else next.delete('type');
+    return next;
+  }, { replace: true });
   const [status, setStatus] = useState('');
   const [q, setQ] = useState('');
   const [rows, setRows] = useState<Row[]>([]);
@@ -47,17 +53,38 @@ export default function ArticlesPage() {
         <Link to="/articles/new" className="btn">+ Новая статья</Link>
       </div>
 
+      {/* Подзаголовки-типы: клик — предвыбранный список (как на сайте) */}
+      <nav className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-zinc-800 pb-2 text-sm">
+        <button
+          onClick={() => setType('')}
+          className={type === '' ? 'font-semibold text-[#beff00]' : 'text-zinc-500 hover:text-zinc-300'}
+        >
+          Все
+        </button>
+        {Object.entries(TYPE_LABELS).map(([v, l]) => (
+          <button
+            key={v}
+            onClick={() => setType(v)}
+            className={type === v ? 'font-semibold text-[#beff00]' : 'text-zinc-500 hover:text-zinc-300'}
+          >
+            {l}
+          </button>
+        ))}
+      </nav>
+
       <div className="flex flex-wrap items-center gap-3">
         <SearchInput value={q} onChange={setQ} placeholder="Поиск по заголовку / slug…" />
-        <select className="input max-w-[180px]" value={type} onChange={(e) => setType(e.target.value)}>
-          <option value="">Все типы</option>
-          {Object.entries(TYPE_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-        </select>
         <select className="input max-w-[180px]" value={status} onChange={(e) => setStatus(e.target.value)}>
           <option value="">Все статусы</option>
           {Object.entries(STATUS_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
         </select>
+        <span className="text-sm text-zinc-500">{loading ? '…' : `${rows.length} шт.`}</span>
       </div>
+      {type && (
+        <button onClick={() => setType('')} className="text-xs text-zinc-500 hover:text-zinc-300">
+          сбросить тип ✕
+        </button>
+      )}
 
       {error && <p className="text-sm text-red-400">{error}</p>}
       <div className="card overflow-x-auto p-0">
