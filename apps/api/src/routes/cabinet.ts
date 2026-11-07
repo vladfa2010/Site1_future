@@ -8,7 +8,7 @@ import { and, desc, eq, inArray, sql, type SQL } from 'drizzle-orm';
 import {
   db, favorites, subscriptions, articles, companies, trends, stories, users,
   articleCompanies, articleTrends, articleIndustries, articleTickers, media,
-  notificationSettings,
+  notificationSettings, industries, tickers,
 } from '@newinvest/db';
 import { authRequired } from '../middleware/auth.js';
 import { createLinkCode, tgStatus, disconnect, tgEnabled } from '../services/telegram.js';
@@ -150,7 +150,31 @@ cabinetRouter.delete('/subscriptions/:type/:id', async (req, res) => {
 
 cabinetRouter.get('/subscriptions', async (req, res) => {
   const rows = await db.select().from(subscriptions).where(eq(subscriptions.userId, req.user!.id));
-  res.json({ subscriptions: rows });
+
+  // обогащаем каждую подписку данными сущности (как /favorites) — фронт не резолвит имена сам
+  const ids = (t: string) => rows.filter((r) => r.entityType === t).map((r) => r.entityId);
+  const [aR, cR, tR, iR, kR] = await Promise.all([
+    ids('article').length ? db.select({ id: articles.id, type: articles.type, slug: articles.slug, title: articles.title }).from(articles).where(inArray(articles.id, ids('article'))) : Promise.resolve([]),
+    ids('company').length ? db.select({ id: companies.id, slug: companies.slug, name: companies.name }).from(companies).where(inArray(companies.id, ids('company'))) : Promise.resolve([]),
+    ids('trend').length ? db.select({ id: trends.id, slug: trends.slug, name: trends.name }).from(trends).where(inArray(trends.id, ids('trend'))) : Promise.resolve([]),
+    ids('industry').length ? db.select({ id: industries.id, slug: industries.slug, name: industries.name }).from(industries).where(inArray(industries.id, ids('industry'))) : Promise.resolve([]),
+    ids('ticker').length ? db.select({ id: tickers.id, slug: tickers.slug, symbol: tickers.symbol }).from(tickers).where(inArray(tickers.id, ids('ticker'))) : Promise.resolve([]),
+  ]);
+  const mapOf = <T extends { id: number }>(arr: T[]) => new Map(arr.map((x) => [x.id, x]));
+  const aMap = mapOf(aR as { id: number }[]); const cMap = mapOf(cR as { id: number }[]);
+  const tMap = mapOf(tR as { id: number }[]); const iMap = mapOf(iR as { id: number }[]); const kMap = mapOf(kR as { id: number }[]);
+
+  res.json({
+    subscriptions: rows.map((r) => {
+      const data =
+        r.entityType === 'article' ? aMap.get(r.entityId)
+        : r.entityType === 'company' ? cMap.get(r.entityId)
+        : r.entityType === 'trend' ? tMap.get(r.entityId)
+        : r.entityType === 'industry' ? iMap.get(r.entityId)
+        : kMap.get(r.entityId);
+      return { ...r, data: data ?? null };
+    }),
+  });
 });
 
 // PUT /api/avatar — выбор иконки из пресета

@@ -338,61 +338,61 @@ function FeedTab() {
 }
 
 /* ---------- Подписки ---------- */
+interface SubRow {
+  entityType: string;
+  entityId: number;
+  data: { title?: string; name?: string; symbol?: string; slug?: string; type?: string } | null;
+}
+
 function SubscriptionsTab() {
-  const [subs, setSubs] = useState<{ entityType: string; entityId: number }[]>([]);
-  const [names, setNames] = useState<Map<string, string>>(new Map());
+  const [subs, setSubs] = useState<SubRow[]>([]);
   const [loading, setLoading] = useState(true);
 
   const load = () => {
-    void Promise.all([
-      fetch('/api/subscriptions', { headers: authed() }).then((r) => (r.ok ? r.json() : Promise.reject())),
-      fetch('/api/companies').then((r) => (r.ok ? r.json() : Promise.reject())),
-      fetch('/api/trends').then((r) => (r.ok ? r.json() : Promise.reject())),
-      fetch('/api/industries').then((r) => (r.ok ? r.json() : Promise.reject())),
-      fetch('/api/tickers').then((r) => (r.ok ? r.json() : Promise.reject())),
-    ])
-      .then(([subsD, companiesD, trendsD, industriesD, tickersD]: [
-        { subscriptions: { entityType: string; entityId: number }[] },
-        { companies: { id: number; name: string; slug: string }[] },
-        { trends: { id: number; name: string; slug: string }[] },
-        { industries: { id: number; name: string; slug: string }[] },
-        { tickers: { id: number; symbol: string; slug: string }[] },
-      ]) => {
-        setSubs(subsD.subscriptions);
-        const m = new Map<string, string>();
-        companiesD.companies.forEach((c) => m.set(`company:${c.id}`, c.name));
-        trendsD.trends.forEach((t) => m.set(`trend:${t.id}`, t.name));
-        industriesD.industries.forEach((i) => m.set(`industry:${i.id}`, i.name));
-        tickersD.tickers.forEach((t) => m.set(`ticker:${t.id}`, t.symbol));
-        setNames(m);
-      })
+    void fetch('/api/subscriptions', { headers: authed() })
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((d: { subscriptions: SubRow[] }) => setSubs(d.subscriptions))
       .catch(() => {})
       .finally(() => setLoading(false));
   };
   useEffect(load, []);
 
-  const remove = async (s: { entityType: string; entityId: number }) => {
+  const remove = async (s: SubRow) => {
     await fetch(`/api/subscriptions/${s.entityType}/${s.entityId}`, { method: 'DELETE', headers: authed() });
     setSubs((prev) => prev.filter((x) => !(x.entityType === s.entityType && x.entityId === s.entityId)));
   };
 
-  const LABELS: Record<string, string> = { ticker: 'Тикер', company: 'Компания', trend: 'Тренд', industry: 'Индустрия' };
-  const ICONS: Record<string, string> = { ticker: '💹', company: '🏢', trend: '📈', industry: '🏭' };
+  const name = (s: SubRow) =>
+    s.data?.title ?? s.data?.name ?? s.data?.symbol ?? `${s.entityType} #${s.entityId}`;
+  const href = (s: SubRow) =>
+    s.entityType === 'article' && s.data?.type && s.data?.slug ? `/${s.data.type}/${s.data.slug}`
+    : s.data?.slug ? `/${s.entityType === 'company' ? 'kompaniya' : s.entityType}/${s.data.slug}`
+    : null;
+
+  const LABELS: Record<string, string> = { ticker: 'Тикер', company: 'Компания', trend: 'Тренд', industry: 'Индустрия', article: 'Идея' };
+  const ICONS: Record<string, string> = { ticker: '💹', company: '🏢', trend: '📈', industry: '🏭', article: '💡' };
   if (loading) return <p className="text-zinc-400">Загрузка…</p>;
-  if (subs.length === 0) return <p className="text-zinc-500">Нет подписок. Подписывайтесь на компании, тренды, тикеры и индустрии — их материалы попадут в «Мою ленту».</p>;
+  if (subs.length === 0) return <p className="text-zinc-500">Нет подписок. Подписывайтесь на компании, тренды, тикеры, индустрии и идеи — их материалы попадут в «Мою ленту».</p>;
 
   return (
     <ul className="space-y-2">
-      {subs.map((s) => (
-        <li key={`${s.entityType}:${s.entityId}`} className="flex items-center justify-between rounded-lg border border-[#2a2a2a] bg-[#191919] px-4 py-2.5 text-sm">
-          <span>
-            <span className="mr-2">{ICONS[s.entityType] ?? '•'}</span>
-            <span className="font-medium">{names.get(`${s.entityType}:${s.entityId}`) ?? `${LABELS[s.entityType] ?? s.entityType} #${s.entityId}`}</span>
-            <span className="ml-2 text-xs text-zinc-600">{LABELS[s.entityType]}</span>
-          </span>
-          <button onClick={() => void remove(s)} className="text-zinc-500 hover:text-red-400">отписаться</button>
-        </li>
-      ))}
+      {subs.map((s) => {
+        const link = href(s);
+        return (
+          <li key={`${s.entityType}:${s.entityId}`} className="flex items-center justify-between rounded-lg border border-[#2a2a2a] bg-[#191919] px-4 py-2.5 text-sm">
+            <span>
+              <span className="mr-2">{ICONS[s.entityType] ?? '•'}</span>
+              {link ? (
+                <Link to={link} className="font-medium hover:text-[#c9ff2a]">{name(s)}</Link>
+              ) : (
+                <span className="font-medium">{name(s)}</span>
+              )}
+              <span className="ml-2 text-xs text-zinc-600">{LABELS[s.entityType]}</span>
+            </span>
+            <button onClick={() => void remove(s)} className="text-zinc-500 hover:text-red-400">отписаться</button>
+          </li>
+        );
+      })}
     </ul>
   );
 }
