@@ -155,7 +155,22 @@ export default function HomePage() {
       </Section>
 
       {/* Пайплайн венчурного портфеля */}
-      <Section title="Пайплайн" linkTo="/portfolio?phase=pipeline" itemsCount={pipeline?.total ?? 0}>
+      <Section title="Пайплайн" linkTo="/portfolio?phase=pipeline" itemsCount={(pipeline?.total ?? 0) + 1}>
+        <div className={CAROUSEL_ITEM}>
+          <div className="flex aspect-[3/4] w-full flex-col rounded-lg border border-[#beff00]/30 bg-gradient-to-br from-zinc-900 to-zinc-950 p-5">
+            <h3 className="text-xl font-bold uppercase tracking-wide text-[#c9ff2a]">Пайплайн</h3>
+            <p className="mt-3 text-sm leading-relaxed text-zinc-300">
+              Идеи, которые мы уже отслеживаем и готовим к сделке. Путь каждой: от глобального тренда —
+              через компанию и стадию — до публичного архива.
+            </p>
+            <Link
+              to="/portfolio?phase=pipeline"
+              className="mt-auto rounded-full bg-[#beff00] px-4 py-2 text-center text-sm font-bold text-zinc-950 hover:bg-[#c9ff2a]"
+            >
+              Смотреть пайплайн
+            </Link>
+          </div>
+        </div>
         {pipeline?.ideas.slice(0, 12).map((i) => (
           <div key={i.id} className={CAROUSEL_ITEM}><IdeaCard idea={i} /></div>
         ))}
