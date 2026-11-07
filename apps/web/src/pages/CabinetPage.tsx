@@ -31,6 +31,7 @@ export default function CabinetPage() {
   const { user, logout } = useAuth();
   const { open } = useAuthModal();
   const [tab, setTab] = useState<Tab>('favorites');
+  const [avatarEdit, setAvatarEdit] = useState(false);
   const isAdmin = user?.role === 'admin' || user?.role === 'super_admin';
   const ADMIN_URL = import.meta.env.VITE_ADMIN_URL ?? 'http://localhost:5174';
 
@@ -50,9 +51,19 @@ export default function CabinetPage() {
     <div>
       <Breadcrumbs items={[{ label: 'Личный кабинет' }]} />
 
-      {/* Профиль: аватар, имя, выход (сюда переехал «Выйти» из шапки) */}
+      {/* Профиль: аватар (edit → модал выбора), имя, выход */}
       <header className="flex items-center gap-4">
-        <Avatar avatar={user.avatar} name={user.displayName} size={64} />
+        <button
+          type="button"
+          onClick={() => setAvatarEdit(true)}
+          title="Сменить иконку профиля"
+          className="group relative shrink-0 rounded-full"
+        >
+          <Avatar avatar={user.avatar} name={user.displayName} size={64} />
+          <span className="absolute inset-0 flex items-center justify-center rounded-full bg-black/60 text-[10px] font-semibold uppercase tracking-wide text-white opacity-0 transition-opacity group-hover:opacity-100">
+            edit
+          </span>
+        </button>
         <div className="min-w-0 flex-1">
           <h1 className="truncate text-2xl font-bold">{user.displayName ?? user.email}</h1>
           <p className="text-sm text-zinc-500">{user.email}</p>
@@ -71,8 +82,6 @@ export default function CabinetPage() {
           </button>
         </div>
       </header>
-
-      <AvatarPicker current={user.avatar} />
 
       <div className="mt-6 flex flex-wrap gap-2 border-b border-[#2a2a2a] pb-4">
         {TABS.map((t) => (
@@ -95,45 +104,52 @@ export default function CabinetPage() {
       </div>
 
       <DeleteAccountBlock />
+
+      {avatarEdit && (
+        <AvatarPickerModal current={user.avatar} onClose={() => setAvatarEdit(false)} />
+      )}
     </div>
   );
 }
 
-/* ---------- Аватар: выбор иконки из пресета ---------- */
-function AvatarPicker({ current }: { current?: string | null }) {
+/* ---------- Модал выбора иконки профиля ---------- */
+function AvatarPickerModal({ current, onClose }: { current?: string | null; onClose: () => void }) {
   const { refresh } = useAuth();
   const [selected, setSelected] = useState(current ?? null);
-  const [notice, setNotice] = useState<string | null>(null);
 
   const pick = async (emoji: string) => {
     setSelected(emoji);
     await fetch('/api/avatar', { method: 'PUT', headers: authed(), body: JSON.stringify({ avatar: emoji }) });
     refresh();
-    setNotice('Аватар обновлён ✓');
-    setTimeout(() => setNotice(null), 2000);
   };
 
   return (
-    <div className="mt-5">
-      <div className="flex items-center gap-3">
-        <span className="text-sm text-zinc-500">Иконка профиля:</span>
-        {notice && <span className="text-xs text-[#c9ff2a]">{notice}</span>}
-      </div>
-      <div className="mt-2 flex flex-wrap gap-2">
-        {AVATAR_PRESET.map((a) => (
-          <button
-            key={a.emoji}
-            type="button"
-            onClick={() => void pick(a.emoji)}
-            title="Выбрать иконку"
-            className={`flex h-11 w-11 items-center justify-center rounded-full text-xl transition-transform ${
-              selected === a.emoji ? 'ring-2 ring-[#beff00] ring-offset-2 ring-offset-black' : 'opacity-70 hover:scale-110 hover:opacity-100'
-            }`}
-            style={{ background: a.bg }}
-          >
-            {a.emoji}
-          </button>
-        ))}
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/80 p-4 backdrop-blur-sm" onClick={onClose}>
+      <div
+        className="w-full max-w-sm rounded-xl border border-zinc-700 bg-zinc-900 p-5 shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="font-semibold">Иконка профиля</h2>
+          <button onClick={onClose} className="rounded-lg bg-zinc-800 px-3 py-1 text-sm text-zinc-300 hover:bg-zinc-700">✕</button>
+        </div>
+        <div className="grid grid-cols-5 gap-3">
+          {AVATAR_PRESET.map((a) => (
+            <button
+              key={a.emoji}
+              type="button"
+              onClick={() => void pick(a.emoji)}
+              title="Выбрать иконку"
+              className={`flex h-14 w-14 items-center justify-center rounded-full text-2xl transition-transform ${
+                selected === a.emoji ? 'ring-2 ring-[#beff00] ring-offset-2 ring-offset-zinc-900' : 'opacity-75 hover:scale-110 hover:opacity-100'
+              }`}
+              style={{ background: a.bg }}
+            >
+              {a.emoji}
+            </button>
+          ))}
+        </div>
+        <p className="mt-4 text-center text-xs text-zinc-500">Клик — сразу сохраняется</p>
       </div>
     </div>
   );
