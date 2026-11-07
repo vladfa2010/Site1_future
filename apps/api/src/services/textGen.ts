@@ -3,12 +3,13 @@
  * Используется для лидов/выжимок: промпт собирается из всех полей статьи.
  * Без ключа — mock-режим: выжимка делается экстракцией первых предложений текста.
  */
-import { config } from '../config.js';
+import { getKimiSettings } from './kimiSettings.js';
 
 /** Генерирует текст по промпту. maxChars — мягкое ограничение длины результата. */
 export async function generateText(prompt: string, maxChars = 400, persona: TextPersona = 'editor'): Promise<string> {
-  if (!config.moonshotApiKey) return mockExtract(prompt);
-  return kimiText(prompt, maxChars, persona);
+  const s = await getKimiSettings();
+  if (!s.apiKey) return mockExtract(prompt);
+  return kimiText(prompt, maxChars, persona, s);
 }
 
 export type TextPersona = 'editor' | 'seo';
@@ -18,15 +19,20 @@ const PERSONA_PROMPTS: Record<TextPersona, string> = {
   seo: 'Ты опытный SEO-специалист. Читаешь статью целиком и пишешь meta description: уникально, информативно, с ключевыми словами из текста, с призывом к действию где уместно. Без кликбейта и обещаний. Отвечаешь ТОЛЬКО готовым текстом без пояснений и кавычек.',
 };
 
-async function kimiText(prompt: string, maxChars: number, persona: TextPersona): Promise<string> {
-  const res = await fetch(`${config.moonshotBaseUrl}/chat/completions`, {
+async function kimiText(
+  prompt: string,
+  maxChars: number,
+  persona: TextPersona,
+  s: { apiKey: string; baseUrl: string; textModel: string },
+): Promise<string> {
+  const res = await fetch(`${s.baseUrl}/chat/completions`, {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${config.moonshotApiKey}`,
+      Authorization: `Bearer ${s.apiKey}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: config.moonshotTextModel,
+      model: s.textModel,
       messages: [
         { role: 'system', content: PERSONA_PROMPTS[persona] },
         { role: 'user', content: prompt },

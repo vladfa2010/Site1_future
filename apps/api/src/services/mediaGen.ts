@@ -4,7 +4,7 @@
  * акцент), чтобы весь UX редактора работал до появления ключа.
  */
 import { createHash } from 'node:crypto';
-import { config } from '../config.js';
+import { getKimiSettings } from './kimiSettings.js';
 
 export interface GeneratedImage {
   buffer: Buffer;
@@ -13,18 +13,19 @@ export interface GeneratedImage {
 }
 
 export async function generateImage(prompt: string): Promise<GeneratedImage> {
-  if (!config.moonshotApiKey) return mockImage(prompt);
-  return kimiImage(prompt);
+  const s = await getKimiSettings();
+  if (!s.apiKey) return mockImage(prompt);
+  return kimiImage(prompt, s);
 }
 
-async function kimiImage(prompt: string): Promise<GeneratedImage> {
-  const res = await fetch(`${config.moonshotBaseUrl}/images/generations`, {
+async function kimiImage(prompt: string, s: { apiKey: string; baseUrl: string; imageModel: string }): Promise<GeneratedImage> {
+  const res = await fetch(`${s.baseUrl}/images/generations`, {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${config.moonshotApiKey}`,
+      Authorization: `Bearer ${s.apiKey}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ model: config.moonshotImageModel, prompt, n: 1, size: '1024x1536' }),
+    body: JSON.stringify({ model: s.imageModel, prompt, n: 1, size: '1024x1536' }),
   });
   const data = (await res.json().catch(() => ({}))) as {
     data?: { b64_json?: string; url?: string }[];

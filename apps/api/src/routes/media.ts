@@ -14,6 +14,7 @@ import { db, media, articles } from '@newinvest/db';
 import { authRequired, requireRole } from '../middleware/auth.js';
 import { generateImage } from '../services/mediaGen.js';
 import { generateText } from '../services/textGen.js';
+import { getKimiSettings } from '../services/kimiSettings.js';
 import { config } from '../config.js';
 
 export const mediaRouter = Router();
@@ -74,6 +75,7 @@ mediaRouter.post('/media/generate', authRequired, requireRole('admin', 'super_ad
   const { prompt, articleId } = parsed.data;
 
   try {
+    const s = await getKimiSettings();
     const img = await generateImage(prompt);
     const dir = path.resolve(config.uploadDir);
     await mkdir(dir, { recursive: true });
@@ -83,14 +85,14 @@ mediaRouter.post('/media/generate', authRequired, requireRole('admin', 'super_ad
     const url = `/uploads/${name}`;
     const [row] = await db
       .insert(media)
-      .values({ filePath: url, alt: prompt.slice(0, 120), sourceUrl: config.moonshotApiKey ? 'kimi-image-api' : 'mock-generator' })
+      .values({ filePath: url, alt: prompt.slice(0, 120), sourceUrl: s.apiKey ? 'kimi-image-api' : 'mock-generator' })
       .returning();
 
     if (articleId) {
       await db.update(articles).set({ coverMediaId: row.id }).where(eq(articles.id, articleId));
     }
 
-    res.status(201).json({ media: row, url, mock: !config.moonshotApiKey });
+    res.status(201).json({ media: row, url, mock: !s.apiKey });
   } catch (e) {
     res.status(502).json({ error: 'generation failed', message: e instanceof Error ? e.message : 'unknown' });
   }
@@ -117,7 +119,8 @@ mediaRouter.post('/media/generate-text', authRequired, requireRole('admin', 'sup
       res.status(422).json({ error: 'empty result', message: 'Недостаточно контекста — заполните текст статьи' });
       return;
     }
-    res.json({ text, mock: !config.moonshotApiKey });
+    const s = await getKimiSettings();
+    res.json({ text, mock: !s.apiKey });
   } catch (e) {
     res.status(502).json({ error: 'generation failed', message: e instanceof Error ? e.message : 'unknown' });
   }

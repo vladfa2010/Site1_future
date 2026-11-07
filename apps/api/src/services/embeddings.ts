@@ -3,7 +3,7 @@
  * Модель — 1024-мерная (под колонку vector(1024) в article_embeddings).
  * Без ключа — null: поиск честно работает только в FTS-режиме.
  */
-import { config } from '../config.js';
+import { getKimiSettings } from './kimiSettings.js';
 
 export interface EmbedResult {
   vector: number[];
@@ -11,14 +11,15 @@ export interface EmbedResult {
 }
 
 export async function embedText(text: string): Promise<EmbedResult | null> {
-  if (!config.moonshotApiKey || !config.moonshotEmbedModel) return null;
-  const res = await fetch(`${config.moonshotBaseUrl}/embeddings`, {
+  const s = await getKimiSettings();
+  if (!s.apiKey || !s.embedModel) return null;
+  const res = await fetch(`${s.baseUrl}/embeddings`, {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${config.moonshotApiKey}`,
+      Authorization: `Bearer ${s.apiKey}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ model: config.moonshotEmbedModel, input: text.slice(0, 8000) }),
+    body: JSON.stringify({ model: s.embedModel, input: text.slice(0, 8000) }),
   });
   const data = (await res.json().catch(() => ({}))) as {
     data?: { embedding?: number[] }[];
@@ -27,5 +28,5 @@ export async function embedText(text: string): Promise<EmbedResult | null> {
   if (!res.ok || !data.data?.[0]?.embedding) {
     throw new Error(`embeddings API: ${res.status} ${data.error?.message ?? 'no data'}`);
   }
-  return { vector: data.data[0].embedding, model: config.moonshotEmbedModel };
+  return { vector: data.data[0].embedding, model: s.embedModel };
 }

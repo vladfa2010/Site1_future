@@ -20,6 +20,7 @@ import UserEditPage from './pages/UserEditPage';
 import TariffsPage from './pages/TariffsPage';
 import FeaturesPage from './pages/FeaturesPage';
 import StatsPage from './pages/StatsPage';
+import KimiSettingsPage from './pages/KimiSettingsPage';
 
 function RequireAdmin({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
@@ -62,6 +63,7 @@ export default function App() {
                   <Route path="/tariffs" element={<TariffsPage />} />
                   <Route path="/features" element={<FeaturesPage />} />
                   <Route path="/stats" element={<StatsPage />} />
+                  <Route path="/kimi" element={<KimiSettingsPage />} />
                 </Routes>
               </Layout>
             </RequireAdmin>

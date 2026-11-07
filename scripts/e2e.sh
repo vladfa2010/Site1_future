@@ -141,6 +141,11 @@ echo "$GT" | grep -q '"text"' && ok || bad "textgen: возвращает тек
 echo "$GT" | grep -q '"mock":true' && ok || bad "textgen: mock-флаг без ключа"
 curl -s -o /dev/null -w "%{http_code}" -X POST "$B/api/media/generate-text" -H "$A" -H "$J" -d '{"prompt":"кор"}' | grep -q 400 && ok || bad "textgen: короткий промпт 400"
 curl -s -o /dev/null -w "%{http_code}" -X POST "$B/api/media/generate-text" -H "$J" -d '{"prompt":"тестовый промпт достаточной длины"}' | grep -q 401 && ok || bad "textgen: anon 401"
+# настройки Kimi: доступ только админу, сохранение читается обратно
+curl -s -o /dev/null -w "%{http_code}" "$B/api/admin/kimi-settings" | grep -q 401 && ok || bad "kimi-settings: anon 401"
+curl -s -X POST "$B/api/admin/kimi-settings" -H "$A" -H "$J" -d '{"textModel":"kimi-k3"}' | grep -q '"ok":true' && ok || bad "kimi-settings: POST"
+curl -s "$B/api/admin/kimi-settings" -H "$A" | grep -q '"textModel":"kimi-k3"' && ok || bad "kimi-settings: persisted"
+curl -s "$B/api/admin/kimi-settings" -H "$UA" -o /dev/null -w "%{http_code}" | grep -q 403 && ok || bad "kimi-settings: reader 403"
 
 echo ""
 echo "════════════════════════════════════════"

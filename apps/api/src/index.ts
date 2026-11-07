@@ -17,6 +17,7 @@ import { marketRouter } from './routes/market.js';
 import { cabinetRouter } from './routes/cabinet.js';
 import { featuresRouter } from './routes/features.js';
 import { searchRouter } from './routes/search.js';
+import { kimiSettingsRouter } from './routes/kimiSettings.js';
 
 // В production запрет на дефолтный секрет — fail fast
 if (process.env.NODE_ENV === 'production' && config.jwtSecret === 'dev-secret-change-me') {
@@ -49,6 +50,7 @@ app.use('/api/auth', authRouter);
 app.use('/api', bindingsRouter); // ПЕРЕД articlesRouter: пути /articles/:id/...
 app.use('/api/articles', articlesRouter);
 app.use('/api/search', searchRouter);
+app.use('/api', kimiSettingsRouter); // /admin/kimi-settings — ПЕРЕД cabinet (у него router-wide auth)
 app.use('/api', entitiesRouter);   // /companies /tickers /industries /trends
 app.use('/api', storiesRouter);    // /stories
 app.use('/api', screenerRouter);   // /screener /deal-phases /deal-stages
