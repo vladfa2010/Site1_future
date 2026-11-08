@@ -1,5 +1,6 @@
-async function get<T>(path: string): Promise<T> {
-  const res = await fetch(`/api${path}`);
+// ТЗ-06: signal пробрасывается в fetch — React Query отменяет запрос при unmount (queryFn: ({ signal }) => …)
+async function get<T>(path: string, signal?: AbortSignal): Promise<T> {
+  const res = await fetch(`/api${path}`, { signal });
   if (!res.ok) {
     const body = await res.json().catch(() => null);
     // статус и тело ошибки нужны фронту (пейволл 403 и др.)
@@ -119,14 +120,14 @@ export interface StoryDetail {
 }
 
 export const api = {
-  articles: (type?: string) =>
-    get<{ articles: ArticleListItem[] }>(`/articles${type ? `?type=${type}` : ''}`),
-  article: (type: string, slug: string) =>
-    get<{ article: ArticleDetail; author: ArticleAuthor | null; viewsCount: number; coverUrl: string | null; likesCount: number; sharesCount: number; liked: boolean; relations: ArticleRelations; stages: string[] }>(`/articles/${type}/${slug}`),
+  articles: (type?: string, signal?: AbortSignal) =>
+    get<{ articles: ArticleListItem[] }>(`/articles${type ? `?type=${type}` : ''}`, signal),
+  article: (type: string, slug: string, signal?: AbortSignal) =>
+    get<{ article: ArticleDetail; author: ArticleAuthor | null; viewsCount: number; coverUrl: string | null; likesCount: number; sharesCount: number; liked: boolean; relations: ArticleRelations; stages: string[] }>(`/articles/${type}/${slug}`, signal),
   author: (id: string | number) =>
     get<{ author: AuthorProfile; articles: ArticleListItem[] }>(`/authors/${id}`), // ТЗ-05
   company: (slug: string) => get<CompanyDetail>(`/companies/${slug}`),
-  trend: (slug: string) => get<TrendDetail>(`/trends/${slug}`),
+  trend: (slug: string, signal?: AbortSignal) => get<TrendDetail>(`/trends/${slug}`, signal),
   story: (slug: string) => get<StoryDetail>(`/stories/${slug}`),
   ideaEvents: (articleId: number, type = 'sobytie') =>
     get<{ events: ArticleListItem[] }>(`/articles/${articleId}/events?type=${type}`),
@@ -136,8 +137,8 @@ export const api = {
     return get<{ ideas: Idea[]; total: number }>(`/screener${qs ? `?${qs}` : ''}`);
   },
   // лента по типу (для каруселей «все …» на странице идеи)
-  byType: (type: string, limit = 10) =>
-    get<{ articles: ArticleListItem[] }>(`/articles?type=${type}&limit=${limit}`),
+  byType: (type: string, limit = 10, signal?: AbortSignal) =>
+    get<{ articles: ArticleListItem[] }>(`/articles?type=${type}&limit=${limit}`, signal),
   // ТЗ-07: Trending Now — топ по реальным просмотрам за окно (счётчик в тиккере не рендерим — аддендум v2.1)
   trending: () =>
     get<{ items: TrendingItem[]; windowHours: number; computedAt: string }>('/trending'),

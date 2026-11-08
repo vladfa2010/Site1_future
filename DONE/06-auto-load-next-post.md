@@ -321,3 +321,15 @@ export const setArticleTitle = (title: string) => { document.title = articleTitl
 8. Paywall-фильтр в `/api/trends/:slug` (шаг 1 каскада) — проверить/добавить accessCondition до реализации (сейчас не фильтрует — потенциальная череда paywall-блоков).
 9. Циклы между переходами (назад → вперёд) — зафиксировать в рисках: внутри монтирования защита есть, между монтированиями нет (лимит 3 смягчает).
 10. api.get расширяем `signal?: AbortSignal` — тело не читается при 403, только status (паттерн уже есть).
+
+---
+
+## СТАТУС: ✅ РЕАЛИЗОВАНО (2026-11-08, агент-53, принято)
+
+**Реализация:** `lib/pageTitle.ts` — единый менеджер title (SITE_TITLE, articleTitle ««{title}» — инвестиционно.рф» полный заголовок, setArticleTitle, resetPageTitle); ArticlePage: useEffect установки title до ранних return'ов, сброс на unmount (аддендум №7), `<AutoLoadNext key={article.id}>` в конце статьи (key сбрасывает стейт при переходе между статьями без unmount). `lib/nextCandidates.ts` — чистый каскад тренд→тип→все с исключениями. `AutoLoadNext.tsx` — стейт-машина, победа stale closure: observer один раз с пустыми deps читает только refs, loadingRef.current = items.some(loading) пересчитывается в эффекте (нет мёртвого замка), явный observer.disconnect в cleanup, повторный pump() при освобождении loadingRef если sentinel ещё во вьюпорте (иначе лента встала бы после первой подгрузки — observer не даёт второго события), replaceState/title один раз на статью через lastOkKeyRef и только для статуса ok, скелет 2 блока animate-pulse, error-блок не рендерится но считается в лимит 3, paywall-блок встроен как есть, «Читать дальше» после 3-й. API: GET /api/trends/:slug переведён на optionalAuth + accessCondition (№8 — закрытые статьи больше не попадают анону в кандидаты); api.get пробрасывает AbortSignal.
+
+**Отклонения от ТЗ (приняты):** api.articles() без limit (дефолт эндпоинта 20 — поведение как в ТЗ). UI-сценарии R1–R14 (observer, replaceState, abort) — ручной проход, curl JS не исполняет (зафиксировано в ТЗ §5.1).
+
+**Приёмка:** tsc чисто (api+web), web build успешен, E2E 216/216 (+2: tariff-материал отфильтрован для анона в /api/trends/:slug и виден владельцу тарифа).
+
+**E2E: 216/216.**

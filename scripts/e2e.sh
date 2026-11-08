@@ -63,6 +63,7 @@ echo "  E2E: АДМИНКА — СУЩНОСТИ"
 echo "════════════════════════════════════════"
 curl -s -X POST "$B/api/companies" -H "$A" -H "$J" -d '{"slug":"e2e-corp","name":"E2E Corp","industryIds":[1]}' | grep -q e2e-corp && ok || bad "companies: создать"
 curl -s -X POST "$B/api/trends" -H "$A" -H "$J" -d '{"slug":"e2e-trend","name":"E2E Тренд"}' | grep -q e2e-trend && ok || bad "trends: создать"
+TID=$(curl -s "$B/api/trends" | jqget "[t['id'] for t in d['trends'] if t['slug']=='e2e-trend'][0]")
 curl -s -X POST "$B/api/industries" -H "$A" -H "$J" -d '{"slug":"e2e-ind","name":"E2E Индустрия"}' | grep -q e2e-ind && ok || bad "industries: создать"
 curl -s -X POST "$B/api/tickers" -H "$A" -H "$J" -d '{"slug":"e2e","symbol":"E2E","companyId":1}' | grep -q E2E && ok || bad "tickers: создать"
 curl -s "$B/api/tickers?q=e2e" -H "$A" | grep -q E2E && ok || bad "tickers: автодополнение"
@@ -110,9 +111,14 @@ curl -s -X PUT "$B/api/avatar" -H "$UA" -H "$J" -d '{"avatar":"🧠"}' | grep -q
 curl -s -X POST "$B/api/articles/propose" -H "$UA" -H "$J" -d '{"type":"ideya","title":"E2E идея от юзера","text":"Текст идеи более двадцати символов для валидации"}' | grep -q draft && ok || bad "propose: отправка идеи"
 curl -s -o /dev/null -w "%{http_code}" -X POST "$B/api/articles/propose" -H "$J" -d '{"type":"ideya","title":"аноним","text":"анонимный текст более двадцати символов"}' | grep -q 401 && ok || bad "propose: anon 401"
 # пейволл tariff-материал (insider=1, юзер с тарифом 1)
-curl -s -X POST "$B/api/articles" -H "$A" -H "$J" -d '{"type":"analitika","slug":"e2e-insider","title":"E2E Инсайд","contentHtml":"<p>x</p>","status":"published","accessLevel":"tariff","accessTariffId":1}' > /dev/null
+INSIDER=$(curl -s -X POST "$B/api/articles" -H "$A" -H "$J" -d '{"type":"analitika","slug":"e2e-insider","title":"E2E Инсайд","contentHtml":"<p>x</p>","status":"published","accessLevel":"tariff","accessTariffId":1}' | jqget "d['article']['id']")
 curl -s -o /dev/null -w "%{http_code}" "$B/api/articles/analitika/e2e-insider" | grep -q 403 && ok || bad "paywall: anon 403 на tariff"
 curl -s -o /dev/null -w "%{http_code}" "$B/api/articles/analitika/e2e-insider" -H "$UA" | grep -q 200 && ok || bad "paywall: юзер с тарифом 200"
+# ТЗ-06 (аддендум v2.1 №8): лента тренда фильтруется по пейволлу — иначе анону в кандидаты
+# автоподгрузки «следующий материал» попадали бы закрытые статьи (череда paywall-блоков)
+curl -s -X PUT "$B/api/articles/$INSIDER/relations" -H "$A" -H "$J" -d "{\"trendIds\":[$TID]}" > /dev/null
+curl -s "$B/api/trends/e2e-trend" | python3 -c "import json,sys; a=json.load(sys.stdin)['articles']; assert all(x['slug']!='e2e-insider' for x in a); print('ok')" > /dev/null 2>&1 && ok || bad "trends: tariff-материал отфильтрован для анона (ТЗ-06)"
+curl -s "$B/api/trends/e2e-trend" -H "$UA" | grep -q e2e-insider && ok || bad "trends: tariff-материал виден владельцу тарифа (ТЗ-06)"
 
 echo "════════════════════════════════════════"
 echo "  E2E: ТЗ-03 — СЧЁТЧИКИ ПРОСМОТРОВ / ДОКРУТКА"

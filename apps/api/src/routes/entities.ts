@@ -19,8 +19,9 @@ import {
   media,
   tariffPlans,
 } from '@newinvest/db';
-import { authRequired, requireRole } from '../middleware/auth.js';
+import { authRequired, optionalAuth, requireRole } from '../middleware/auth.js';
 import { virtualViewsSql } from '../services/viewsBump.js';
+import { accessCondition, isAdmin } from './articles.js';
 
 export const entitiesRouter = Router();
 
@@ -288,12 +289,18 @@ entitiesRouter.get('/trends', async (_req, res) => {
 });
 
 // GET /api/trends/kosmos — лендинг-тренд: лонгрид + статьи
-entitiesRouter.get('/trends/:slug', async (req, res) => {
+// ТЗ-06 (аддендум v2.1 №8): лента тренда фильтруется по пейволлу — иначе анону
+// в кандидаты автоподгрузки («следующий материал») попадали бы закрытые статьи
+// и страница превращалась бы в череду встроенных paywall-блоков.
+entitiesRouter.get('/trends/:slug', optionalAuth, async (req, res) => {
   const [trend] = await db.select().from(trends).where(eq(trends.slug, req.params.slug)).limit(1);
   if (!trend) {
     res.status(404).json({ error: 'not found' });
     return;
   }
+  const conditions: SQL[] = [eq(articleTrends.trendId, trend.id), eq(articles.status, 'published')];
+  const acc = accessCondition(req.user, isAdmin(req.user?.role));
+  if (acc) conditions.push(acc);
   const trendArticles = await db
     .select({
       id: articles.id,
@@ -309,7 +316,7 @@ entitiesRouter.get('/trends/:slug', async (req, res) => {
     .from(articleTrends)
     .innerJoin(articles, eq(articleTrends.articleId, articles.id))
     .leftJoin(media, eq(articles.coverMediaId, media.id))
-    .where(and(eq(articleTrends.trendId, trend.id), eq(articles.status, 'published')))
+    .where(and(...conditions))
     .orderBy(sql`${articles.publishedAt} desc nulls last`)
     .limit(50);
   res.json({ trend, articles: trendArticles });

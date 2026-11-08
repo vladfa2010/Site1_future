@@ -1,7 +1,10 @@
 import { useParams, Link } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
+import { useEffect } from 'react';
 import { api } from '../api';
 import { EntityChips } from '../components/EntityChips';
+import { AutoLoadNext } from '../components/AutoLoadNext';
+import { setArticleTitle, resetPageTitle } from '../lib/pageTitle';
 import { Breadcrumbs, type Crumb } from '../components/Breadcrumbs';
 import { JsonLdBreadcrumbs } from '../components/JsonLdBreadcrumbs';
 import { sanitizeArticleHtml } from '../lib/sanitize';
@@ -78,6 +81,13 @@ export default function ArticlePage() {
     queryKey: ['article', type, slug],
     queryFn: () => api.article(type, slug),
   });
+
+  // ТЗ-06: единый менеджер document.title — строго до ранних return'ов (хуки).
+  // Заголовок ПОЛНЫЙ, без обрезки; на unmount — сброс на SITE_TITLE (аддендум v2.1 №7).
+  useEffect(() => {
+    if (data) setArticleTitle(data.article.title);
+  }, [data]);
+  useEffect(() => () => resetPageTitle(), []);
 
   if (isLoading) return <p className="text-zinc-400">Загрузка…</p>;
   // пейволл: 403 от API → экран «войдите / оформите тариф»
@@ -221,6 +231,10 @@ export default function ArticlePage() {
           <TypeCarousel type="ideya" title="Все идеи" excludeId={article.id} />
         </>
       )}
+
+      {/* ТЗ-06: автоподгрузка следующего материала в самом низу (после всех блоков).
+          key={article.id} — при переходе на другую статью без unmount стейт подгрузки сбрасывается */}
+      <AutoLoadNext key={article.id} current={article} relations={relations} />
     </article>
   );
 }
