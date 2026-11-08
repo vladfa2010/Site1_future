@@ -45,7 +45,13 @@ export default function UserEditPage() {
     try {
       const { user: updated } = await api<{ user: { id: number } }>(`/users/${id}`, {
         method: 'PATCH',
-        body: JSON.stringify({ ...form, tariffId: form.tariffId ? Number(form.tariffId) : null, tariffExpiresAt: form.tariffExpiresAt ? new Date(form.tariffExpiresAt).toISOString() : null }),
+        body: JSON.stringify({
+          ...form,
+          // пустое имя = сброс в null (колонка nullable), иначе серверная min(2) даст 400
+          displayName: form.displayName.trim() || null,
+          tariffId: form.tariffId ? Number(form.tariffId) : null,
+          tariffExpiresAt: form.tariffExpiresAt ? new Date(form.tariffExpiresAt).toISOString() : null,
+        }),
       });
       setNotice(`Сохранено ✓ (id=${updated.id})`);
     } catch (err) {

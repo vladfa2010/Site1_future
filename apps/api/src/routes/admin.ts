@@ -63,7 +63,7 @@ adminRouter.get('/users/export.csv', authRequired, requireRole(...ADMIN_ROLES), 
 const userPatchSchema = z.object({
   role: z.enum(['super_admin', 'admin', 'author', 'reader']).optional(),
   email: z.string().email().optional(),
-  displayName: z.string().trim().min(2).max(40).optional(),
+  displayName: z.string().trim().min(2).max(40).nullable().optional(), // null — сбросить (колонка nullable)
   tariffId: z.number().int().nullable().optional(),        // пейволл: тариф из БД (null — снять)
   tariffExpiresAt: z.string().nullable().optional(),      // ISO-дата; null = бессрочно
 });
@@ -98,7 +98,7 @@ adminRouter.patch('/users/:id', authRequired, requireRole('super_admin'), async 
   const updates: Record<string, unknown> = {};
   if (role) updates.role = role;
   if (email) updates.email = email;
-  if (displayName) updates.displayName = displayName;
+  if (displayName !== undefined) updates.displayName = displayName; // null — сбросить имя
   if (tariffId !== undefined) updates.tariffId = tariffId;
   if (tariffExpiresAt !== undefined) updates.tariffExpiresAt = tariffExpiresAt ? new Date(tariffExpiresAt) : null;
 

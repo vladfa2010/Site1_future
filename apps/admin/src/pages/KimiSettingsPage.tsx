@@ -47,7 +47,9 @@ export default function KimiSettingsPage() {
     setError(null);
     setNotice(null);
     try {
-      const body: Record<string, string> = { baseUrl, textModel, imageModel, embedModel };
+      // пустой baseUrl не шлём — сервер валидирует его как URL с allowlist и даст 400
+      const body: Record<string, string> = { textModel, imageModel, embedModel };
+      if (baseUrl.trim()) body.baseUrl = baseUrl.trim();
       if (apiKey.trim()) body.apiKey = apiKey.trim();
       await api('/admin/kimi-settings', { method: 'POST', body: JSON.stringify(body) });
       setApiKey('');
