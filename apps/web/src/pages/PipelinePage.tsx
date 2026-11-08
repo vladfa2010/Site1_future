@@ -1,6 +1,7 @@
 import { useSearchParams, Link } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
-import { Breadcrumbs } from '../components/Breadcrumbs';
+import { Breadcrumbs, type Crumb } from '../components/Breadcrumbs';
+import { JsonLdBreadcrumbs } from '../components/JsonLdBreadcrumbs';
 
 interface Idea {
   id: number;
@@ -80,9 +81,14 @@ export default function PipelinePage() {
     queryFn: async () => (await fetch(`/api/screener?${qs}`)).json() as Promise<{ ideas: Idea[] }>,
   });
 
+  // ТЗ-01: визуальные крошки включают фазу/тренд из query; JSON-LD — только «Скринер проектов»
+  // без query-параметров (§4.7, осознанное несоответствие) — тот же массив, slice(0, 1).
+  const crumbs: Crumb[] = [{ label: 'Скринер проектов' }, ...(phase ? [{ label: PHASE_LABELS[phase] ?? phase }] : []), ...(trend ? [{ label: trends?.trends?.find((t: { slug: string }) => t.slug === trend)?.name ?? trend }] : [])];
+
   return (
     <div className="space-y-8">
-      <Breadcrumbs items={[{ label: 'Скринер проектов' }, ...(phase ? [{ label: PHASE_LABELS[phase] ?? phase }] : []), ...(trend ? [{ label: trends?.trends?.find((t: { slug: string }) => t.slug === trend)?.name ?? trend }] : [])]} />
+      <Breadcrumbs items={crumbs} />
+      <JsonLdBreadcrumbs items={crumbs.slice(0, 1)} />
       <h1 className="text-2xl font-bold">Скринер проектов</h1>
 
       {/* Фильтры: состояние в URL — можно делиться выборкой */}

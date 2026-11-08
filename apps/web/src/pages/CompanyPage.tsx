@@ -3,7 +3,8 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from '../api';
 import { ArticleCard } from '../components/ArticleCard';
 import { RoundsTable } from '../components/RoundsTable';
-import { Breadcrumbs } from '../components/Breadcrumbs';
+import { Breadcrumbs, type Crumb } from '../components/Breadcrumbs';
+import { JsonLdBreadcrumbs } from '../components/JsonLdBreadcrumbs';
 import { FavoriteButton } from '../components/FavoriteButton';
 import { SubscribeButton } from '../components/SubscribeButton';
 
@@ -19,9 +20,13 @@ export default function CompanyPage() {
 
   const { company, tickers, industries, articles, fundingRounds } = data;
 
+  // ТЗ-01: один массив крошек — визуал + JSON-LD (элемент 2 → /portfolio, §4.5)
+  const crumbs: Crumb[] = [{ label: 'Скринер проектов', to: '/portfolio' }, { label: company.name }];
+
   return (
     <div className="space-y-10">
-      <Breadcrumbs items={[{ label: 'Скринер проектов', to: '/portfolio' }, { label: company.name }]} />
+      <Breadcrumbs items={crumbs} />
+      <JsonLdBreadcrumbs items={crumbs} />
       {/* Шапка профиля */}
       <header>
         <div className="flex items-start justify-between gap-4">

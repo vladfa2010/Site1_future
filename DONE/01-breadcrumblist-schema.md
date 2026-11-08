@@ -248,3 +248,20 @@ curl -s "$W/" | grep -q 'application/ld+json' && echo "ПРОБЛЕМА: ld+json
 7. Фолбэк `TYPE_LABELS[article.type] ?? article.type` в name.
 8. 3 unit-теста на чистые функции (node:test, паттерн ТЗ-09): позиции, escaping двойного `<`, сериализация без item у последнего.
 9. ТЗ-10 дополняется BreadcrumbList в bot-шаблоне для ВСЕХ типов страниц (не только статей) — правка вносится в ТЗ-10, здесь фиксируем контракт-источник: `buildBreadcrumbList(Crumb[])`.
+
+---
+
+## СТАТУС: ✅ РЕАЛИЗОВАНО (2026-11-08, агент-50, принято)
+
+**Реализация:** `packages/db/src/breadcrumbs.ts` — чистые функции `buildBreadcrumbList(items, origin)` (position с 1; item только у непоследних с to; последний БЕЗ item; непоследний без to — name-only по schema.org) и `serializeJsonLd` ('<' → '\u003c', U+2028/29; валидный JSON, roundtrip проверен). Сабпас-экспорт `@newinvest/db/breadcrumbs`. `JsonLdBreadcrumbs.tsx` — useEffect-инжект `<script type="application/ld+json" data-breadcrumb-ld>`, замена своего скрипта при клиентском переходе, cleanup, StrictMode-safe; «Главная» дописывается компонентом (единый массив crumbs на визуал + JSON-LD). Интегрировано на 6 страницах: ArticlePage (в т.ч. обрезка заголовка перенесена в Breadcrumbs через `truncate` — визуал обрезанный, JSON-LD полный), TypePage, TrendPage, CompanyPage, StoryPage, PipelinePage (только «Скринер», без query). На 403-пейволле не рендерится. Главная/search/feed/cabinet/служебные не тронуты.
+
+**Контракт для ТЗ-10:** `packages/db/src/breadcrumbs.contract.ts` — серверный botRender обязан генерировать идентичный JSON-LD (синхронные правки обоих файлов).
+
+**Отклонения от ТЗ (приняты):**
+1. Утилиты в `@newinvest/db` (не apps/web/src/lib) — инвариант монорепо, server/client переиспользование; хост `window.location.origin`, не VITE_SITE_URL.
+2. Добавлен `packages/db/tsconfig.json` (в репо отсутствовал, без него tsc -p packages/db не запускался).
+3. should-9 (title через Helmet) отменён аддендумом v2.1 №1.
+
+**Приёмка:** tsc чисто (apps/web + packages/db), unit-тесты 14/14 (6 новых: последний без item, origin+to, непоследний без to, escaping '</script>', U+2028/29, roundtrip), web build собирается, E2E 191/191.
+
+**E2E: 191/191.**

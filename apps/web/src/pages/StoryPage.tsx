@@ -1,7 +1,8 @@
 import { useParams } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../api';
-import { Breadcrumbs } from '../components/Breadcrumbs';
+import { Breadcrumbs, type Crumb } from '../components/Breadcrumbs';
+import { JsonLdBreadcrumbs } from '../components/JsonLdBreadcrumbs';
 import { FavoriteButton } from '../components/FavoriteButton';
 
 export default function StoryPage() {
@@ -16,9 +17,13 @@ export default function StoryPage() {
 
   const { story, articles } = data;
 
+  // ТЗ-01: один массив крошек — визуал + JSON-LD («Сюжеты» без to: индексной страницы нет, §4.6)
+  const crumbs: Crumb[] = [{ label: 'Сюжеты' }, { label: story.name }];
+
   return (
     <div className="space-y-10">
-      <Breadcrumbs items={[{ label: 'Сюжеты' }, { label: story.name }]} />
+      <Breadcrumbs items={crumbs} />
+      <JsonLdBreadcrumbs items={crumbs} />
       <header>
         <span className="text-xs uppercase tracking-wide text-zinc-500">Сюжет</span>
         <div className="flex items-start justify-between gap-4">

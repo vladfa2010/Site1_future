@@ -5,7 +5,8 @@ import { stripHtml } from '@newinvest/db/text-utils';
 import { api, type ArticleListItem } from '../api';
 import { ArticleCard, TYPE_LABELS } from '../components/ArticleCard';
 import { VideoCard } from '../components/VideoCard';
-import { Breadcrumbs } from '../components/Breadcrumbs';
+import { Breadcrumbs, type Crumb } from '../components/Breadcrumbs';
+import { JsonLdBreadcrumbs } from '../components/JsonLdBreadcrumbs';
 import { Carousel, CAROUSEL_ITEM } from '../components/Carousel';
 import { FavoriteButton } from '../components/FavoriteButton';
 import { SubscribeButton } from '../components/SubscribeButton';
@@ -43,9 +44,13 @@ export default function TrendPage() {
 
   const byType = (type: string): ArticleListItem[] => articles.filter((a) => a.type === type);
 
+  // ТЗ-01: один массив крошек — визуал + JSON-LD («Тренды» без to: индексной страницы нет, §4.4)
+  const crumbs: Crumb[] = [{ label: 'Тренды' }, { label: trend.name }];
+
   return (
     <div className="space-y-10">
-      <Breadcrumbs items={[{ label: 'Тренды' }, { label: trend.name }]} />
+      <Breadcrumbs items={crumbs} />
+      <JsonLdBreadcrumbs items={crumbs} />
 
       {/* Шапка */}
       <header className="flex items-start justify-between gap-4">

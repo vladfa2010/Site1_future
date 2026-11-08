@@ -2,7 +2,8 @@ import { useParams } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../api';
 import { EntityChips } from '../components/EntityChips';
-import { Breadcrumbs } from '../components/Breadcrumbs';
+import { Breadcrumbs, type Crumb } from '../components/Breadcrumbs';
+import { JsonLdBreadcrumbs } from '../components/JsonLdBreadcrumbs';
 import { sanitizeArticleHtml } from '../lib/sanitize';
 import { toEmbedUrl } from '../lib/video';
 import { IdeaChart } from '../components/IdeaChart';
@@ -87,18 +88,20 @@ export default function ArticlePage() {
 
   const { article, relations, stages } = data;
 
+  // ТЗ-01: один массив крошек на страницу — визуал + JSON-LD (последний без item, полный заголовок в JSON-LD)
+  const crumbs: Crumb[] = [
+    { label: TYPE_LABELS[article.type] ?? article.type, to: `/${article.type}` },
+    { label: article.title, truncate: 60 },
+  ];
+
   // «Торги на бирже» ⇒ у компании есть тикер → показываем график (источник решает бэкенд)
   const trading = (stages ?? []).includes('Торги на бирже');
   const chartSymbol = trading ? relations.tickers[0]?.symbol ?? null : null;
 
   return (
     <article className="mx-auto max-w-3xl">
-      <Breadcrumbs
-        items={[
-          { label: TYPE_LABELS[article.type] ?? article.type, to: `/${article.type}` },
-          { label: article.title.length > 60 ? `${article.title.slice(0, 60)}…` : article.title },
-        ]}
-      />
+      <Breadcrumbs items={crumbs} />
+      <JsonLdBreadcrumbs items={crumbs} />
       <div className="flex items-start justify-between gap-4">
         <h1 className="mt-2 text-3xl font-bold leading-tight">{article.title}</h1>
         {/* ТЗ-04: лайк + счётчик шеров (иконка + число без слов, ревью v2.1 №5) + избранное + подписка на идею */}

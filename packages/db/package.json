@@ -8,6 +8,10 @@
     "./text-utils": {
       "types": "./src/text-utils.ts",
       "default": "./src/text-utils.ts"
+    },
+    "./breadcrumbs": {
+      "types": "./src/breadcrumbs.ts",
+      "default": "./src/breadcrumbs.ts"
     }
   },
   "scripts": {
