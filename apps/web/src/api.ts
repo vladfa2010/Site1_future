@@ -26,8 +26,9 @@ async function send<T>(path: string, method: 'PUT' | 'DELETE' | 'POST', body?: u
   return res.json() as Promise<T>;
 }
 
-/** Каналы шеринга — финальный список закрепит ТЗ-02 (lib/share.ts); пока тип и метод тут (решение ТЗ-04) */
-export type ShareChannel = 'telegram' | 'vk' | 'whatsapp' | 'copylink' | 'native_share' | 'unknown';
+/** Каналы шеринга — единый union на обе границы (фронт-обработчики и api.share), ТЗ-02 */
+import type { ShareChannel } from './lib/share';
+export type { ShareChannel };
 
 // Типы зеркалят ответы API (apps/api/src/routes/*)
 export interface ArticleListItem {
@@ -121,7 +122,7 @@ export const api = {
     send<{ ok: boolean; liked: boolean; likesCount: number }>(`/articles/${articleId}/like`, 'PUT'),
   unlike: (articleId: number) =>
     send<{ ok: boolean; liked: boolean; likesCount: number }>(`/articles/${articleId}/like`, 'DELETE'),
-  share: (articleId: number, channel: string) =>
+  share: (articleId: number, channel: ShareChannel) =>
     send<{ ok: boolean; sharesCount: number }>(`/articles/${articleId}/share`, 'POST', { channel }),
 };
 

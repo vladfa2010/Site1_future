@@ -193,6 +193,12 @@ Inline SVG внутри `ShareButtons.tsx` (Telegram paper-plane, «VK», WhatsA
 
 ## 5. Тестирование (e2e)
 
+> **Ручной чек-лист (ревью v2.1 №2):** Playwright в репо НЕ добавляем — сценарии §5
+> проходятся вручную (реальный попап Telegram/VK на десктопе, нативный шит на
+> Android Chrome / iOS Safari, копирование по HTTP-dev). Автоматизировано только
+> curl-smoke в `scripts/e2e.sh` (секция «ТЗ-02»): страница статьи 200 через
+> SPA-fallback, `sharesCount` в detail; POST share 201/whitelist/429 — см. секцию ТЗ-04.
+
 Инфраструктура Playwright — из ТЗ-04 (п. 4.7): `@playwright/test` как devDependency, конфиг `apps/web/playwright.config.ts`, спеки в `apps/web/e2e/`. Спека **`apps/web/e2e/share.spec.ts`**:
 
 1. **Видимость на всех типах:** для фикстур каждого из 5 типов (`analitika`, `novost`, `ideya`, `interesnoe`, `video`) блок шеринга присутствует ровно в двух местах: после чипов и после «Источника» (проверка по data-testid `share-block` + порядковый соседний элемент).
@@ -260,3 +266,20 @@ Inline SVG внутри `ShareButtons.tsx` (Telegram paper-plane, «VK», WhatsA
 6. Paywall-страница (403): блок шеринга НЕ рендерится (данных статьи нет) — зафиксировать в §3.1.
 7. WhatsApp — включён (решение принято).
 8. Sticky-панель — отдельным ТЗ, здесь не делаем.
+
+---
+
+## СТАТУС: ✅ РЕАЛИЗОВАНО (2026-11-08, агент-49, принято)
+
+**Реализация:** `apps/web/src/lib/share.ts` (SHARE_CHANNELS, buildShareLink, buildCanonicalUrl, withUtm), `apps/web/src/components/ShareButtons.tsx` (TG/VK/WhatsApp в попапах с `win.opener=null` и fallback `<a target="_blank">` при popup-blocker, копия ссылки Clipboard API + execCommand-fallback, нативный `navigator.share` с обязательным `.catch(() => {})`), вставки блока в `ArticlePage.tsx` (после EntityChips и после «Источника»; paywall-403 не рендерится), типизированный `api.share()` (ShareChannel реэкспорт из lib/share, ответ `{ok, sharesCount}`).
+
+**Отклонения от ТЗ (приняты):**
+1. VK — текстовый глиф «VK», не иконка (внешние брендовые ассеты не тянем).
+2. `track('copylink')` фиксируется только при успешном копировании (факт попадания ссылки в буфер, а не клик).
+3. `setArticleTitle` не вызывается — `lib/pageTitle.ts` появится в ТЗ-06, интеграция одной строкой там.
+
+**Приёмка:** tsc чисто; curl-smoke: страница 200, sharesCount в detail, POST share → 201. E2E 191/191 (см. правки сьюта ниже).
+
+**Правки теста при приёмке (не продукта):** сьют стал повторяемым — (1) перед юзер-блоком лимита чистим `article_share_events` тестового юзера из прошлых прогонов + пересчёт `shares_count` (per-article throttle 10 мин держит события в БД, повторный прогон получал 429 по БД, а не по лимитеру); (2) detail-проверка sharesCount идёт с админ-токеном, т.к. e2e-novost к этому моменту auth-материал (paywall-тест) и anon получил бы 403.
+
+**E2E: 191/191.**

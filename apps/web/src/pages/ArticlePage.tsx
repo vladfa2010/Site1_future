@@ -14,6 +14,7 @@ import { ViewsBadge } from '../components/ViewsBadge';
 import { Carousel, CAROUSEL_ITEM } from '../components/Carousel';
 import { FavoriteButton } from '../components/FavoriteButton';
 import { LikeButton } from '../components/LikeButton';
+import { ShareButtons } from '../components/ShareButtons';
 import { SubscribeButton } from '../components/SubscribeButton';
 import { Share2 } from 'lucide-react';
 import { formatCount } from '../lib/format';
@@ -147,6 +148,9 @@ export default function ArticlePage() {
         <EntityChips relations={relations} />
       </div>
 
+      {/* ТЗ-02: блок шеринга под заголовком — после чипов, до событий/видео/тела (все типы статей) */}
+      <ShareButtons articleId={article.id} title={article.title} type={article.type} variant="inline-top" />
+
       {/* События по этой идее — общие привязки (компании/тикеры/индустрии/тренды) */}
       {article.type === 'ideya' && <IdeaEvents articleId={article.id} type="sobytie" title="События по идее" />}
 
@@ -184,6 +188,9 @@ export default function ArticlePage() {
           </a>
         </p>
       )}
+
+      {/* ТЗ-02: блок шеринга в «футере» статьи — после «Источника», перед каруселями */}
+      <ShareButtons articleId={article.id} title={article.title} type={article.type} variant="inline-bottom" />
 
       {/* Нижний блок каруселей — только на странице идеи (как у донора) */}
       {article.type === 'ideya' && (

@@ -203,7 +203,11 @@ for i in $(seq 1 12); do
 done
 [ "$ANON_OK" -le 10 ] && [ "$ANON_429" -ge 1 ] 2>/dev/null && ok || bad "shares: анонимный лимит 10/час (ok=$ANON_OK 429=$ANON_429)"
 # S3 лимит юзера 30/час — на РАЗНЫХ материалах (ревью v2.1 №3), свежий юзер = свежий бакет
+# идемпотентность: чистим share-события юзера из прошлых прогонов (per-article throttle 10 мин держит их в БД),
+# иначе повторный прогон в течение 10 минут получает 429 по БД, а не по лимитеру.
+# Счётчики shares_count пересчитываем сразу — иначе проверка инварианта «до reconcile» честно падает.
 curl -s -X POST $B/api/auth/register -H "$J" -d '{"username":"E2EEngage","email":"e2e-engage@test.ru","password":"E2ePass123"}' > /dev/null
+psql -d newinvest -q -c "DELETE FROM article_share_events WHERE user_id=(SELECT id FROM users WHERE email='e2e-engage@test.ru'); UPDATE articles SET shares_count=(SELECT count(*) FROM article_share_events se WHERE se.article_id=articles.id)" 2>/dev/null
 ET=$(curl -s -X POST $B/api/auth/login -H "$J" -d '{"email":"e2e-engage@test.ru","password":"E2ePass123"}' | jqget "d['token']")
 EA="Authorization: Bearer $ET"
 IDS=$(curl -s "$B/api/articles?limit=100" | jqget "' '.join(str(x['id']) for x in d['articles'] if x['id'] != $ART)")
@@ -218,6 +222,17 @@ done
 # инвариант БД + reconcile-скрипт (ревью v2.1 №11): после сверки расхождений 0
 psql -d newinvest -tAc "SELECT count(*) FROM articles WHERE likes_count <> (SELECT count(*) FROM article_likes al WHERE al.article_id=articles.id) OR shares_count <> (SELECT count(*) FROM article_share_events se WHERE se.article_id=articles.id)" 2>/dev/null | grep -q ^0$ && ok || bad "engagement: инвариант likes/shares до reconcile"
 (cd "$(dirname "$0")/.." && npm run reconcile:engagement -w @newinvest/db 2>&1 | grep -q "OK:") && ok || bad "engagement: npm run reconcile:engagement"
+
+echo "════════════════════════════════════════"
+echo "  E2E: ТЗ-02 — КНОПКИ ШЕРИНГА (curl-smoke)"
+echo "  UI-сценарии — ручной проход (ревью v2.1 №2), чек-лист: TODO/02-social-sharing.md §5"
+echo "════════════════════════════════════════"
+# POST share 201/whitelist/429 — см. блок ТЗ-04 выше (не дублируем)
+# страница статьи отдаёт 200 через SPA-fallback (vite dev на WEB_URL)
+W="${WEB_URL:-http://localhost:5173}"
+curl -s -o /dev/null -w "%{http_code}" "$W/novost/e2e-novost" | grep -q 200 && ok || bad "share: страница статьи 200 (SPA-fallback)"
+# GET detail отдаёт sharesCount — запрос с админ-токеном: e2e-novost в этот момент auth-материал (paywall-тест выше), anon получил бы 403
+curl -s "$B/api/articles/novost/e2e-novost" -H "$A" | grep -q '"sharesCount"' && ok || bad "share: detail отдаёт sharesCount"
 
 echo "════════════════════════════════════════"
 echo "  E2E: БЕЗОПАСНОСТЬ / ОГРАНИЧЕНИЯ"
