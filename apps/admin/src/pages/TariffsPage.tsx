@@ -18,6 +18,7 @@ interface AdminPlan {
   portfolioLimit: number;
   planLevel: number;
   features: Record<string, boolean>;
+  products: string[]; // доступность — свойство плана: где показывать/действует
   displayOrder: number;
   isActive: boolean;
   isPopular: boolean;
@@ -80,6 +81,7 @@ interface FormState {
   is_active: boolean;
   is_popular: boolean;
   features: Record<string, boolean>;
+  products: string[];
 }
 
 export default function TariffsPage() {
@@ -169,6 +171,7 @@ export default function TariffsPage() {
       id: '', name: '', price: '', billing_frequency: 'monthly', yearly_discount: '',
       tag_limit: '', portfolio_limit: '', plan_level: '', display_order: '',
       coming_soon_label: '', is_active: true, is_popular: false, features,
+      products: ['invest'], // новый план по умолчанию — на инвестиционно.рф
     });
     setSaveError(null);
     setModalOpen(true);
@@ -195,6 +198,7 @@ export default function TariffsPage() {
       is_active: plan.isActive,
       is_popular: plan.isPopular,
       features,
+      products: plan.products ?? [],
     });
     setSaveError(null);
     setModalOpen(true);
@@ -214,6 +218,7 @@ export default function TariffsPage() {
       portfolio_limit: Number(form.portfolio_limit || 0),
       plan_level: Number(form.plan_level),
       features: form.features,
+      products: form.products,
       is_active: form.is_active,
       is_popular: form.is_popular,
       coming_soon_label: form.coming_soon_label || null,
@@ -330,6 +335,11 @@ export default function TariffsPage() {
                   <td className="td">
                     <span className="font-medium">{plan.name}</span>
                     {isDeleted && <span className="ml-2 rounded-full bg-red-500/10 px-2 py-0.5 text-xs text-red-400">Удалён</span>}
+                    <span className="mt-0.5 block text-xs text-zinc-500">
+                      {plan.products?.includes('invest') && <span className="mr-1.5 rounded bg-zinc-800 px-1.5 py-0.5">инвестиционно.рф</span>}
+                      {plan.products?.includes('pulse') && <span className="mr-1.5 rounded bg-zinc-800 px-1.5 py-0.5">PULSE</span>}
+                      {(!plan.products || plan.products.length === 0) && 'нигде не показывается'}
+                    </span>
                   </td>
                   <td className="td whitespace-nowrap">{Number(plan.price).toLocaleString('ru-RU')} ₽</td>
                   <td className="td text-xs text-zinc-400">{plan.billingFrequency}</td>
@@ -443,6 +453,39 @@ export default function TariffsPage() {
                   <input type="checkbox" checked={form.is_popular} onChange={(e) => setForm({ ...form, is_popular: e.target.checked })} />
                   Популярный
                 </label>
+              </div>
+
+              {/* Доступность — СВОЙСТВО плана (не фича): где тариф показывается и действует */}
+              <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4">
+                <h4 className="label mb-1">Доступность</h4>
+                <p className="mb-3 text-xs text-zinc-500">На каких витринах показывать тариф и где он действует</p>
+                <div className="flex flex-wrap gap-4">
+                  {([
+                    ['invest', 'инвестиционно.рф'],
+                    ['pulse', 'PULSE'],
+                  ] as const).map(([key, label]) => (
+                    <label key={key} className="flex items-center gap-2 text-sm text-zinc-300">
+                      <input
+                        type="checkbox"
+                        checked={form.products.includes(key)}
+                        onChange={(e) =>
+                          setForm((prev) =>
+                            prev && {
+                              ...prev,
+                              products: e.target.checked
+                                ? [...prev.products, key]
+                                : prev.products.filter((p) => p !== key),
+                            },
+                          )
+                        }
+                      />
+                      {label}
+                    </label>
+                  ))}
+                  {form.products.length === 0 && (
+                    <span className="text-xs text-amber-400">Ни один продукт не выбран — тариф нигде не показывается</span>
+                  )}
+                </div>
               </div>
 
               {/* Фичи из реестра (активные + уже выбранные в плане) */}

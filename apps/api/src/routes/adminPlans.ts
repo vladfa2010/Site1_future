@@ -25,6 +25,7 @@ const createPlanSchema = z.object({
   portfolio_limit: z.number().int().min(-1).default(0),
   plan_level: z.number().int().min(0),
   features: z.record(z.boolean()).default({}),
+  products: z.array(z.enum(['invest', 'pulse'])).default(['invest']),
   is_active: z.boolean().default(true),
   is_popular: z.boolean().default(false),
   coming_soon_label: z.string().max(50).nullable().optional(),
@@ -40,6 +41,7 @@ const updatePlanSchema = z.object({
   portfolio_limit: z.number().int().min(-1).optional(),
   plan_level: z.number().int().min(0).optional(),
   features: z.record(z.boolean()).optional(),
+  products: z.array(z.enum(['invest', 'pulse'])).optional(),
   is_active: z.boolean().optional(),
   is_popular: z.boolean().optional(),
   coming_soon_label: z.string().max(50).nullable().optional(),
@@ -179,6 +181,7 @@ adminPlansRouter.post('/', authRequired, requireRole(...ADMIN_ROLES), async (req
         portfolioLimit: body.portfolio_limit,
         planLevel: body.plan_level,
         features,
+        products: body.products,
         displayOrder: body.display_order,
         isActive: body.is_active,
         isPopular: body.is_popular,
@@ -257,6 +260,7 @@ adminPlansRouter.patch('/:planId', authRequired, requireRole(...ADMIN_ROLES), as
     if (body.portfolio_limit !== undefined) updates.portfolioLimit = body.portfolio_limit;
     if (body.features !== undefined) updates.features = mergedFeatures ?? body.features;
     if (mergedFeatures && body.features === undefined) updates.features = mergedFeatures;
+    if (body.products !== undefined) updates.products = body.products;
     if (body.is_active !== undefined) updates.isActive = body.is_active;
     if (body.is_popular !== undefined) updates.isPopular = body.is_popular;
     if (body.coming_soon_label !== undefined) updates.comingSoonLabel = body.coming_soon_label || null;

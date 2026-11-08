@@ -29,8 +29,6 @@ VALUES
   ('insider', 'Insider', 2500, 'monthly', 20, 0, 0, 3, '{}', 2, TRUE, FALSE, NULL)
 ON CONFLICT ("id") DO NOTHING;
 
--- Seed реестра фич: реализация «решаем что и где показывать» через существующие чекбоксы фич.
-INSERT INTO "features_registry" ("id", "label", "is_active") VALUES
-  ('invest', 'Доступен на инвестиционно.рф', TRUE),
-  ('pulse', 'Доступен в PULSE', TRUE)
-ON CONFLICT ("id") DO NOTHING;
+-- Доступность тарифа по продуктам — СВОЙСТВО плана (колонка products, миграция 0017),
+-- а не фича реестра. Сид фич invest/pulse удалён намеренно.
+

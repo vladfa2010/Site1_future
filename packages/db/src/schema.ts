@@ -431,7 +431,10 @@ export const subscriptionPlans = pgTable('subscription_plans', {
   tagLimit: integer('tag_limit').notNull().default(0),
   portfolioLimit: integer('portfolio_limit').notNull().default(0),
   planLevel: integer('plan_level').notNull().default(0),
-  features: jsonb('features').notNull().default({}), // {invest: true, pulse: true, multi_portfolio: true, ...}
+  features: jsonb('features').notNull().default({}), // {multi_portfolio: true, ...}
+  // Доступность плана — СВОЙСТВО плана (не фича): на витрине какого продукта показывать
+  // и где действует. 'invest' | 'pulse' (расширяемо). Пустой массив = нигде.
+  products: text('products').array().notNull().default([]),
   displayOrder: integer('display_order').notNull().default(0),
   isActive: boolean('is_active').default(true),
   isPopular: boolean('is_popular').notNull().default(false),

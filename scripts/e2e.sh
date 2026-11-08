@@ -401,13 +401,19 @@ assert code=='409' and d.get('subscriberCount')==1 and 'blockedFields' in d, (co
 curl -s -X PATCH "$B/api/admin/plans/base" -H "$A" -H "$J" -d '{"price":350}' | grep -q '"price":350' && ok || bad "plans: разрешённый PATCH при подписчике 200"
 curl -s "$B/api/admin/plans/base/subscribers" -H "$A" | python3 -c "import json,sys; d=json.load(sys.stdin); assert d['total']>=1 and any(s['email']=='plans-e2e@test.ru' for s in d['subscribers']); print('ok')" > /dev/null 2>&1 && ok || bad "plans: subscribers через маппинг tariff_plans.slug"
 psql -d newinvest -q -c "DELETE FROM users WHERE email='plans-e2e@test.ru'" 2>/dev/null
+# products: свойство плана (не фича) — создание с массивом, PATCH-roundtrip, дефолт invest
+curl -s -X PATCH "$B/api/admin/plans/e2e-subplan" -H "$A" -H "$J" -d '{"products":["invest","pulse"]}' | grep -q '"products":\["invest","pulse"\]' && ok || bad "plans: PATCH products invest+pulse"
+curl -s "$B/api/admin/plans" -H "$A" | python3 -c "import json,sys; ps={p['id']:p['products'] for p in json.load(sys.stdin)['plans']}; assert ps.get('base')==['invest'] and set(ps.get('e2e-subplan',[]))=={'invest','pulse'}, ps; print('ok')" > /dev/null 2>&1 && ok || bad "plans: products в списке (base=invest, subplan=invest+pulse)"
+curl -s -o /dev/null -w "%{http_code}" -X PATCH "$B/api/admin/plans/e2e-subplan" -H "$A" -H "$J" -d '{"products":["bogus"]}' | grep -q 400 && ok || bad "plans: невалидный product 400"
+curl -s -X PATCH "$B/api/admin/plans/e2e-subplan" -H "$A" -H "$J" -d '{"products":["invest"]}' > /dev/null
 # архив (soft delete) / восстановление
 curl -s -X POST "$B/api/admin/plans/e2e-subpop/archive" -H "$A" | grep -q '"archived":true' && ok || bad "plans: архив"
 curl -s "$B/api/admin/plans" -H "$A" | python3 -c "import json,sys; d=json.load(sys.stdin)['plans']; p=[x for x in d if x['id']=='e2e-subpop'][0]; assert p['deletedAt'] is not None; print('ok')" > /dev/null 2>&1 && ok || bad "plans: архивный в списке с deletedAt"
 curl -s -X POST "$B/api/admin/plans/e2e-subpop/restore" -H "$A" | grep -q '"restored":true' && ok || bad "plans: восстановление"
 curl -s -o /dev/null -w "%{http_code}" -X POST "$B/api/admin/plans/no-such-plan/archive" -H "$A" | grep -q 404 && ok || bad "plans: архив несуществующего 404"
-# seed реестра фич (миграция 0016): «решаем что и где показывать» через чекбоксы
-curl -s "$B/api/features" | python3 -c "import json,sys; ids={f['id'] for f in json.load(sys.stdin)['features']}; assert 'invest' in ids and 'pulse' in ids, ids; print('ok')" > /dev/null 2>&1 && ok || bad "plans: фичи invest+pulse в реестре"
+# доступность — СВОЙСТВО плана (products, миграция 0017), а не фича реестра:
+# seed-фичи invest/pulse удалены из миграции 0016; проверяем, что их больше нет
+curl -s "$B/api/features" | python3 -c "import json,sys; ids={f['id'] for f in json.load(sys.stdin)['features']}; assert 'invest' not in ids and 'pulse' not in ids, ids; print('ok')" > /dev/null 2>&1 && ok || bad "plans: invest/pulse НЕ фичи (свойство products)"
 
 
 echo "════════════════════════════════════════"
