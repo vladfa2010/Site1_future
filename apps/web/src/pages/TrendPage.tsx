@@ -3,22 +3,24 @@ import { useParams } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { api, type ArticleListItem } from '../api';
 import { ArticleCard, TYPE_LABELS } from '../components/ArticleCard';
+import { VideoCard } from '../components/VideoCard';
 import { Breadcrumbs } from '../components/Breadcrumbs';
 import { Carousel, CAROUSEL_ITEM } from '../components/Carousel';
 import { FavoriteButton } from '../components/FavoriteButton';
 import { SubscribeButton } from '../components/SubscribeButton';
 
 /**
- * Страница тренда — структура как у донора:
- * шапка → «про тренд» → «идеи тренда» → «новости тренда» → «события тренда»
- * → «аналитика по тренду» → «интересное по тренду».
+ * Страница тренда — воронка погружения по концепту:
+ * «Видео» (лёгкий вход) → «Аналитика» (глубина) → «Новости» (актуальный фон)
+ * → «События» → «Идеи» → «Интересное» (всё вокруг темы).
  * Пустые секции не рендерятся (принцип 4.3).
  */
 const SECTIONS: { type: string; title: string }[] = [
-  { type: 'ideya', title: 'Идеи тренда' },
+  { type: 'video', title: 'Видео по теме' },
+  { type: 'analitika', title: 'Аналитика по тренду' },
   { type: 'novost', title: 'Новости тренда' },
   { type: 'sobytie', title: 'События тренда' },
-  { type: 'analitika', title: 'Аналитика по тренду' },
+  { type: 'ideya', title: 'Идеи тренда' },
   { type: 'interesnoe', title: 'Интересное по тренду' },
 ];
 
@@ -86,7 +88,11 @@ export default function TrendPage() {
             <Carousel>
               {items.map((a) => (
                 <div key={a.id} className={CAROUSEL_ITEM}>
-                  <ArticleCard article={a} />
+                  {type === 'video' ? (
+                    <VideoCard article={a as ArticleListItem & { videoUrl?: string | null }} />
+                  ) : (
+                    <ArticleCard article={a} />
+                  )}
                 </div>
               ))}
             </Carousel>

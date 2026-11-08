@@ -28,7 +28,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
             </svg>
           </Link>
           <Link to="/feed" className="text-zinc-400">Лента</Link>
-          <Link to="/portfolio" className="text-zinc-400">Портфель</Link>
+          <Link to="/portfolio" className="text-zinc-400">Стартапы</Link>
           <Link to="/pricing" className="text-zinc-400">Тарифы</Link>
           {user ? (
             /* круглый аватар → кабинет («Выйти» живёт там) */

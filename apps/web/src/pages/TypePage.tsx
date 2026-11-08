@@ -3,9 +3,10 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from '../api';
 import { ArticleCard, TYPE_LABELS } from '../components/ArticleCard';
 import { NewsCard } from '../components/NewsCard';
+import { VideoCard } from '../components/VideoCard';
 import { Breadcrumbs } from '../components/Breadcrumbs';
 
-const KNOWN_TYPES = ['novost', 'ideya', 'analitika', 'interesnoe', 'sobytie'];
+const KNOWN_TYPES = ['novost', 'ideya', 'analitika', 'interesnoe', 'sobytie', 'video'];
 
 export default function TypePage() {
   const { type = '' } = useParams();
@@ -19,8 +20,8 @@ export default function TypePage() {
 
   if (!known) return <p className="text-zinc-400">Раздел не найден</p>;
 
-  // новости — широкие карточки как у донора, остальные типы — книжные 3:4
-  const Card = type === 'novost' ? NewsCard : ArticleCard;
+  // новости — широкие карточки как у донора, видео — с play-кнопкой, остальные — книжные 3:4
+  const Card = type === 'novost' ? NewsCard : type === 'video' ? VideoCard : ArticleCard;
 
   return (
     <div className="space-y-6">

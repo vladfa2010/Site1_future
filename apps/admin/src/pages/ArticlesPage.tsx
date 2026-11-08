@@ -4,7 +4,7 @@ import { api } from '../api';
 import SearchInput from '../components/SearchInput';
 
 const TYPE_LABELS: Record<string, string> = {
-  novost: 'Новость', ideya: 'Идея', sobytie: 'Событие', analitika: 'Аналитика', interesnoe: 'Интересное',
+  novost: 'Новость', ideya: 'Идея', sobytie: 'Событие', analitika: 'Аналитика', interesnoe: 'Интересное', video: 'Видео',
 };
 const STATUS_LABELS: Record<string, string> = { published: 'Опубликована', draft: 'Черновик', pending: 'На модерации' };
 

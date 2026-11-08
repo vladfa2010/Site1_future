@@ -301,6 +301,7 @@ entitiesRouter.get('/trends/:slug', async (req, res) => {
       excerpt: articles.excerpt,
       publishedAt: articles.publishedAt,
       coverUrl: media.filePath,
+      videoUrl: articles.videoUrl,
     })
     .from(articleTrends)
     .innerJoin(articles, eq(articleTrends.articleId, articles.id))

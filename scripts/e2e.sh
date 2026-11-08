@@ -154,6 +154,11 @@ curl -s "$B/api/articles/263/events" | python3 -c "import json,sys; evs=json.loa
 curl -s -o /dev/null -w "%{http_code}" "$B/api/articles/1/events" | grep -q 404 && ok || bad "idea-events: не-идея 404"
 curl -s -o /dev/null -w "%{http_code}" "$B/api/articles/263/events?type=bogus" | grep -q 400 && ok || bad "idea-events: невалидный тип 400"
 curl -s "$B/api/articles/263/events?type=novost" | python3 -c "import json,sys; evs=json.load(sys.stdin).get('events',[]); assert all(e['type']=='novost' for e in evs); print(len(evs))" 2>/dev/null | grep -qE '^[0-9]+$' && ok || bad "idea-events: ?type=novost только новости"
+# видео-тип: создание с videoUrl, валидация, embed-поле в детали
+curl -s -X POST "$B/api/articles" -H "$A" -H "$J" -d '{"type":"video","slug":"e2e-video","title":"E2E Видео","contentHtml":"<p>x</p>","videoUrl":"https://www.youtube.com/watch?v=dQw4w9WgXcQ","status":"published"}' | grep -q dQw4w9WgXcQ && ok || bad "video: создать с videoUrl"
+curl -s "$B/api/articles/video/e2e-video" | grep -q '"videoUrl":"https://www.youtube.com' && ok || bad "video: embed-поле в детали"
+curl -s "$B/api/articles?type=video&limit=5" | grep -q e2e-video && ok || bad "video: фильтр по типу в списке"
+curl -s "$B/api/search?q=E2E%20%D0%92%D0%B8%D0%B4%D0%B5%D0%BE&limit=3" -H "$A" | grep -q '"type":"video"' && ok || bad "video: находится поиском"
 
 echo "════════════════════════════════════════"
 echo "  E2E: КАБИНЕТ — ПОДПИСКИ/ИЗБРАННОЕ/НАСТРОЙКИ"
@@ -241,7 +246,7 @@ echo "════════════════════════�
 
 # очистка e2e-данных
 psql -d newinvest -q -c "
-DELETE FROM articles WHERE slug IN ('e2e-novost','e2e-insider') OR title LIKE 'E2E идея%';
+DELETE FROM articles WHERE slug IN ('e2e-novost','e2e-insider','e2e-video') OR title LIKE 'E2E идея%';
 DELETE FROM stories WHERE slug='e2e-story';
 DELETE FROM companies WHERE slug='e2e-corp';
 DELETE FROM trends WHERE slug='e2e-trend';

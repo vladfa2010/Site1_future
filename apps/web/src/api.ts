@@ -17,12 +17,14 @@ export interface ArticleListItem {
   excerpt: string | null;
   publishedAt: string | null;
   coverUrl: string | null;
+  videoUrl?: string | null;
 }
 
 export interface ArticleDetail extends ArticleListItem {
   contentHtml: string;
   thesis: string | null;
   sourceUrl: string | null;
+  videoUrl: string | null;
   status: string;
 }
 

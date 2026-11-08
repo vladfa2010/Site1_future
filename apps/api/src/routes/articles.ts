@@ -28,6 +28,7 @@ const createSchema = z.object({
   accessLevel: z.enum(['public', 'auth', 'tariff']).optional(), // пейволл
   accessTariffId: z.number().int().optional(),
   sourceUrl: z.string().url().optional(),
+  videoUrl: z.string().url().optional(), // type=video: внешнее видео (YouTube/RuTube/VK)
   status: z.enum(['draft', 'published']).default('draft'),
 });
 
@@ -89,6 +90,7 @@ articlesRouter.get('/', optionalAuth, async (req, res) => {
       status: articles.status,
       publishedAt: articles.publishedAt,
       coverUrl: media.filePath,
+      videoUrl: articles.videoUrl,
     })
     .from(articles)
     .leftJoin(media, eq(articles.coverMediaId, media.id))

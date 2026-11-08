@@ -9,6 +9,7 @@ export const TYPE_LABELS: Record<string, string> = {
   sobytie: 'Событие',
   analitika: 'Аналитика',
   interesnoe: 'Интересное',
+  video: 'Видео',
 };
 
 /** Карточка статьи с вертикальной обложкой, как у донора */

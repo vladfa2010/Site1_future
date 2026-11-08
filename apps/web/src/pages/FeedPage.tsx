@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { useAuth } from '../auth';
 import { useAuthModal } from '../authModal';
-import { ArticleCard, type ArticleListItem } from '../components/ArticleCard';
+import { ArticleCard } from '../components/ArticleCard';
+import type { ArticleListItem } from '../api';
 
 const authed = () => ({ Authorization: `Bearer ${localStorage.getItem('token')}` });
 

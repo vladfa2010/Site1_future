@@ -4,6 +4,7 @@ import { api, type ArticleListItem } from '../api';
 import { EntityChips } from '../components/EntityChips';
 import { Breadcrumbs } from '../components/Breadcrumbs';
 import { sanitizeArticleHtml } from '../lib/sanitize';
+import { toEmbedUrl } from '../lib/video';
 import { IdeaChart } from '../components/IdeaChart';
 import { Paywall } from '../components/Paywall';
 import { ArticleCard, TYPE_LABELS } from '../components/ArticleCard';
@@ -119,6 +120,20 @@ export default function ArticlePage() {
 
       {/* События по этой идее — общие привязки (компании/тикеры/индустрии/тренды) */}
       {article.type === 'ideya' && <IdeaEvents articleId={article.id} type="sobytie" title="События по идее" />}
+
+      {/* type=video: встроенный плеер (embed, как в WordPress) */}
+      {article.type === 'video' && article.videoUrl && toEmbedUrl(article.videoUrl) && (
+        <div className="mt-6 overflow-hidden rounded-xl border border-[#2a2a2a]">
+          <iframe
+            src={toEmbedUrl(article.videoUrl)!}
+            title={article.title}
+            className="aspect-video w-full"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allowFullScreen
+            loading="lazy"
+          />
+        </div>
+      )}
 
       <div
         className="prose-invert mt-6 space-y-4 leading-relaxed [&_h2]:mt-8 [&_h2]:text-xl [&_h2]:font-bold [&_a]:text-[#c9ff2a] [&_p]:text-zinc-300 [&_ul]:list-disc [&_ul]:pl-6"

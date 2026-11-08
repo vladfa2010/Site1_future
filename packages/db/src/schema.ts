@@ -166,7 +166,7 @@ export const stories = pgTable('stories', {
 
 // ---------- Контент ----------
 
-export const ARTICLE_TYPES = ['novost', 'sobytie', 'analitika', 'interesnoe', 'ideya'] as const;
+export const ARTICLE_TYPES = ['novost', 'sobytie', 'analitika', 'interesnoe', 'ideya', 'video'] as const;
 export type ArticleType = (typeof ARTICLE_TYPES)[number];
 
 export const articles = pgTable(
@@ -180,6 +180,7 @@ export const articles = pgTable(
     excerpt: text('excerpt'),
     thesis: text('thesis'), // тезис идеи (2–3 предложения «почему это инвестиция»)
     sourceUrl: text('source_url'), // дедупликация (как в wptg)
+    videoUrl: text('video_url'), // type=video: ссылка на внешнее видео (YouTube/RuTube/VK → embed)
     coverMediaId: integer('cover_media_id').references(() => media.id),
     authorId: integer('author_id').references(() => users.id, { onDelete: 'set null' }), // удаление аккаунта не трогает контент
     status: text('status').notNull().default('draft'), // draft | pending | published

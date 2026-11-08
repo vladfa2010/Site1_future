@@ -4,15 +4,16 @@ import { api } from '../api';
 import PreviewModal from '../components/PreviewModal';
 import MediaPickerModal from '../components/MediaPickerModal';
 import EntityCloud from '../components/EntityCloud';
+import { toEmbedUrl } from '../lib/video';
 
 // TipTap тяжёлый (~450 KB) — грузим редактор лениво, только в редакторе статьи
 const RichTextEditor = lazy(() =>
   import('../components/RichTextEditor').then((m) => ({ default: m.RichTextEditor })),
 );
 
-const TYPES = ['novost', 'ideya', 'sobytie', 'analitika', 'interesnoe'] as const;
+const TYPES = ['novost', 'ideya', 'sobytie', 'analitika', 'interesnoe', 'video'] as const;
 const TYPE_LABELS: Record<string, string> = {
-  novost: 'Новость', ideya: 'Идея', sobytie: 'Событие', analitika: 'Аналитика', interesnoe: 'Интересное',
+  novost: 'Новость', ideya: 'Идея', sobytie: 'Событие', analitika: 'Аналитика', interesnoe: 'Интересное', video: 'Видео',
 };
 
 interface Option { id: number; name: string; symbol?: string; companyName?: string }
@@ -27,7 +28,7 @@ export default function ArticleEditPage() {
 
   const [form, setForm] = useState({
     type: 'novost', slug: '', title: '', excerpt: '', thesis: '', contentHtml: '', status: 'draft', metaDescription: '',
-    accessLevel: 'public', accessTariffId: '',
+    accessLevel: 'public', accessTariffId: '', videoUrl: '',
   });
   const [articleId, setArticleId] = useState<number | null>(null);
   const [coverMediaId, setCoverMediaId] = useState<number | null>(null);
@@ -67,12 +68,13 @@ export default function ArticleEditPage() {
       setTariffPlans(plans.plans);
 
       if (!isNew && urlType && slug) {
-        const detail = await api<{ article: { id: number; type: string; slug: string; title: string; excerpt: string | null; thesis: string | null; contentHtml: string; status: string; coverMediaId: number | null; accessLevel: string | null; accessTariffId: number | null }; coverUrl: string | null; meta: { description: string | null } }>(`/articles/${urlType}/${slug}`);
+        const detail = await api<{ article: { id: number; type: string; slug: string; title: string; excerpt: string | null; thesis: string | null; contentHtml: string; status: string; coverMediaId: number | null; accessLevel: string | null; accessTariffId: number | null; videoUrl: string | null }; coverUrl: string | null; meta: { description: string | null } }>(`/articles/${urlType}/${slug}`);
         const a = detail.article;
         setForm({
           type: a.type, slug: a.slug, title: a.title, excerpt: a.excerpt ?? '', thesis: a.thesis ?? '',
           contentHtml: a.contentHtml, status: a.status, metaDescription: detail.meta.description ?? '',
           accessLevel: a.accessLevel ?? 'public', accessTariffId: a.accessTariffId ? String(a.accessTariffId) : '',
+          videoUrl: a.videoUrl ?? '',
         });
         setArticleId(a.id);
         setCoverMediaId(a.coverMediaId);
@@ -386,6 +388,20 @@ export default function ArticleEditPage() {
           <label className="label">Тезис идеи (для type=ideya)</label>
           <textarea className="input" rows={2} value={form.thesis} onChange={set('thesis')} />
         </div>
+        {form.type === 'video' && (
+          <div>
+            <label className="label">Ссылка на видео (YouTube / RuTube / VK — встроится плеером)</label>
+            <input
+              className="input font-mono"
+              placeholder="https://www.youtube.com/watch?v=…"
+              value={form.videoUrl}
+              onChange={set('videoUrl')}
+            />
+            {form.videoUrl && !toEmbedUrl(form.videoUrl) && (
+              <p className="mt-1 text-xs text-amber-400">Платформа не распознана — проверьте ссылку (поддерживаются YouTube, RuTube, VK, Vimeo, Dailymotion)</p>
+            )}
+          </div>
+        )}
         <div>
           <label className="label">Excerpt</label>
           <textarea className="input" rows={2} value={form.excerpt} onChange={set('excerpt')} />
