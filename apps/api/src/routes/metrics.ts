@@ -145,3 +145,141 @@ metricsRouter.get('/admin/metrics/top-trends', ...adminOnly, async (req, res) =>
   `);
   res.json({ trends: rows.rows.map((r) => ({ ...r, articles: Number(r.articles), views: Number(r.views) })) });
 });
+
+// ---------- Воронка: регистрация → чтение → избранное → подписка ----------
+metricsRouter.get('/admin/metrics/funnel', async (req, res) => {
+  const d = days(req);
+  const rows = await db.execute<{ step: string; n: number }>(sql`
+    with registered as (
+      select count(*)::int as n from users where created_at >= now() - make_interval(days => ${d})
+    ),
+    read as (
+      select count(distinct user_id)::int as n from article_views
+      where user_id is not null and viewed_at >= now() - make_interval(days => ${d})
+    ),
+    favorited as (
+      select count(distinct user_id)::int as n from favorites
+      where created_at >= now() - make_interval(days => ${d})
+    ),
+    subscribed as (
+      select count(distinct user_id)::int as n from subscriptions
+      where created_at >= now() - make_interval(days => ${d})
+    )
+    select 'Регистрация' as step, n from registered
+    union all select 'Прочитали статью', n from read
+    union all select 'Добавили в избранное', n from favorited
+    union all select 'Оформили подписку', n from subscribed
+  `);
+  const steps = rows.rows.map((r) => Number(r.n));
+  const funnel = rows.rows.map((r, i) => ({
+    step: r.step,
+    count: Number(r.n),
+    pct_of_prev: i === 0 ? 100 : (steps[i - 1] > 0 ? Math.round((Number(r.n) / steps[i - 1]) * 100) : 0),
+    pct_of_total: steps[0] > 0 ? Math.round((Number(r.n) / steps[0]) * 100) : 0,
+  }));
+  res.json({ funnel, periodDays: d });
+});
+
+// ---------- Retention D1/D7/D30 (дневные когорты, молодые — null) ----------
+metricsRouter.get('/admin/metrics/retention-daily', async (_req, res) => {
+  const cohorts = await db.execute<{ cohort: string; users: number }>(sql`
+    select created_at::date as cohort, count(*)::int as users
+    from users
+    where created_at >= now() - interval '35 days'
+    group by 1 order by 1
+  `);
+  const activity = await db.execute<{ user_id: number; cohort: string; last_view: string }>(sql`
+    select av.user_id, u.created_at::date as cohort, max(av.viewed_at) as last_view
+    from article_views av
+    join users u on u.id = av.user_id
+    where u.created_at >= now() - interval '35 days'
+    group by 1, 2
+  `);
+  const actMap = new Map<number, { cohort: string; lastView: Date }>();
+  for (const a of activity.rows) {
+    actMap.set(Number(a.user_id), { cohort: String(a.cohort), lastView: new Date(String(a.last_view)) });
+  }
+  const DAY = 86400_000;
+  const now = Date.now();
+  const result = cohorts.rows.map((c) => {
+    const cohortDate = new Date(String(c.cohort)).getTime();
+    const ageDays = Math.floor((now - cohortDate) / DAY);
+    const usersInCohort = Number(c.users);
+    let activeD1 = 0, activeD7 = 0, activeD30 = 0;
+    for (const [, act] of actMap) {
+      if (act.cohort !== String(c.cohort)) continue;
+      const diffDays = Math.floor((act.lastView.getTime() - cohortDate) / DAY);
+      if (diffDays <= 1) activeD1++;
+      if (diffDays <= 7) activeD7++;
+      if (diffDays <= 30) activeD30++;
+    }
+    return {
+      cohort: String(c.cohort),
+      users: usersInCohort,
+      // null — когорте ещё не исполнилось N дней (честность, как в PULSE)
+      d1: ageDays >= 1 ? Math.round((activeD1 / usersInCohort) * 100) : null,
+      d7: ageDays >= 7 ? Math.round((activeD7 / usersInCohort) * 100) : null,
+      d30: ageDays >= 30 ? Math.round((activeD30 / usersInCohort) * 100) : null,
+    };
+  });
+  res.json({ cohorts: result });
+});
+
+// ---------- Группы риска: счётчики + списки ----------
+metricsRouter.get('/admin/metrics/at-risk', async (req, res) => {
+  const type = String(req.query.type ?? 'dormant_7d');
+  const valid = ['dormant_7d', 'dormant_30d', 'read_no_sub'] as const;
+  if (!valid.includes(type as typeof valid[number])) {
+    res.status(400).json({ error: 'invalid type' });
+    return;
+  }
+  let rows;
+  if (type === 'dormant_7d' || type === 'dormant_30d') {
+    // два отдельных запроса: interval нельзя параметризовать, значение — из whitelist-константы
+    const q7 = sql`
+      select u.id, u.email, u.display_name,
+        max(av.viewed_at) as last_view,
+        count(*)::int as views
+      from users u
+      left join article_views av on av.user_id = u.id
+      where u.created_at < now() - interval '1 day'
+      group by u.id, u.email, u.display_name
+      having (max(av.viewed_at) is null or max(av.viewed_at) < now() - interval '7 days')
+      order by max(av.viewed_at) desc nulls last
+      limit 100`;
+    const q30 = sql`
+      select u.id, u.email, u.display_name,
+        max(av.viewed_at) as last_view,
+        count(*)::int as views
+      from users u
+      left join article_views av on av.user_id = u.id
+      where u.created_at < now() - interval '1 day'
+      group by u.id, u.email, u.display_name
+      having (max(av.viewed_at) is null or max(av.viewed_at) < now() - interval '30 days')
+      order by max(av.viewed_at) desc nulls last
+      limit 100`;
+    rows = await db.execute(type === 'dormant_7d' ? q7 : q30);
+  } else {
+    // read_no_sub: читают, но ни на что не подписаны
+    rows = await db.execute<{ id: number; email: string; display_name: string | null; last_view: string | null; views: number }>(sql`
+      select u.id, u.email, u.display_name,
+        max(av.viewed_at) as last_view,
+        count(*)::int as views
+      from users u
+      join article_views av on av.user_id = u.id
+      where not exists (select 1 from subscriptions s where s.user_id = u.id)
+      group by u.id, u.email, u.display_name
+      order by count(*) desc
+      limit 100
+    `);
+  }
+  res.json({
+    users: rows.rows.map((r) => ({
+      id: Number(r.id),
+      email: r.email,
+      displayName: r.display_name,
+      lastView: r.last_view ? String(r.last_view).slice(0, 10) : 'никогда',
+      views: Number(r.views),
+    })),
+  });
+});

@@ -4,7 +4,7 @@ import { api } from '../api';
 import { useAuth } from '../auth';
 import SearchInput, { filterRows } from '../components/SearchInput';
 
-interface UserRow { id: number; email: string; displayName: string | null; role: string; createdAt: string; views: number }
+interface UserRow { id: number; email: string; displayName: string | null; role: string; tariffId?: number | null; createdAt: string; views: number }
 const ROLES = ['reader', 'author', 'admin', 'super_admin'] as const;
 const ROLE_LABELS: Record<string, string> = { reader: 'читатель', author: 'автор', admin: 'админ', super_admin: 'супер-админ' };
 
@@ -32,13 +32,56 @@ export default function UsersPage() {
     }
   };
 
+  const [exportBusy, setExportBusy] = useState(false);
+  const exportCsv = async () => {
+    setExportBusy(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/users/export.csv', {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+      });
+      if (!res.ok) throw new Error(`Ошибка выгрузки: ${res.status}`);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `users-${new Date().toISOString().slice(0, 10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Ошибка выгрузки');
+    } finally {
+      setExportBusy(false);
+    }
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-3">
         <h1 className="text-xl font-bold">Пользователи</h1>
+        <button
+          type="button"
+          onClick={exportCsv}
+          disabled={exportBusy}
+          className="btn-secondary"
+          title="Выгрузить базу (CSV)"
+        >
+          {exportBusy ? 'Выгружаем…' : '⬇ Выгрузить CSV'}
+        </button>
+      </div>
+
+      {/* Сводка над таблицей (как в PULSE): подписанные / с просмотрами / всего прочтений */}
+      <div className="flex flex-wrap items-center gap-4 rounded-lg border border-zinc-800 bg-zinc-900 px-4 py-2.5 text-sm">
+        <span className="text-zinc-400">{rows.length} юзеров</span>
+        <span className="text-[#c9ff2a]">{rows.filter((r) => r.tariffId).length} с тарифом</span>
+        <span className="text-zinc-400">{rows.filter((r) => Number(r.views) > 0).length} читают</span>
+        <span className="text-zinc-500">{rows.reduce((s, r) => s + Number(r.views), 0).toLocaleString('ru-RU')} прочтений суммарно</span>
+      </div>
+
+      <div className="flex items-center justify-between gap-3">
+        <SearchInput value={q} onChange={setQ} placeholder="Поиск по email / имени…" />
         <span className="text-sm text-zinc-500">{filtered.length} из {rows.length}</span>
       </div>
-      <SearchInput value={q} onChange={setQ} placeholder="Поиск по email / имени…" />
       {notice && <p className="rounded-lg bg-green-500/10 px-3 py-2 text-sm text-green-400">{notice}</p>}
       {error && <p className="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-400">{error}</p>}
 

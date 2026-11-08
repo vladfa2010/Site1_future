@@ -172,6 +172,14 @@ done
 curl -s "$B/api/admin/metrics/overview" -H "$A" | grep -q '"dau"' && ok || bad "metrics: overview содержит DAU"
 curl -s -o /dev/null -w "%{http_code}" "$B/api/admin/metrics/overview" | grep -q 401 && ok || bad "metrics: anon 401"
 curl -s "$B/api/admin/metrics/top-trends" -H "$A" | grep -q '"views"' && ok || bad "metrics: top-trends содержит views"
+# PULSE-паттерны: воронка, D1/D7/D30, at-risk, CSV
+curl -s "$B/api/admin/metrics/funnel?days=30" -H "$A" | grep -q 'pct_of_prev' && ok || bad "metrics: воронка pct_of_prev"
+curl -s "$B/api/admin/metrics/funnel?days=30" -H "$A" | grep -q 'Регистрация' && ok || bad "metrics: воронка шаги"
+curl -s "$B/api/admin/metrics/retention-daily" -H "$A" | grep -q '"d1"' && ok || bad "metrics: retention-daily d1"
+curl -s "$B/api/admin/metrics/at-risk?type=dormant_7d" -H "$A" | grep -q '"users"' && ok || bad "metrics: at-risk dormant_7d"
+curl -s -o /dev/null -w "%{http_code}" "$B/api/admin/metrics/at-risk?type=bogus" -H "$A" | grep -q 400 && ok || bad "metrics: at-risk bogus 400"
+curl -s "$B/api/users/export.csv" -H "$A" | grep -q "display_name" && ok || bad "metrics: CSV export"
+curl -s -o /dev/null -w "%{http_code}" "$B/api/users/export.csv" | grep -q 401 && ok || bad "metrics: CSV anon 401"
 
 echo "════════════════════════════════════════"
 echo "  E2E: КАБИНЕТ — ПОДПИСКИ/ИЗБРАННОЕ/НАСТРОЙКИ"

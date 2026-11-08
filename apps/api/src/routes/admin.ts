@@ -31,6 +31,32 @@ adminRouter.get('/users', authRequired, requireRole(...ADMIN_ROLES), async (_req
   res.json({ users: rows });
 });
 
+// GET /api/admin/users/export.csv — выгрузка базы (как в PULSE, ТЗ-120)
+adminRouter.get('/users/export.csv', authRequired, requireRole(...ADMIN_ROLES), async (_req, res) => {
+  const rows = await db
+    .select({
+      id: users.id,
+      email: users.email,
+      displayName: users.displayName,
+      role: users.role,
+      tariffName: tariffPlans.name,
+      createdAt: users.createdAt,
+      views: sql<number>`(select count(*) from article_views where user_id = ${users.id})`,
+      favorites: sql<number>`(select count(*) from favorites where user_id = ${users.id})`,
+      subscriptions: sql<number>`(select count(*) from subscriptions where user_id = ${users.id})`,
+    })
+    .from(users)
+    .leftJoin(tariffPlans, eq(users.tariffId, tariffPlans.id))
+    .orderBy(desc(users.createdAt));
+  const esc = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const header = 'id,email,display_name,role,tariff,created_at,views,favorites,subscriptions';
+  const lines = rows.map((r) =>
+    [r.id, esc(r.email), esc(r.displayName), r.role, esc(r.tariffName ?? ''), r.createdAt, r.views, r.favorites, r.subscriptions].join(','));
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="users-${new Date().toISOString().slice(0, 10)}.csv"`);
+  res.send('﻿' + header + '\n' + lines.join('\n'));
+});
+
 // редактирование пользователя — только super_admin
 const userPatchSchema = z.object({
   role: z.enum(['super_admin', 'admin', 'author', 'reader']).optional(),
