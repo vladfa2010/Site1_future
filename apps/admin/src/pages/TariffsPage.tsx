@@ -1,226 +1,541 @@
-import { useEffect, useState, type FormEvent } from 'react';
-import { api } from '../api';
+import { useCallback, useEffect, useState } from 'react';
+import { api, ApiError } from '../api';
 
 /**
- * Админка тарифов — порт модели PULSE (PAYMENTS.md §2–3):
- * каталог планов с ценами (месяц/год, скидка), фичами, active/coming soon.
- * Оплата (ЮKassa) подтянет тарифы отсюда же.
+ * Админка тарифов — порт PlansSubTab PULSE на новую модель subscription_plans
+ * (API /api/admin/plans). Старые /api/tariff-plans и таблица tariff_plans не трогаем —
+ * на них работает пейволл сайта (переключение — отдельная фаза).
+ *
+ * Подписчики плана маппятся через tariff_plans.slug = id плана (оплата не подключена).
  */
-interface Plan {
-  id: number;
-  slug: string;
+interface AdminPlan {
+  id: string;
   name: string;
-  description: string | null;
-  priceMonthly: string;
-  priceYearly: string;
+  price: number;
+  billingFrequency: string;
   yearlyDiscount: number;
-  features: Record<string, unknown>;
+  tagLimit: number;
+  portfolioLimit: number;
+  planLevel: number;
+  features: Record<string, boolean>;
+  displayOrder: number;
   isActive: boolean;
+  isPopular: boolean;
   comingSoonLabel: string | null;
-  sortOrder: number;
+  createdAt: string | null;
+  updatedAt: string | null;
+  deletedAt: string | null;
 }
 
-const EMPTY_FORM = {
-  slug: '', name: '', description: '', priceMonthly: '0', priceYearly: '0', yearlyDiscount: '20',
-  isActive: true, comingSoonLabel: '', sortOrder: '0',
-};
-const EMPTY_FEATURES: Record<string, boolean> = {};
+interface RegistryFeature {
+  id: string;
+  label: string;
+  description: string | null;
+  isActive: boolean;
+}
 
-interface RegistryFeature { id: string; label: string; description: string | null; isActive: boolean }
+interface Subscriber {
+  id: number;
+  display_name: string | null;
+  email: string;
+  tariff_expires_at: string | null;
+}
+
+const FREQ_OPTIONS = ['weekly', 'monthly', 'quarterly', 'yearly'] as const;
+
+function formatDateTime(iso: string | Date | null): string {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleString('ru-RU', {
+    day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
+  });
+}
+
+function formatDateShort(iso: string | null): string {
+  if (!iso) return 'бессрочно';
+  return new Date(iso).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
+}
+
+function errMsg(err: unknown): string {
+  if (err instanceof ApiError) {
+    try {
+      const body = JSON.parse(err.message.replace(/^API \d+: /, '')) as { error?: string };
+      if (typeof body.error === 'string') return body.error;
+    } catch { /* fallthrough */ }
+    return err.message;
+  }
+  return err instanceof Error ? err.message : 'Ошибка';
+}
+
+interface FormState {
+  id: string;
+  name: string;
+  price: string;
+  billing_frequency: string;
+  yearly_discount: string;
+  tag_limit: string;
+  portfolio_limit: string;
+  plan_level: string;
+  display_order: string;
+  coming_soon_label: string;
+  is_active: boolean;
+  is_popular: boolean;
+  features: Record<string, boolean>;
+}
 
 export default function TariffsPage() {
-  const [plans, setPlans] = useState<Plan[]>([]);
+  const [plans, setPlans] = useState<AdminPlan[]>([]);
   const [registry, setRegistry] = useState<RegistryFeature[]>([]);
-  const [editing, setEditing] = useState<Plan | null>(null);
-  const [showCreate, setShowCreate] = useState(false);
-  const [form, setForm] = useState(EMPTY_FORM);
-  const [features, setFeatures] = useState<Record<string, boolean>>(EMPTY_FEATURES);
-  const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
-  const load = async () => {
-    const [p, f] = await Promise.all([
-      api<{ plans: Plan[] }>('/tariff-plans'),
-      api<{ features: RegistryFeature[] }>('/admin/features').catch(() => ({ features: [] as RegistryFeature[] })),
-    ]);
-    setPlans(p.plans);
-    setRegistry(f.features);
-  };
-  useEffect(() => { void load().catch(() => setError('Ошибка загрузки')); }, []);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editingPlan, setEditingPlan] = useState<AdminPlan | null>(null);
+  const [form, setForm] = useState<FormState | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
-  const featureLabel = (id: string) => registry.find((f) => f.id === id)?.label ?? id;
+  const [archiveConfirm, setArchiveConfirm] = useState<AdminPlan | null>(null);
+  const [archiveSubscribers, setArchiveSubscribers] = useState<number | null>(null);
+  const [archiving, setArchiving] = useState(false);
 
-  const startEdit = (p: Plan) => {
-    setEditing(p);
-    setShowCreate(false);
+  const [subscribers, setSubscribers] = useState<Subscriber[]>([]);
+  const [subscribersTotal, setSubscribersTotal] = useState(0);
+  const [subscribersLoading, setSubscribersLoading] = useState(false);
+  const [showAllSubscribers, setShowAllSubscribers] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [p, f] = await Promise.all([
+        api<{ plans: AdminPlan[] }>('/admin/plans'),
+        api<{ features: RegistryFeature[] }>('/admin/features').catch(() => ({ features: [] as RegistryFeature[] })),
+      ]);
+      setPlans(p.plans);
+      setRegistry(f.features);
+      setLastRefresh(new Date());
+      setLoadError(null);
+    } catch (err) {
+      setLoadError(errMsg(err));
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { void load(); }, [load]);
+
+  // автообновление раз в 60с (как в PULSE)
+  useEffect(() => {
+    const interval = setInterval(() => void load(), 60_000);
+    return () => clearInterval(interval);
+  }, [load]);
+
+  // success-сообщение скрывается через 3с
+  useEffect(() => {
+    if (!successMsg) return;
+    const t = setTimeout(() => setSuccessMsg(null), 3000);
+    return () => clearTimeout(t);
+  }, [successMsg]);
+
+  // чекбоксы фич: активные из реестра + уже выбранные в плане (даже выключенные в реестре)
+  const checkboxFeatures = (plan: AdminPlan | null) => [
+    ...registry.filter((f) => f.isActive),
+    ...(plan ? registry.filter((f) => !f.isActive && plan.features[f.id]) : []),
+  ];
+
+  const loadSubscribers = useCallback(async (planId: string) => {
+    setSubscribersLoading(true);
+    try {
+      const res = await api<{ subscribers: Subscriber[]; total: number }>(`/admin/plans/${planId}/subscribers`);
+      setSubscribers(res.subscribers);
+      setSubscribersTotal(res.total);
+    } catch {
+      setSubscribers([]);
+      setSubscribersTotal(0);
+    } finally {
+      setSubscribersLoading(false);
+    }
+  }, []);
+
+  const openCreate = () => {
+    const features: Record<string, boolean> = {};
+    checkboxFeatures(null).forEach((f) => { features[f.id] = false; });
+    setEditingPlan(null);
+    setSubscribers([]);
+    setSubscribersTotal(0);
+    setShowAllSubscribers(false);
     setForm({
-      slug: p.slug, name: p.name, description: p.description ?? '', priceMonthly: p.priceMonthly,
-      priceYearly: p.priceYearly, yearlyDiscount: String(p.yearlyDiscount),
-      isActive: p.isActive, comingSoonLabel: p.comingSoonLabel ?? '', sortOrder: String(p.sortOrder),
+      id: '', name: '', price: '', billing_frequency: 'monthly', yearly_discount: '',
+      tag_limit: '', portfolio_limit: '', plan_level: '', display_order: '',
+      coming_soon_label: '', is_active: true, is_popular: false, features,
     });
-    setFeatures({ ...EMPTY_FEATURES, ...(p.features as Record<string, boolean>) });
+    setSaveError(null);
+    setModalOpen(true);
   };
 
-  const startCreate = () => {
-    setEditing(null);
-    setShowCreate(true);
-    setForm(EMPTY_FORM);
-    setFeatures(EMPTY_FEATURES);
-  };
-
-  const save = async (e: FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    setNotice(null);
-    const body = {
-      ...(editing ? {} : { slug: form.slug }),
-      name: form.name,
-      description: form.description || undefined,
-      priceMonthly: form.priceMonthly,
-      priceYearly: form.priceYearly,
-      yearlyDiscount: Number(form.yearlyDiscount),
+  const openEdit = (plan: AdminPlan) => {
+    const features: Record<string, boolean> = {};
+    checkboxFeatures(plan).forEach((f) => { features[f.id] = plan.features[f.id] === true; });
+    setEditingPlan(plan);
+    setSubscribers([]);
+    setSubscribersTotal(0);
+    setShowAllSubscribers(false);
+    setForm({
+      id: plan.id,
+      name: plan.name,
+      price: String(plan.price),
+      billing_frequency: plan.billingFrequency,
+      yearly_discount: String(plan.yearlyDiscount),
+      tag_limit: String(plan.tagLimit),
+      portfolio_limit: String(plan.portfolioLimit),
+      plan_level: String(plan.planLevel),
+      display_order: String(plan.displayOrder),
+      coming_soon_label: plan.comingSoonLabel ?? '',
+      is_active: plan.isActive,
+      is_popular: plan.isPopular,
       features,
-      isActive: form.isActive,
-      comingSoonLabel: form.comingSoonLabel || null,
-      sortOrder: Number(form.sortOrder),
+    });
+    setSaveError(null);
+    setModalOpen(true);
+    void loadSubscribers(plan.id);
+  };
+
+  const handleSave = async () => {
+    if (!form) return;
+    setSaving(true);
+    setSaveError(null);
+    const body = {
+      name: form.name,
+      price: Number(form.price),
+      billing_frequency: form.billing_frequency,
+      yearly_discount: Number(form.yearly_discount || 0),
+      tag_limit: Number(form.tag_limit),
+      portfolio_limit: Number(form.portfolio_limit || 0),
+      plan_level: Number(form.plan_level),
+      features: form.features,
+      is_active: form.is_active,
+      is_popular: form.is_popular,
+      coming_soon_label: form.coming_soon_label || null,
+      display_order: Number(form.display_order || 0),
     };
     try {
-      if (editing) {
-        await api(`/tariff-plans/${editing.id}`, { method: 'PATCH', body: JSON.stringify(body) });
-        setNotice(`Тариф «${form.name}» обновлён ✓`);
+      if (!editingPlan) {
+        await api('/admin/plans', { method: 'POST', body: JSON.stringify({ id: form.id, ...body }) });
+        setSuccessMsg('Тариф создан');
       } else {
-        await api('/tariff-plans', { method: 'POST', body: JSON.stringify(body) });
-        setNotice(`Тариф «${form.name}» создан ✓`);
+        await api(`/admin/plans/${editingPlan.id}`, { method: 'PATCH', body: JSON.stringify(body) });
+        setSuccessMsg('Тариф сохранён');
       }
-      setEditing(null);
-      setShowCreate(false);
+      setModalOpen(false);
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Ошибка сохранения');
+      setSaveError(errMsg(err));
+    } finally {
+      setSaving(false);
     }
   };
 
-  // фичи плана: подписи из реестра (порт PULSE — registry драйвит форму)
-  const activeFeatures = (p: Plan) =>
-    Object.entries(p.features)
-      .filter(([, v]) => Boolean(v))
-      .map(([k]) => featureLabel(k));
+  const openArchive = async (plan: AdminPlan) => {
+    setArchiveConfirm(plan);
+    setArchiveSubscribers(null);
+    try {
+      const res = await api<{ total: number }>(`/admin/plans/${plan.id}/subscribers`);
+      setArchiveSubscribers(res.total);
+    } catch {
+      setArchiveSubscribers(null);
+    }
+  };
 
-  // чекбоксы: активные фичи реестра + фичи, уже выбранные в плане (даже выключенные в реестре)
-  const checkboxFeatures = editing
-    ? [...registry.filter((f) => f.isActive), ...registry.filter((f) => !f.isActive && editing.features[f.id])]
-    : registry.filter((f) => f.isActive);
+  const confirmArchive = async () => {
+    if (!archiveConfirm) return;
+    setArchiving(true);
+    try {
+      const res = await api<{ message?: string }>(`/admin/plans/${archiveConfirm.id}/archive`, { method: 'POST', body: '{}' });
+      setSuccessMsg(res.message ?? 'Тариф архивирован');
+      setArchiveConfirm(null);
+      setArchiveSubscribers(null);
+      await load();
+    } catch (err) {
+      setSaveError(errMsg(err));
+    } finally {
+      setArchiving(false);
+    }
+  };
+
+  const handleRestore = async (plan: AdminPlan) => {
+    try {
+      await api(`/admin/plans/${plan.id}/restore`, { method: 'POST', body: '{}' });
+      setSuccessMsg('Тариф восстановлен');
+      await load();
+    } catch (err) {
+      setLoadError(errMsg(err));
+    }
+  };
+
+  const setFeature = (id: string, value: boolean) => {
+    setForm((prev) => prev && { ...prev, features: { ...prev.features, [id]: value } });
+  };
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold">Тарифы</h1>
-        <button className="btn" onClick={startCreate}>+ Новый тариф</button>
+      {/* Шапка */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-wrap items-center gap-4 text-sm">
+          <h1 className="text-xl font-bold">Тарифы</h1>
+          <span className="text-zinc-400">{plans.length} тарифов</span>
+          <span className="text-zinc-500">{plans.filter((p) => !p.deletedAt).length} активных</span>
+          {lastRefresh && (
+            <span className="hidden text-xs text-zinc-500 sm:inline">Обновлено: {formatDateTime(lastRefresh)}</span>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <button className="btn-secondary" onClick={() => void load()} disabled={loading} title="Обновить">
+            ⟳
+          </button>
+          <button className="btn" onClick={openCreate}>+ Новый тариф</button>
+        </div>
       </div>
-      <p className="text-sm text-zinc-500">
-        Каталог тарифов (модель PULSE). Материалы с доступом «по тарифу» привязываются к планам отсюда;
-        будущая оплата будет активировать эти же планы.
-      </p>
-      {notice && <p className="rounded-lg bg-green-500/10 px-3 py-2 text-sm text-green-400">{notice}</p>}
-      {error && <p className="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-400">{error}</p>}
 
+      <p className="text-sm text-zinc-500">
+        Каталог планов подписок (модель PULSE). Подписчики маппятся через старые тарифы (tariff_plans.slug);
+        оплата пока не подключена — тариф выдаёт админ.
+      </p>
+
+      {successMsg && <p className="rounded-lg bg-green-500/10 px-3 py-2 text-sm text-green-400">✓ {successMsg}</p>}
+      {loadError && <p className="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-400">{loadError}</p>}
+
+      {/* Таблица */}
       <div className="card overflow-x-auto p-0">
         <table className="w-full">
           <thead className="border-b border-zinc-800">
-            <tr><th className="th">Тариф</th><th className="th">Месяц</th><th className="th">Год</th><th className="th">Фичи</th><th className="th">Статус</th><th className="th" /></tr>
+            <tr>
+              <th className="th">ID</th><th className="th">Название</th><th className="th">Цена</th>
+              <th className="th">Период</th><th className="th">Скидка за год %</th><th className="th">Лимит тегов</th>
+              <th className="th">Уровень</th><th className="th">Активен</th><th className="th">Популярный</th>
+              <th className="th">Скоро</th><th className="th">Порядок</th><th className="th">Удалён</th>
+              <th className="th">Действия</th>
+            </tr>
           </thead>
           <tbody>
-            {plans.map((p) => (
-              <tr key={p.id} className="border-b border-zinc-800 last:border-0">
-                <td className="td">
-                  <span className="font-medium">{p.name}</span>
-                  <span className="ml-2 text-xs text-zinc-600">{p.slug}</span>
-                </td>
-                <td className="td whitespace-nowrap">{Number(p.priceMonthly).toLocaleString('ru-RU')} ₽</td>
-                <td className="td whitespace-nowrap text-zinc-400">
-                  {Number(p.priceYearly).toLocaleString('ru-RU')} ₽
-                  {p.yearlyDiscount > 0 && <span className="ml-1 text-xs text-[#c9ff2a]">−{p.yearlyDiscount}%</span>}
-                </td>
-                <td className="td max-w-xs">
-                  <span className="line-clamp-1 text-xs text-zinc-500">{activeFeatures(p).join(', ') || '—'}</span>
-                </td>
-                <td className="td">
-                  {p.isActive
-                    ? <span className="rounded-full bg-green-500/10 px-2 py-0.5 text-xs text-green-400">активен</span>
-                    : <span className="rounded-full bg-zinc-800 px-2 py-0.5 text-xs text-zinc-500">{p.comingSoonLabel ?? 'скрыт'}</span>}
-                </td>
-                <td className="td"><button onClick={() => startEdit(p)} className="text-orange-400 hover:underline">ред.</button></td>
-              </tr>
-            ))}
+            {plans.map((plan) => {
+              const isDeleted = !!plan.deletedAt;
+              return (
+                <tr
+                  key={plan.id}
+                  className="border-b border-zinc-800 last:border-0"
+                  style={{ opacity: isDeleted ? 0.55 : 1 }}
+                >
+                  <td className="td font-mono text-xs">{plan.id}</td>
+                  <td className="td">
+                    <span className="font-medium">{plan.name}</span>
+                    {isDeleted && <span className="ml-2 rounded-full bg-red-500/10 px-2 py-0.5 text-xs text-red-400">Удалён</span>}
+                  </td>
+                  <td className="td whitespace-nowrap">{Number(plan.price).toLocaleString('ru-RU')} ₽</td>
+                  <td className="td text-xs text-zinc-400">{plan.billingFrequency}</td>
+                  <td className="td">{plan.yearlyDiscount}%</td>
+                  <td className="td">{plan.tagLimit < 0 ? '∞' : plan.tagLimit}</td>
+                  <td className="td">{plan.planLevel}</td>
+                  <td className="td">
+                    <span className={`rounded-full px-2 py-0.5 text-xs ${plan.isActive ? 'bg-green-500/10 text-green-400' : 'bg-zinc-800 text-zinc-500'}`}>
+                      {plan.isActive ? 'Да' : 'Нет'}
+                    </span>
+                  </td>
+                  <td className="td">
+                    <span className={`rounded-full px-2 py-0.5 text-xs ${plan.isPopular ? 'bg-sky-500/10 text-sky-400' : 'bg-zinc-800 text-zinc-500'}`}>
+                      {plan.isPopular ? 'Да' : 'Нет'}
+                    </span>
+                  </td>
+                  <td className="td text-xs text-zinc-400">{plan.comingSoonLabel || '—'}</td>
+                  <td className="td">{plan.displayOrder}</td>
+                  <td className="td text-xs text-zinc-500">{formatDateTime(plan.deletedAt)}</td>
+                  <td className="td whitespace-nowrap">
+                    {isDeleted ? (
+                      <button onClick={() => void handleRestore(plan)} className="text-green-400 hover:underline">восстановить</button>
+                    ) : (
+                      <span className="flex gap-3">
+                        <button onClick={() => openEdit(plan)} className="text-orange-400 hover:underline">ред.</button>
+                        <button onClick={() => void openArchive(plan)} className="text-amber-400 hover:underline">архив</button>
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+            {plans.length === 0 && (
+              <tr><td colSpan={13} className="td py-10 text-center text-zinc-500">{loading ? 'Загрузка...' : 'Нет тарифов'}</td></tr>
+            )}
           </tbody>
         </table>
       </div>
 
-      {(editing || showCreate) && (
-        <form onSubmit={save} className="card space-y-4">
-          <h2 className="font-semibold">{editing ? `Редактирование: ${editing.name}` : 'Новый тариф'}</h2>
-          <div className="grid gap-4 sm:grid-cols-3">
-            {!editing && (
-              <div>
-                <label className="label">Slug</label>
-                <input className="input" required pattern="[a-z0-9-]+" value={form.slug} onChange={(e) => setForm({ ...form, slug: e.target.value })} />
-              </div>
-            )}
-            <div>
-              <label className="label">Название</label>
-              <input className="input" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+      {/* Модал создания/редактирования */}
+      {modalOpen && form && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/80 p-4 backdrop-blur-sm" onClick={() => setModalOpen(false)}>
+          <div className="card max-h-[90vh] w-full max-w-2xl overflow-y-auto p-0" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between border-b border-zinc-800 px-5 py-4">
+              <h3 className="text-sm font-semibold">{editingPlan ? `Редактировать тариф: ${editingPlan.name}` : 'Новый тариф'}</h3>
+              <button onClick={() => setModalOpen(false)} className="text-zinc-500 hover:text-zinc-300">✕</button>
             </div>
-            <div>
-              <label className="label">Описание</label>
-              <input className="input" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
-            </div>
-            <div>
-              <label className="label">Цена/месяц, ₽</label>
-              <input className="input" type="number" min="0" value={form.priceMonthly} onChange={(e) => setForm({ ...form, priceMonthly: e.target.value })} />
-            </div>
-            <div>
-              <label className="label">Цена/год, ₽</label>
-              <input className="input" type="number" min="0" value={form.priceYearly} onChange={(e) => setForm({ ...form, priceYearly: e.target.value })} />
-            </div>
-            <div>
-              <label className="label">Скидка за год, %</label>
-              <input className="input" type="number" min="0" max="100" value={form.yearlyDiscount} onChange={(e) => setForm({ ...form, yearlyDiscount: e.target.value })} />
-            </div>
-            <div>
-              <label className="label">Порядок показа</label>
-              <input className="input" type="number" value={form.sortOrder} onChange={(e) => setForm({ ...form, sortOrder: e.target.value })} />
-            </div>
-            <div>
-              <label className="label">Бейдж «скоро» (пусто — без)</label>
-              <input className="input" placeholder="Скоро" value={form.comingSoonLabel} onChange={(e) => setForm({ ...form, comingSoonLabel: e.target.value })} />
-            </div>
-            <label className="flex items-end gap-2 pb-2 text-sm">
-              <input type="checkbox" checked={form.isActive} onChange={(e) => setForm({ ...form, isActive: e.target.checked })} />
-              Активен (виден на сайте)
-            </label>
-          </div>
-          <div>
-            <span className="label">Фичи тарифа (из реестра «Фичи»)</span>
-            <div className="flex flex-wrap gap-3">
-              {checkboxFeatures.map((f) => (
-                <label key={f.id} className="flex items-center gap-1.5 text-sm text-zinc-300" title={f.description ?? f.id}>
+            <div className="space-y-4 p-5">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="label">ID</label>
                   <input
-                    type="checkbox"
-                    checked={features[f.id] ?? false}
-                    onChange={(e) => setFeatures({ ...features, [f.id]: e.target.checked })}
+                    className="input" value={form.id} disabled={!!editingPlan}
+                    placeholder="premium" pattern="[a-z0-9_-]+"
+                    onChange={(e) => setForm({ ...form, id: e.target.value })}
                   />
-                  {f.label}
-                  {!f.isActive && <span className="text-xs text-zinc-600">(выкл. в реестре)</span>}
+                </div>
+                <div>
+                  <label className="label">Название</label>
+                  <input className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+                </div>
+                <div>
+                  <label className="label">Цена, ₽</label>
+                  <input className="input" type="number" min="0" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} />
+                </div>
+                <div>
+                  <label className="label">Период оплаты</label>
+                  <select className="input" value={form.billing_frequency} onChange={(e) => setForm({ ...form, billing_frequency: e.target.value })}>
+                    {FREQ_OPTIONS.map((f) => <option key={f} value={f}>{f}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="label">Скидка за год, % (0 при периоде yearly)</label>
+                  <input className="input" type="number" min="0" max="100" value={form.yearly_discount} onChange={(e) => setForm({ ...form, yearly_discount: e.target.value })} />
+                </div>
+                <div>
+                  <label className="label">Лимит тегов (-1 = ∞)</label>
+                  <input className="input" type="number" min="-1" value={form.tag_limit} onChange={(e) => setForm({ ...form, tag_limit: e.target.value })} />
+                </div>
+                <div>
+                  <label className="label">Лимит портфелей (-1 = ∞)</label>
+                  <input className="input" type="number" min="-1" value={form.portfolio_limit} onChange={(e) => setForm({ ...form, portfolio_limit: e.target.value })} />
+                </div>
+                <div>
+                  <label className="label">Уровень плана</label>
+                  <input className="input" type="number" min="0" value={form.plan_level} onChange={(e) => setForm({ ...form, plan_level: e.target.value })} />
+                </div>
+                <div>
+                  <label className="label">Порядок отображения</label>
+                  <input className="input" type="number" min="0" value={form.display_order} onChange={(e) => setForm({ ...form, display_order: e.target.value })} />
+                </div>
+                <div>
+                  <label className="label">Метка «скоро» (пусто — без)</label>
+                  <input className="input" placeholder="Скоро" value={form.coming_soon_label} onChange={(e) => setForm({ ...form, coming_soon_label: e.target.value })} />
+                </div>
+              </div>
+
+              <div className="flex items-center gap-6">
+                <label className="flex items-center gap-2 text-sm text-zinc-300">
+                  <input
+                    type="checkbox" checked={form.is_active}
+                    onChange={(e) => setForm({
+                      ...form,
+                      is_active: e.target.checked,
+                      ...(e.target.checked ? { coming_soon_label: '' } : {}),
+                    })}
+                  />
+                  Активен
                 </label>
-              ))}
-              {checkboxFeatures.length === 0 && <span className="text-sm text-zinc-500">Реестр фич пуст — добавьте в табе «Фичи»</span>}
+                <label className="flex items-center gap-2 text-sm text-zinc-300">
+                  <input type="checkbox" checked={form.is_popular} onChange={(e) => setForm({ ...form, is_popular: e.target.checked })} />
+                  Популярный
+                </label>
+              </div>
+
+              {/* Фичи из реестра (активные + уже выбранные в плане) */}
+              <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4">
+                <h4 className="label mb-3">Фичи</h4>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  {checkboxFeatures(editingPlan).map((f) => (
+                    <label key={f.id} className="flex items-center gap-2 text-sm text-zinc-300" title={f.description ?? f.id}>
+                      <input type="checkbox" checked={!!form.features[f.id]} onChange={(e) => setFeature(f.id, e.target.checked)} />
+                      {f.label}
+                      {!f.isActive && <span className="text-xs text-zinc-600">(выкл. в реестре)</span>}
+                    </label>
+                  ))}
+                  {checkboxFeatures(editingPlan).length === 0 && (
+                    <span className="text-sm text-zinc-500">Реестр фич пуст — добавьте в табе «Фичи»</span>
+                  )}
+                </div>
+              </div>
+
+              {/* Подписчики (при редактировании) */}
+              {editingPlan && (
+                <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4">
+                  <h4 className="label mb-3">
+                    Активные подписчики ({subscribersLoading ? '...' : subscribersTotal})
+                  </h4>
+                  {subscribersLoading ? (
+                    <p className="text-xs text-zinc-500">Загрузка подписчиков...</p>
+                  ) : subscribers.length === 0 ? (
+                    <p className="text-xs text-zinc-500">Нет активных подписчиков</p>
+                  ) : (
+                    <div className="space-y-1">
+                      {(showAllSubscribers ? subscribers : subscribers.slice(0, 5)).map((user) => (
+                        <div key={user.id} className="flex items-center gap-3 rounded-lg px-3 py-2 text-left">
+                          <span className="flex-1 truncate text-sm font-medium text-zinc-200">
+                            {user.display_name || user.email}
+                          </span>
+                          <span className="hidden max-w-40 truncate text-xs text-zinc-500 sm:inline">{user.email}</span>
+                          <span className="flex-shrink-0 rounded-full bg-zinc-800 px-2 py-0.5 text-xs text-zinc-400">
+                            до {formatDateShort(user.tariff_expires_at)}
+                          </span>
+                        </div>
+                      ))}
+                      {subscribers.length > 5 && (
+                        <button
+                          onClick={() => setShowAllSubscribers((v) => !v)}
+                          className="w-full rounded-lg py-2 text-center text-xs text-sky-400 hover:bg-zinc-800"
+                        >
+                          {showAllSubscribers ? 'Свернуть' : `Показать все (${subscribersTotal})`}
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {saveError && <p className="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-400">{saveError}</p>}
+            </div>
+            <div className="flex items-center justify-end gap-3 border-t border-zinc-800 px-5 py-4">
+              <button className="btn-secondary" onClick={() => setModalOpen(false)} disabled={saving}>Отмена</button>
+              <button className="btn" onClick={() => void handleSave()} disabled={saving}>
+                {saving ? 'Сохранение...' : 'Сохранить'}
+              </button>
             </div>
           </div>
-          <div className="flex gap-3">
-            <button className="btn" type="submit">Сохранить</button>
-            <button type="button" className="btn-secondary" onClick={() => { setEditing(null); setShowCreate(false); }}>Отмена</button>
+        </div>
+      )}
+
+      {/* Подтверждение архивации с предпросмотром числа подписчиков */}
+      {archiveConfirm && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-zinc-950/80 p-4 backdrop-blur-sm" onClick={() => !archiving && setArchiveConfirm(null)}>
+          <div className="card w-full max-w-md p-0" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between border-b border-zinc-800 px-5 py-4">
+              <h3 className="text-sm font-semibold">Архивировать тариф «{archiveConfirm.name}»?</h3>
+              <button onClick={() => setArchiveConfirm(null)} disabled={archiving} className="text-zinc-500 hover:text-zinc-300">✕</button>
+            </div>
+            <div className="space-y-3 p-5">
+              <p className="text-sm text-zinc-300">
+                Тариф будет скрыт из каталога для новых пользователей. Текущие подписчики останутся на нём
+                до конца оплаченного периода.
+              </p>
+              <p className="text-xs text-zinc-500">
+                Активных подписчиков, которые останутся на тарифе:{' '}
+                <strong className={archiveSubscribers ? 'text-amber-400' : 'text-zinc-200'}>{archiveSubscribers ?? '—'}</strong>
+              </p>
+            </div>
+            <div className="flex items-center justify-end gap-3 border-t border-zinc-800 px-5 py-4">
+              <button className="btn-secondary" onClick={() => setArchiveConfirm(null)} disabled={archiving}>Отмена</button>
+              <button className="btn" onClick={() => void confirmArchive()} disabled={archiving}>
+                {archiving ? 'Архивация...' : 'Архивировать'}
+              </button>
+            </div>
           </div>
-        </form>
+        </div>
       )}
     </div>
   );

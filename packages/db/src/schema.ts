@@ -11,6 +11,8 @@ import {
   timestamp,
   date,
   numeric,
+  varchar,
+  jsonb,
   uniqueIndex,
   primaryKey,
   index,
@@ -415,6 +417,29 @@ export const tariffPlans = pgTable('tariff_plans', {
 // Уровни доступа материалов
 export const ACCESS_LEVELS = ['public', 'auth', 'tariff'] as const;
 export type AccessLevel = (typeof ACCESS_LEVELS)[number];
+
+// Планы подписок (админка тарифов, порт subscription_plans PULSE v3).
+// Миграция 0016. Подписчики пока маппятся через tariff_plans.slug = subscription_plans.id
+// (оплата не подключена — тариф выдаёт админ); с подключением оплаты мигрируем на прямую связь.
+// timestamp без timezone — по DDL миграции (DEFAULT NOW()).
+export const subscriptionPlans = pgTable('subscription_plans', {
+  id: varchar('id', { length: 20 }).primaryKey(), // base | insider | ...
+  name: varchar('name', { length: 50 }).notNull(),
+  price: numeric('price', { precision: 10, scale: 2 }).notNull().default('0'),
+  billingFrequency: varchar('billing_frequency', { length: 20 }).notNull().default('monthly'), // weekly|monthly|quarterly|yearly
+  yearlyDiscount: integer('yearly_discount').default(0),
+  tagLimit: integer('tag_limit').notNull().default(0),
+  portfolioLimit: integer('portfolio_limit').notNull().default(0),
+  planLevel: integer('plan_level').notNull().default(0),
+  features: jsonb('features').notNull().default({}), // {invest: true, pulse: true, multi_portfolio: true, ...}
+  displayOrder: integer('display_order').notNull().default(0),
+  isActive: boolean('is_active').default(true),
+  isPopular: boolean('is_popular').notNull().default(false),
+  comingSoonLabel: varchar('coming_soon_label', { length: 50 }),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+  deletedAt: timestamp('deleted_at'),
+});
 
 // Реестр фич (порт features_registry PULSE): драйвит чекбоксы в редакторе
 // тарифов и подписи в Pricing. integration_status: pending | integrated | deprecated

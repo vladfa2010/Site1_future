@@ -240,6 +240,11 @@ curl -s -o /dev/null -w "%{http_code}" "$W/novost/e2e-novost" | grep -q 200 && o
 # GET detail отдаёт sharesCount — запрос с админ-токеном: e2e-novost в этот момент auth-материал (paywall-тест выше), anon получил бы 403
 curl -s "$B/api/articles/novost/e2e-novost" -H "$A" | grep -q '"sharesCount"' && ok || bad "share: detail отдаёт sharesCount"
 
+# Pacing: общий apiLimiter API — 300 запросов/60с на IP. Сюит шлёт ~320 запросов,
+# без паузы хвост сьюта (trending и далее) стабильно получает 429. Пауза сбрасывает окно лимитера.
+echo "  … pacing 60с (rate-limit window)…"
+sleep 60
+
 echo "════════════════════════════════════════"
 echo "  E2E: БЕЗОПАСНОСТЬ / ОГРАНИЧЕНИЯ"
 echo "════════════════════════════════════════"
@@ -365,6 +370,45 @@ curl -s -o /dev/null -w "%{http_code}" "$B/api/admin/features" | grep -q 401 && 
 curl -s -X PATCH "$B/api/companies/$CID" -H "$A" -H "$J" -d '{"oneLiner":"E2E лайнер"}' | grep -q "E2E лайнер" && ok || bad "companies: PATCH карточки"
 TID=$(curl -s "$B/api/trends" | jqget "[t['id'] for t in d['trends'] if t['slug']=='e2e-trend'][0]")
 curl -s -X PATCH "$B/api/trends/$TID" -H "$A" -H "$J" -d '{"description":"<p>E2E лонгрид</p>"}' | grep -q "E2E лонгрид" && ok || bad "trends: PATCH лонгрида"
+
+echo "════════════════════════════════════════"
+echo "  E2E: АДМИНКА — ПЛАНЫ ПОДПИСОК (/api/admin/plans)"
+echo "════════════════════════════════════════"
+# seed из миграции 0016 (base/insider + фичи invest/pulse)
+curl -s "$B/api/admin/plans" -H "$A" | python3 -c "import json,sys; ids={p['id'] for p in json.load(sys.stdin)['plans']}; assert 'base' in ids and 'insider' in ids, ids; print('ok')" > /dev/null 2>&1 && ok || bad "plans: seed base+insider есть"
+curl -s -o /dev/null -w "%{http_code}" "$B/api/admin/plans" | grep -q 401 && ok || bad "plans: anon 401"
+# создание: multi_portfolio мержится при portfolio_limit > 0 (порт ТЗ-182)
+curl -s -X POST "$B/api/admin/plans" -H "$A" -H "$J" -d '{"id":"e2e-subplan","name":"E2E SubPlan","price":990,"billing_frequency":"monthly","yearly_discount":10,"tag_limit":-1,"portfolio_limit":2,"plan_level":2,"features":{"invest":true},"is_active":true,"is_popular":false,"display_order":90}' | grep -q '"multi_portfolio":true' && ok || bad "plans: создание + multi_portfolio merge"
+curl -s -o /dev/null -w "%{http_code}" -X POST "$B/api/admin/plans" -H "$A" -H "$J" -d '{"id":"e2e-subplan","name":"Дубль","price":1,"tag_limit":0,"plan_level":0,"display_order":91}' | grep -q 409 && ok || bad "plans: дубль id 409"
+curl -s -o /dev/null -w "%{http_code}" -X POST "$B/api/admin/plans" -H "$A" -H "$J" -d '{"id":"e2e-yr","name":"Год","price":1000,"billing_frequency":"yearly","yearly_discount":10,"tag_limit":0,"plan_level":0,"display_order":92}' | grep -q 400 && ok || bad "plans: yearly + скидка 400"
+# популярность эксклюзивна
+curl -s -X POST "$B/api/admin/plans" -H "$A" -H "$J" -d '{"id":"e2e-subpop","name":"E2E Pop","price":500,"tag_limit":0,"plan_level":1,"display_order":93,"is_popular":true}' > /dev/null
+curl -s -X POST "$B/api/admin/plans" -H "$A" -H "$J" -d '{"id":"e2e-subpop2","name":"E2E Pop2","price":600,"tag_limit":0,"plan_level":1,"display_order":94,"is_popular":true}' > /dev/null
+curl -s "$B/api/admin/plans" -H "$A" | python3 -c "import json,sys; d=json.load(sys.stdin)['plans']; pop=[p for p in d if p['isPopular']]; assert len(pop)==1 and pop[0]['id']=='e2e-subpop2', pop; print('ok')" > /dev/null 2>&1 && ok || bad "plans: популярный только один"
+# PATCH whitelist: цена меняется; пустой апдейт 400; несуществующий 404
+curl -s -X PATCH "$B/api/admin/plans/e2e-subplan" -H "$A" -H "$J" -d '{"price":1111}' | grep -q '"price":1111' && ok || bad "plans: PATCH price"
+curl -s -o /dev/null -w "%{http_code}" -X PATCH "$B/api/admin/plans/e2e-subplan" -H "$A" -H "$J" -d '{}' | grep -q 400 && ok || bad "plans: пустой PATCH 400"
+curl -s -o /dev/null -w "%{http_code}" -X PATCH "$B/api/admin/plans/no-such-plan" -H "$A" -H "$J" -d '{"price":1}' | grep -q 404 && ok || bad "plans: PATCH несуществующего 404"
+# страховка «скоро»: активация без явной метки сбрасывает её в NULL
+curl -s -X PATCH "$B/api/admin/plans/e2e-subplan" -H "$A" -H "$J" -d '{"coming_soon_label":"Скоро","is_active":false}' > /dev/null
+curl -s -X PATCH "$B/api/admin/plans/e2e-subplan" -H "$A" -H "$J" -d '{"is_active":true}' | grep -q '"comingSoonLabel":null' && ok || bad "plans: активация сбрасывает «скоро»"
+# гвард подписчиков: подписчик = юзер со старым тарифом base (тариф выдаёт админ, оплаты нет)
+psql -d newinvest -q -c "INSERT INTO users (email,password_hash,display_name,role,tariff_id) VALUES ('plans-e2e@test.ru','x','Plans E2E','reader',(SELECT id FROM tariff_plans WHERE slug='base')) ON CONFLICT (email) DO UPDATE SET tariff_id=(SELECT id FROM tariff_plans WHERE slug='base')" 2>/dev/null
+curl -s -w "\n%{http_code}" -X PATCH "$B/api/admin/plans/base" -H "$A" -H "$J" -d '{"plan_level":9}' | python3 -c "
+import json,sys
+raw=sys.stdin.read(); body,code=raw.rsplit('\n',1); d=json.loads(body)
+assert code=='409' and d.get('subscriberCount')==1 and 'blockedFields' in d, (code,d); print('ok')" > /dev/null 2>&1 && ok || bad "plans: гвард plan_level 409 + subscriberCount"
+curl -s -X PATCH "$B/api/admin/plans/base" -H "$A" -H "$J" -d '{"price":350}' | grep -q '"price":350' && ok || bad "plans: разрешённый PATCH при подписчике 200"
+curl -s "$B/api/admin/plans/base/subscribers" -H "$A" | python3 -c "import json,sys; d=json.load(sys.stdin); assert d['total']>=1 and any(s['email']=='plans-e2e@test.ru' for s in d['subscribers']); print('ok')" > /dev/null 2>&1 && ok || bad "plans: subscribers через маппинг tariff_plans.slug"
+psql -d newinvest -q -c "DELETE FROM users WHERE email='plans-e2e@test.ru'" 2>/dev/null
+# архив (soft delete) / восстановление
+curl -s -X POST "$B/api/admin/plans/e2e-subpop/archive" -H "$A" | grep -q '"archived":true' && ok || bad "plans: архив"
+curl -s "$B/api/admin/plans" -H "$A" | python3 -c "import json,sys; d=json.load(sys.stdin)['plans']; p=[x for x in d if x['id']=='e2e-subpop'][0]; assert p['deletedAt'] is not None; print('ok')" > /dev/null 2>&1 && ok || bad "plans: архивный в списке с deletedAt"
+curl -s -X POST "$B/api/admin/plans/e2e-subpop/restore" -H "$A" | grep -q '"restored":true' && ok || bad "plans: восстановление"
+curl -s -o /dev/null -w "%{http_code}" -X POST "$B/api/admin/plans/no-such-plan/archive" -H "$A" | grep -q 404 && ok || bad "plans: архив несуществующего 404"
+# seed реестра фич (миграция 0016): «решаем что и где показывать» через чекбоксы
+curl -s "$B/api/features" | python3 -c "import json,sys; ids={f['id'] for f in json.load(sys.stdin)['features']}; assert 'invest' in ids and 'pulse' in ids, ids; print('ok')" > /dev/null 2>&1 && ok || bad "plans: фичи invest+pulse в реестре"
+
 
 echo "════════════════════════════════════════"
 echo "  E2E: МЕДИАТЕКА / ПОИСК / ПРОЧЕЕ"
@@ -576,6 +620,9 @@ DELETE FROM trends WHERE slug='e2e-trend';
 DELETE FROM industries WHERE slug='e2e-ind';
 DELETE FROM tickers WHERE slug='e2e';
 DELETE FROM tariff_plans WHERE slug='e2e-tariff';
+DELETE FROM subscription_plans WHERE id IN ('e2e-subplan','e2e-subpop','e2e-subpop2','e2e-yr');
+DELETE FROM users WHERE email='plans-e2e@test.ru';
+UPDATE subscription_plans SET price=300 WHERE id='base';
 DELETE FROM media WHERE source_url='upload' AND created_at > now() - interval '30 minutes';
 DELETE FROM favorites WHERE user_id IN (SELECT id FROM users WHERE email IN ('e2e@test.ru','e2e-gone@test.ru'));
 DELETE FROM subscriptions WHERE user_id IN (SELECT id FROM users WHERE email IN ('e2e@test.ru','e2e-gone@test.ru'));
