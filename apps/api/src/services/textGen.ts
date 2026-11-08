@@ -1,15 +1,18 @@
 /**
- * Генерация текстов через Kimi (Moonshot) Chat API.
+ * Генерация текстов через выбранный LLM-провайдер (Kimi/Moonshot или DeepSeek —
+ * переключается в админке, поле provider). Оба API OpenAI-совместимые.
  * Используется для лидов/выжимок: промпт собирается из всех полей статьи.
- * Без ключа — mock-режим: выжимка делается экстракцией первых предложений текста.
+ * Без ключа активного провайдера — mock-режим: экстракция первых предложений.
  */
-import { getKimiSettings } from './kimiSettings.js';
+import { getKimiSettings, DEEPSEEK_BASE_URL } from './kimiSettings.js';
 
 /** Генерирует текст по промпту. maxChars — мягкое ограничение длины результата. */
 export async function generateText(prompt: string, maxChars = 400, persona: TextPersona = 'editor'): Promise<string> {
   const s = await getKimiSettings();
-  if (!s.apiKey) return mockExtract(prompt);
-  return kimiText(prompt, maxChars, persona, s);
+  const key = s.provider === 'deepseek' ? s.deepseekApiKey : s.apiKey;
+  if (!key) return mockExtract(prompt);
+  if (s.provider === 'deepseek') return chatCompletion(DEEPSEEK_BASE_URL, key, s.deepseekModel, prompt, maxChars, persona, 'DeepSeek');
+  return chatCompletion(s.baseUrl, key, s.textModel, prompt, maxChars, persona, 'Kimi');
 }
 
 export type TextPersona = 'editor' | 'seo';
@@ -19,20 +22,24 @@ const PERSONA_PROMPTS: Record<TextPersona, string> = {
   seo: 'Ты опытный SEO-специалист. Читаешь статью целиком и пишешь meta description: уникально, информативно, с ключевыми словами из текста, с призывом к действию где уместно. Без кликбейта и обещаний. Отвечаешь ТОЛЬКО готовым текстом без пояснений и кавычек.',
 };
 
-async function kimiText(
+/** OpenAI-совместимый chat/completions — общий для Kimi и DeepSeek. */
+async function chatCompletion(
+  baseUrl: string,
+  apiKey: string,
+  model: string,
   prompt: string,
   maxChars: number,
   persona: TextPersona,
-  s: { apiKey: string; baseUrl: string; textModel: string },
+  label: string,
 ): Promise<string> {
-  const res = await fetch(`${s.baseUrl}/chat/completions`, {
+  const res = await fetch(`${baseUrl}/chat/completions`, {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${s.apiKey}`,
+      Authorization: `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: s.textModel,
+      model,
       messages: [
         { role: 'system', content: PERSONA_PROMPTS[persona] },
         { role: 'user', content: prompt },
@@ -42,13 +49,15 @@ async function kimiText(
     }),
   });
   const data = (await res.json().catch(() => ({}))) as {
-    choices?: { message?: { content?: string } }[];
+    choices?: { message?: { content?: string; reasoning_content?: string } }[];
     error?: { message?: string };
   };
-  if (!res.ok || !data.choices?.[0]?.message?.content) {
-    throw new Error(`Kimi chat API: ${res.status} ${data.error?.message ?? 'пустой ответ'}`);
+  // reasoner-модели DeepSeek отдают мысль в reasoning_content, ответ — в content
+  const text = data.choices?.[0]?.message?.content ?? '';
+  if (!res.ok || !text) {
+    throw new Error(`${label} chat API: ${res.status} ${data.error?.message ?? 'пустой ответ'}`);
   }
-  return data.choices[0].message.content.trim();
+  return text.trim();
 }
 
 /**

@@ -1,18 +1,22 @@
 /**
- * Настройки Kimi/Moonshot API.
- * GET  /api/admin/kimi-settings — чтение (admin/super_admin), ключ маскирован
+ * Настройки LLM-провайдеров (Kimi/Moonshot и DeepSeek).
+ * GET  /api/admin/kimi-settings — чтение (admin/super_admin), ключи маскированы,
+ *      списки моделей обоих провайдеров (modelsKimi / modelsDeepseek)
  * POST /api/admin/kimi-settings — ИЗМЕНЕНИЕ (только super_admin — иначе admin может
  *      увести ключ через подмену baseUrl, см. аудит безопасности 2026-11-08)
- *      {apiKey?, baseUrl?, textModel?, imageModel?, embedModel?} (apiKey='' — стереть)
+ *      {provider?, apiKey?, baseUrl?, textModel?, imageModel?, embedModel?,
+ *       deepseekApiKey?, deepseekModel?} (apiKey/deepseekApiKey='' — стереть)
+ * DeepSeek — OpenAI-совместимый API (https://api.deepseek.com), ключ жёстко
+ * привязан к официальному хосту — baseUrl для него не настраивается (SSRF-защита).
  */
 import { Router } from 'express';
 import { z } from 'zod';
 import { authRequired, requireRole } from '../middleware/auth.js';
-import { getKimiSettings, saveKimiSettings, maskKey, listModels } from '../services/kimiSettings.js';
+import { getKimiSettings, saveKimiSettings, maskKey, listModels, DEEPSEEK_BASE_URL } from '../services/kimiSettings.js';
 
 export const kimiSettingsRouter = Router();
 
-/** Домены, которым разрешено получать ключ (защита от SSRF/угона ключа) */
+/** Домены, которым разрешено получать Kimi-ключ (защита от SSRF/угона ключа) */
 const BASE_URL_HOSTS = ['api.moonshot.ai', 'api.moonshot.cn', 'api.kimi.com'];
 const baseUrlSchema = z.string().url().max(200).refine(
   (u) => {
@@ -26,29 +30,47 @@ const baseUrlSchema = z.string().url().max(200).refine(
   { message: `baseUrl: только хосты ${BASE_URL_HOSTS.join(', ')}` },
 );
 
+function publicSettings(s: Awaited<ReturnType<typeof getKimiSettings>>) {
+  return {
+    provider: s.provider,
+    apiKeyMasked: maskKey(s.apiKey),
+    hasKey: Boolean(s.apiKey),
+    baseUrl: s.baseUrl,
+    textModel: s.textModel,
+    imageModel: s.imageModel,
+    embedModel: s.embedModel,
+    deepseekApiKeyMasked: maskKey(s.deepseekApiKey),
+    hasDeepseekKey: Boolean(s.deepseekApiKey),
+    deepseekModel: s.deepseekModel,
+    deepseekBaseUrl: DEEPSEEK_BASE_URL, // фиксирован, для подсказки в UI
+  };
+}
+
 kimiSettingsRouter.get('/admin/kimi-settings', authRequired, requireRole('admin', 'super_admin'), async (_req, res) => {
   const s = await getKimiSettings();
-  const { models, error } = await listModels(s);
+  const [kimi, deepseek] = await Promise.all([
+    listModels(s.baseUrl, s.apiKey),
+    listModels(DEEPSEEK_BASE_URL, s.deepseekApiKey),
+  ]);
   res.json({
-    settings: {
-      apiKeyMasked: maskKey(s.apiKey),
-      hasKey: Boolean(s.apiKey),
-      baseUrl: s.baseUrl,
-      textModel: s.textModel,
-      imageModel: s.imageModel,
-      embedModel: s.embedModel,
-    },
-    models: models.map((m) => m.id),
-    modelsError: error ?? null,
+    settings: publicSettings(s),
+    models: kimi.models.map((m) => m.id),          // активный список — Kimi (обратная совместимость)
+    modelsKimi: kimi.models.map((m) => m.id),
+    modelsDeepseek: deepseek.models.map((m) => m.id),
+    modelsError: kimi.error ?? null,
+    modelsDeepseekError: deepseek.error ?? null,
   });
 });
 
 const patchSchema = z.object({
+  provider: z.enum(['kimi', 'deepseek']).optional(),
   apiKey: z.string().max(200).optional(),
   baseUrl: baseUrlSchema.optional(),
   textModel: z.string().max(100).optional(),
   imageModel: z.string().max(100).optional(),
   embedModel: z.string().max(100).optional(),
+  deepseekApiKey: z.string().max(200).optional(),
+  deepseekModel: z.string().max(100).optional(),
 });
 
 kimiSettingsRouter.post('/admin/kimi-settings', authRequired, requireRole('super_admin'), async (req, res) => {
@@ -60,5 +82,5 @@ kimiSettingsRouter.post('/admin/kimi-settings', authRequired, requireRole('super
   }
   await saveKimiSettings(parsed.data);
   const s = await getKimiSettings();
-  res.json({ ok: true, settings: { apiKeyMasked: maskKey(s.apiKey), hasKey: Boolean(s.apiKey), baseUrl: s.baseUrl, textModel: s.textModel, imageModel: s.imageModel, embedModel: s.embedModel } });
+  res.json({ ok: true, settings: publicSettings(s) });
 });

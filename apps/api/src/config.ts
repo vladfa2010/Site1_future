@@ -18,6 +18,9 @@ export const config = {
   // Векторный поиск: модель эмбеддингов (1024-мерная, под article_embeddings).
   // Пусто — поиск работает в FTS-режиме без векторной части.
   moonshotEmbedModel: process.env.MOONSHOT_EMBED_MODEL ?? '',
+  // DeepSeek (OpenAI-совместимый, https://api.deepseek.com) — второй провайдер текстовой генерации.
+  // Ключ также задаётся в админке (хранится в БД); env — fallback.
+  deepseekApiKey: process.env.DEEPSEEK_API_KEY ?? '',
   uploadDir: process.env.UPLOAD_DIR ?? 'uploads',
   // CORS: доверенные origin'ы (через запятую)
   corsOrigins: (process.env.CORS_ORIGINS ?? 'http://localhost:5173,http://localhost:5174').split(','),

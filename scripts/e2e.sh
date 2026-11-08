@@ -269,6 +269,13 @@ curl -s -o /dev/null -w "%{http_code}" -X POST "$B/api/media/generate-text" -H "
 curl -s -o /dev/null -w "%{http_code}" "$B/api/admin/kimi-settings" | grep -q 401 && ok || bad "kimi-settings: anon 401"
 curl -s -X POST "$B/api/admin/kimi-settings" -H "$A" -H "$J" -d '{"textModel":"kimi-k3"}' | grep -q '"ok":true' && ok || bad "kimi-settings: POST"
 curl -s "$B/api/admin/kimi-settings" -H "$A" | grep -q '"textModel":"kimi-k3"' && ok || bad "kimi-settings: persisted"
+# второй провайдер: deepseek-ключ маскируется, модель сохраняется, переключение provider roundtrip
+curl -s -X POST "$B/api/admin/kimi-settings" -H "$A" -H "$J" -d '{"deepseekApiKey":"sk-testdeepseek0000000000000000000000","deepseekModel":"deepseek-chat"}' | grep -q '"hasDeepseekKey":true' && ok || bad "kimi-settings: deepseek key masked-save"
+curl -s "$B/api/admin/kimi-settings" -H "$A" | grep -q '"deepseekModel":"deepseek-chat"' && ok || bad "kimi-settings: deepseek model persisted"
+curl -s -X POST "$B/api/admin/kimi-settings" -H "$A" -H "$J" -d '{"provider":"deepseek"}' | grep -q '"provider":"deepseek"' && ok || bad "kimi-settings: provider→deepseek"
+curl -s -X POST "$B/api/admin/kimi-settings" -H "$A" -H "$J" -d '{"provider":"kimi"}' | grep -q '"provider":"kimi"' && ok || bad "kimi-settings: provider→kimi"
+curl -s -o /dev/null -w "%{http_code}" -X POST "$B/api/admin/kimi-settings" -H "$A" -H "$J" -d '{"provider":"openai"}' | grep -q 400 && ok || bad "kimi-settings: невалидный provider 400"
+curl -s -X POST "$B/api/admin/kimi-settings" -H "$A" -H "$J" -d '{"deepseekApiKey":""}' > /dev/null
 curl -s "$B/api/admin/kimi-settings" -H "$UA" -o /dev/null -w "%{http_code}" | grep -q 403 && ok || bad "kimi-settings: reader 403"
 # события по идее: публично, только sobytie+published, не-идея → 404
 IDEAID=$(curl -s "$B/api/articles/ideya/proekt-prometej-sledujushhij-shag-razvitija-ii" | jqget "d['article']['id']")

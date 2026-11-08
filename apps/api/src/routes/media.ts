@@ -120,7 +120,8 @@ mediaRouter.post('/media/generate-text', authRequired, requireRole('admin', 'sup
       return;
     }
     const s = await getKimiSettings();
-    res.json({ text, mock: !s.apiKey });
+    const activeKey = s.provider === 'deepseek' ? s.deepseekApiKey : s.apiKey;
+    res.json({ text, mock: !activeKey });
   } catch (e) {
     res.status(502).json({ error: 'generation failed', message: e instanceof Error ? e.message : 'unknown' });
   }
