@@ -23,7 +23,9 @@ export interface KimiSettings {
 }
 
 export const DEEPSEEK_BASE_URL = 'https://api.deepseek.com';
-export const DEEPSEEK_MODEL_HINTS = ['deepseek-chat', 'deepseek-reasoner', 'deepseek-flash', 'deepseek-v4-pro'];
+/** Реальный каталог /models (проверено 2026-11-09). deepseek-chat/deepseek-reasoner —
+ *  устаревшие алиасы: API их принимает, но резолвит в deepseek-flash (проверено запросами). */
+export const DEEPSEEK_MODEL_HINTS = ['deepseek-flash', 'deepseek-v4-pro'];
 
 const OWNER = { ownerType: 'app', ownerId: 0 };
 
@@ -41,7 +43,7 @@ async function load(): Promise<KimiSettings> {
     imageModel: get('kimi_image_model') || config.moonshotImageModel,
     embedModel: get('kimi_embed_model') || config.moonshotEmbedModel,
     deepseekApiKey: get('deepseek_api_key') || config.deepseekApiKey,
-    deepseekModel: get('deepseek_model') || 'deepseek-chat',
+    deepseekModel: get('deepseek_model') || 'deepseek-flash',
   };
 }
 

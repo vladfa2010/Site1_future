@@ -19,8 +19,10 @@ interface Settings {
 const TEXT_HINTS = ['kimi-k3', 'kimi-k3.1-pro', 'kimi-k3.1-pro-highspeed', 'kimi-k2.6', 'kimi-k2.7-code', 'kimi-k2.7-code-highspeed'];
 const IMAGE_HINTS = ['kimi-image-preview', 'moonshot-v1-image'];
 const EMBED_HINTS = ['moonshot-v1-embedding', 'kimi-embedding'];
-/** DeepSeek: /models аккаунта + документированные алиасы (deepseek-chat / deepseek-reasoner) */
-const DEEPSEEK_HINTS = ['deepseek-chat', 'deepseek-reasoner'];
+/** DeepSeek: live-список из /models аккаунта + реальный каталог как fallback.
+ *  deepseek-chat/deepseek-reasoner НЕ подсказываем — устаревшие алиасы,
+ *  API резолвит их в deepseek-flash (проверено запросами 2026-11-09). */
+const DEEPSEEK_HINTS = ['deepseek-flash', 'deepseek-v4-pro'];
 
 export default function KimiSettingsPage() {
   const [settings, setSettings] = useState<Settings | null>(null);
@@ -186,7 +188,7 @@ export default function KimiSettingsPage() {
             value={deepseekModel}
             onChange={setDeepseekModel}
             options={deepseekOptions}
-            hint="deepseek-chat — быстрый универсальный; deepseek-reasoner — рассуждающий (ответ в content, цепочка мысли отбрасывается)."
+            hint="deepseek-flash — быстрая и экономичная; deepseek-v4-pro — флагманская. Устаревшие алиасы deepseek-chat/deepseek-reasoner API принимает, но резолвит в deepseek-flash."
           />
           <StatusLine label="Модели DeepSeek аккаунта" models={modelsDeepseek} error={modelsDeepseekError} />
         </div>
