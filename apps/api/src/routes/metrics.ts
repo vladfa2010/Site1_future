@@ -147,23 +147,26 @@ metricsRouter.get('/admin/metrics/top-trends', ...adminOnly, async (req, res) =>
 });
 
 // ---------- Воронка: регистрация → чтение → избранное → подписка ----------
-metricsRouter.get('/admin/metrics/funnel', async (req, res) => {
+// ВАЖНО: все шаги вложены в когорту зарегистрированных за период (ТЗ-119 Задача 2 PULSE) —
+// иначе % от регистраций бессмыслен и может превышать 100%.
+metricsRouter.get('/admin/metrics/funnel', ...adminOnly, async (req, res) => {
   const d = days(req);
   const rows = await db.execute<{ step: string; n: number }>(sql`
-    with registered as (
-      select count(*)::int as n from users where created_at >= now() - make_interval(days => ${d})
+    with cohort as (
+      select id from users where created_at >= now() - make_interval(days => ${d})
     ),
+    registered as (select count(*)::int as n from cohort),
     read as (
-      select count(distinct user_id)::int as n from article_views
-      where user_id is not null and viewed_at >= now() - make_interval(days => ${d})
+      select count(distinct av.user_id)::int as n from article_views av
+      join cohort c on c.id = av.user_id
     ),
     favorited as (
-      select count(distinct user_id)::int as n from favorites
-      where created_at >= now() - make_interval(days => ${d})
+      select count(distinct f.user_id)::int as n from favorites f
+      join cohort c on c.id = f.user_id
     ),
     subscribed as (
-      select count(distinct user_id)::int as n from subscriptions
-      where created_at >= now() - make_interval(days => ${d})
+      select count(distinct s.user_id)::int as n from subscriptions s
+      join cohort c on c.id = s.user_id
     )
     select 'Регистрация' as step, n from registered
     union all select 'Прочитали статью', n from read
@@ -181,52 +184,49 @@ metricsRouter.get('/admin/metrics/funnel', async (req, res) => {
 });
 
 // ---------- Retention D1/D7/D30 (дневные когорты, молодые — null) ----------
-metricsRouter.get('/admin/metrics/retention-daily', async (_req, res) => {
-  const cohorts = await db.execute<{ cohort: string; users: number }>(sql`
-    select created_at::date as cohort, count(*)::int as users
-    from users
-    where created_at >= now() - interval '35 days'
-    group by 1 order by 1
+// «Активен в первые N дней» = count(distinct user_id) из article_views с
+// viewed_at <= регистрация + N дней. max(viewed_at) занижал D1/D7 для юзеров,
+// вернувшихся позже (баг-аудит 2026-11-08).
+metricsRouter.get('/admin/metrics/retention-daily', ...adminOnly, async (_req, res) => {
+  const rows = await db.execute<{
+    cohort: string; users: number; active_d1: number; active_d7: number; active_d30: number;
+  }>(sql`
+    with cohort as (
+      select id, created_at::date as cohort_date, count(*) over () as users
+      from users
+      where created_at >= now() - interval '35 days'
+    )
+    select
+      c.cohort_date::text as cohort,
+      count(distinct c.id)::int as users,
+      count(distinct c.id) filter (where av.viewed_at is not null and av.viewed_at < c.cohort_date + interval '2 days')::int as active_d1,
+      count(distinct c.id) filter (where av.viewed_at is not null and av.viewed_at < c.cohort_date + interval '8 days')::int as active_d7,
+      count(distinct c.id) filter (where av.viewed_at is not null and av.viewed_at < c.cohort_date + interval '31 days')::int as active_d30
+    from cohort c
+    left join article_views av on av.user_id = c.id
+    group by c.cohort_date
+    order by c.cohort_date
   `);
-  const activity = await db.execute<{ user_id: number; cohort: string; last_view: string }>(sql`
-    select av.user_id, u.created_at::date as cohort, max(av.viewed_at) as last_view
-    from article_views av
-    join users u on u.id = av.user_id
-    where u.created_at >= now() - interval '35 days'
-    group by 1, 2
-  `);
-  const actMap = new Map<number, { cohort: string; lastView: Date }>();
-  for (const a of activity.rows) {
-    actMap.set(Number(a.user_id), { cohort: String(a.cohort), lastView: new Date(String(a.last_view)) });
-  }
   const DAY = 86400_000;
   const now = Date.now();
-  const result = cohorts.rows.map((c) => {
-    const cohortDate = new Date(String(c.cohort)).getTime();
+  const result = rows.rows.map((r) => {
+    const cohortDate = new Date(String(r.cohort)).getTime();
     const ageDays = Math.floor((now - cohortDate) / DAY);
-    const usersInCohort = Number(c.users);
-    let activeD1 = 0, activeD7 = 0, activeD30 = 0;
-    for (const [, act] of actMap) {
-      if (act.cohort !== String(c.cohort)) continue;
-      const diffDays = Math.floor((act.lastView.getTime() - cohortDate) / DAY);
-      if (diffDays <= 1) activeD1++;
-      if (diffDays <= 7) activeD7++;
-      if (diffDays <= 30) activeD30++;
-    }
+    const usersInCohort = Number(r.users);
     return {
-      cohort: String(c.cohort),
+      cohort: String(r.cohort),
       users: usersInCohort,
       // null — когорте ещё не исполнилось N дней (честность, как в PULSE)
-      d1: ageDays >= 1 ? Math.round((activeD1 / usersInCohort) * 100) : null,
-      d7: ageDays >= 7 ? Math.round((activeD7 / usersInCohort) * 100) : null,
-      d30: ageDays >= 30 ? Math.round((activeD30 / usersInCohort) * 100) : null,
+      d1: ageDays >= 1 ? Math.round((Number(r.active_d1) / usersInCohort) * 100) : null,
+      d7: ageDays >= 7 ? Math.round((Number(r.active_d7) / usersInCohort) * 100) : null,
+      d30: ageDays >= 30 ? Math.round((Number(r.active_d30) / usersInCohort) * 100) : null,
     };
   });
   res.json({ cohorts: result });
 });
 
 // ---------- Группы риска: счётчики + списки ----------
-metricsRouter.get('/admin/metrics/at-risk', async (req, res) => {
+metricsRouter.get('/admin/metrics/at-risk', ...adminOnly, async (req, res) => {
   const type = String(req.query.type ?? 'dormant_7d');
   const valid = ['dormant_7d', 'dormant_30d', 'read_no_sub'] as const;
   if (!valid.includes(type as typeof valid[number])) {
@@ -239,7 +239,7 @@ metricsRouter.get('/admin/metrics/at-risk', async (req, res) => {
     const q7 = sql`
       select u.id, u.email, u.display_name,
         max(av.viewed_at) as last_view,
-        count(*)::int as views
+        count(av.viewed_at)::int as views
       from users u
       left join article_views av on av.user_id = u.id
       where u.created_at < now() - interval '1 day'
@@ -250,7 +250,7 @@ metricsRouter.get('/admin/metrics/at-risk', async (req, res) => {
     const q30 = sql`
       select u.id, u.email, u.display_name,
         max(av.viewed_at) as last_view,
-        count(*)::int as views
+        count(av.viewed_at)::int as views
       from users u
       left join article_views av on av.user_id = u.id
       where u.created_at < now() - interval '1 day'
@@ -282,4 +282,35 @@ metricsRouter.get('/admin/metrics/at-risk', async (req, res) => {
       views: Number(r.views),
     })),
   });
+});
+
+// ---------- Счётчики групп риска для KPI-карточек (как в PULSE) ----------
+metricsRouter.get('/admin/metrics/at-risk-counts', ...adminOnly, async (_req, res) => {
+  const rows = await db.execute<{ k: string; n: number }>(sql`
+    select 'dormant_7d' as k, count(*)::int as n from (
+      select u.id from users u
+      left join article_views av on av.user_id = u.id
+      where u.created_at < now() - interval '1 day'
+      group by u.id
+      having (max(av.viewed_at) is null or max(av.viewed_at) < now() - interval '7 days')
+    ) t
+    union all
+    select 'dormant_30d', count(*)::int from (
+      select u.id from users u
+      left join article_views av on av.user_id = u.id
+      where u.created_at < now() - interval '1 day'
+      group by u.id
+      having (max(av.viewed_at) is null or max(av.viewed_at) < now() - interval '30 days')
+    ) t
+    union all
+    select 'read_no_sub', count(*)::int from (
+      select u.id from users u
+      join article_views av on av.user_id = u.id
+      where not exists (select 1 from subscriptions s where s.user_id = u.id)
+      group by u.id
+    ) t
+  `);
+  const counts: Record<string, number> = {};
+  for (const r of rows.rows) counts[r.k] = Number(r.n);
+  res.json({ counts });
 });

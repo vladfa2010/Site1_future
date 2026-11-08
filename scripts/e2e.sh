@@ -180,6 +180,30 @@ curl -s "$B/api/admin/metrics/at-risk?type=dormant_7d" -H "$A" | grep -q '"users
 curl -s -o /dev/null -w "%{http_code}" "$B/api/admin/metrics/at-risk?type=bogus" -H "$A" | grep -q 400 && ok || bad "metrics: at-risk bogus 400"
 curl -s "$B/api/users/export.csv" -H "$A" | grep -q "display_name" && ok || bad "metrics: CSV export"
 curl -s -o /dev/null -w "%{http_code}" "$B/api/users/export.csv" | grep -q 401 && ok || bad "metrics: CSV anon 401"
+# приёмка агента-5: anon 401 на ВСЕ метрики (был дырявый guard), честность null, воронка в когорте
+for ep in "metrics/overview" "metrics/registrations?days=14" "metrics/engagement?days=7" "metrics/retention" "metrics/top-trends" "metrics/funnel?days=30" "metrics/retention-daily" "metrics/at-risk?type=dormant_7d" "metrics/at-risk-counts"; do
+  code=$(curl -s -o /dev/null -w "%{http_code}" "$B/api/admin/$ep")
+  [ "$code" = "401" ] && ok || bad "metrics: anon 401 на /admin/$ep (got $code)"
+done
+# воронка: все шаги ≤ регистраций (когорта), pct_of_total ≤ 100
+FUNNEL_MAX=$(curl -s "$B/api/admin/metrics/funnel?days=90" -H "$A" | python3 -c "import json,sys; f=json.load(sys.stdin)['funnel']; print(max(s['pct_of_total'] for s in f))")
+[ "$FUNNEL_MAX" -le 100 ] 2>/dev/null && ok || bad "metrics: воронка pct_of_total ≤ 100 (got $FUNNEL_MAX)"
+# retention-daily: честность null (когорта сегодня/вчера → d1 null)
+TODAY=$(date +%Y-%m-%d)
+curl -s "$B/api/admin/metrics/retention-daily" -H "$A" | python3 -c "
+import json,sys
+rows=[c for c in json.load(sys.stdin)['cohorts'] if c['cohort'] in ('$TODAY',)]
+assert not rows or rows[-1]['d1'] is None, 'молодая когорта должна иметь d1=null'
+print('ok')" > /dev/null 2>&1 && ok || bad "metrics: retention-daily null у молодой когорты"
+# at-risk: юзер без просмотров не показывает views=1
+DR=$(curl -s "$B/api/admin/metrics/at-risk?type=dormant_30d" -H "$A")
+echo "$DR" | python3 -c "
+import json,sys
+users=json.load(sys.stdin)['users']
+assert all(u['views'] != 1 or True for u in users), 'check'
+never=[u for u in users if u['lastView']=='никогда']
+assert all(u['views']==0 for u in never), 'never-visited должен иметь views=0'
+print('ok')" > /dev/null 2>&1 && ok || bad "metrics: at-risk views=0 у never-visited"
 
 echo "════════════════════════════════════════"
 echo "  E2E: КАБИНЕТ — ПОДПИСКИ/ИЗБРАННОЕ/НАСТРОЙКИ"

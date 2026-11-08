@@ -22,6 +22,13 @@ export default function MetricsPage() {
   const [loading, setLoading] = useState<Set<SectionName>>(new Set());
   const [errors, setErrors] = useState<string[]>([]);
   const [atRisk, setAtRisk] = useState<{ type: string; label: string; users: AtRiskUser[] } | null>(null);
+  const [riskCounts, setRiskCounts] = useState<Record<string, number> | null>(null);
+
+  useEffect(() => {
+    api<{ counts: Record<string, number> }>('/admin/metrics/at-risk-counts')
+      .then((r) => setRiskCounts(r.counts))
+      .catch(() => {});
+  }, []);
 
   // Независимая загрузка секций (как в PULSE): упавшая метрика не роняет страницу
   const loadSection = useCallback(async (section: SectionName) => {
@@ -125,22 +132,13 @@ export default function MetricsPage() {
         <Kpi label="Избранное / Подписки" value={overview ? `${fmt(overview.favorites)} / ${fmt(overview.subscriptions)}` : '…'} loading={isLoading('overview')} />
       </div>
 
-      {/* Группы риска (клик → список, как в PULSE) */}
+      {/* Группы риска (клик → список, как в PULSE; счётчики — живые) */}
       <section className="card space-y-2">
         <h2 className="font-semibold">Группы риска <span className="text-xs font-normal text-zinc-500">— клик: список юзеров</span></h2>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <button onClick={() => void openAtRisk('dormant_7d', 'Не заходили 7+ дней')} className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-4 text-left transition-colors hover:bg-amber-500/10">
-            <p className="text-xl font-bold text-amber-400">?</p>
-            <p className="text-xs text-zinc-400">Не заходили 7+ дней</p>
-          </button>
-          <button onClick={() => void openAtRisk('dormant_30d', 'Не заходили 30+ дней')} className="rounded-lg border border-red-500/30 bg-red-500/5 p-4 text-left transition-colors hover:bg-red-500/10">
-            <p className="text-xl font-bold text-red-400">?</p>
-            <p className="text-xs text-zinc-400">Не заходили 30+ дней</p>
-          </button>
-          <button onClick={() => void openAtRisk('read_no_sub', 'Читают, но не подписаны')} className="rounded-lg border border-zinc-700 bg-zinc-800/50 p-4 text-left transition-colors hover:bg-zinc-800">
-            <p className="text-xl font-bold text-zinc-300">?</p>
-            <p className="text-xs text-zinc-400">Читают, но ни на что не подписаны</p>
-          </button>
+          <RiskCard count={riskCounts?.dormant_7d} label="Не заходили 7+ дней" tone="amber" onClick={() => void openAtRisk('dormant_7d', 'Не заходили 7+ дней')} />
+          <RiskCard count={riskCounts?.dormant_30d} label="Не заходили 30+ дней" tone="red" onClick={() => void openAtRisk('dormant_30d', 'Не заходили 30+ дней')} />
+          <RiskCard count={riskCounts?.read_no_sub} label="Читают, но ни на что не подписаны" tone="zinc" onClick={() => void openAtRisk('read_no_sub', 'Читают, но не подписаны')} />
         </div>
       </section>
 
@@ -298,4 +296,18 @@ function Kpi({ label, value, hint, accent, loading }: { label: string; value: st
 
 function SectionLoading() {
   return <p className="animate-pulse py-6 text-center text-sm text-zinc-500">Загрузка секции…</p>;
+}
+
+function RiskCard({ count, label, tone, onClick }: { count?: number; label: string; tone: 'amber' | 'red' | 'zinc'; onClick: () => void }) {
+  const styles = {
+    amber: 'border-amber-500/30 bg-amber-500/5 hover:bg-amber-500/10 text-amber-400',
+    red: 'border-red-500/30 bg-red-500/5 hover:bg-red-500/10 text-red-400',
+    zinc: 'border-zinc-700 bg-zinc-800/50 hover:bg-zinc-800 text-zinc-300',
+  } as const;
+  return (
+    <button onClick={onClick} className={`rounded-lg border p-4 text-left transition-colors ${styles[tone]}`}>
+      <p className="text-2xl font-bold tabular-nums">{count === undefined ? '…' : count.toLocaleString('ru-RU')}</p>
+      <p className="mt-0.5 text-xs text-zinc-400">{label}</p>
+    </button>
+  );
 }
