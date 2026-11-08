@@ -4,6 +4,7 @@
  * Идемпотентно: пересчитывает только статьи без эмбеддинга (или --force для всех).
  */
 import { db, articles, articleEmbeddings } from './index.js';
+import { stripHtml } from './text-utils.js';
 import { sql, eq, isNull } from 'drizzle-orm';
 
 const API_KEY = process.env.MOONSHOT_API_KEY ?? '';
@@ -15,10 +16,6 @@ const BATCH = 20;
 if (!API_KEY || !MODEL) {
   console.error('Нужны MOONSHOT_API_KEY и MOONSHOT_EMBED_MODEL (1024-мерная модель).');
   process.exit(1);
-}
-
-function stripHtml(html: string): string {
-  return html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
 async function embed(texts: string[]): Promise<number[][]> {

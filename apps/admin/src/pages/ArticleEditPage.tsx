@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef, lazy, Suspense } from 'react';
 import { useParams, useNavigate } from 'react-router';
+import { stripHtml } from '@newinvest/db/text-utils';
 import { api } from '../api';
 import PreviewModal from '../components/PreviewModal';
 import MediaPickerModal from '../components/MediaPickerModal';
@@ -253,8 +254,6 @@ export default function ArticleEditPage() {
   };
 
   // ---- Генерация обложки через Kimi (mock без ключа) ----
-  const stripHtml = (html: string) => html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
-
   const buildPrompt = () => {
     const context =
       form.thesis || form.excerpt || stripHtml(form.contentHtml).slice(0, 300) || form.title;

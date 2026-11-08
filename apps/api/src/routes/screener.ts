@@ -59,6 +59,7 @@ screenerRouter.get('/screener', optionalAuth, async (req, res) => {
       thesis: articles.thesis,
       publishedAt: articles.publishedAt,
       coverUrl: media.filePath,
+      readingTime: articles.readingTime,
       phases: badges('article_deal_phases', 'deal_phases', 'phase_id'),
       stages: badges('article_deal_stages', 'deal_stages', 'stage_id'),
       industries: badges('article_industries', 'industries', 'industry_id'),

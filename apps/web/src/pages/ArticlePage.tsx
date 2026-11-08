@@ -9,6 +9,7 @@ import { IdeaChart } from '../components/IdeaChart';
 import { Paywall } from '../components/Paywall';
 import { ArticleCard, TYPE_LABELS } from '../components/ArticleCard';
 import { NewsCard } from '../components/NewsCard';
+import { ReadingTimeBadge } from '../components/ReadingTimeBadge';
 import { Carousel, CAROUSEL_ITEM } from '../components/Carousel';
 import { FavoriteButton } from '../components/FavoriteButton';
 import { SubscribeButton } from '../components/SubscribeButton';
@@ -93,9 +94,6 @@ export default function ArticlePage() {
           { label: article.title.length > 60 ? `${article.title.slice(0, 60)}…` : article.title },
         ]}
       />
-      <span className="text-xs uppercase tracking-wide text-zinc-500">
-        {TYPE_LABELS[article.type] ?? article.type}
-      </span>
       <div className="flex items-start justify-between gap-4">
         <h1 className="mt-2 text-3xl font-bold leading-tight">{article.title}</h1>
         {/* избранное + подписка на идею */}
@@ -104,6 +102,17 @@ export default function ArticlePage() {
             <FavoriteButton entityType="article" entityId={article.id} />
             <SubscribeButton entityType="article" entityId={article.id} label="Подписаться на идею" />
           </span>
+        )}
+      </div>
+
+      {/* meta-строка «тип · N мин чтения» сразу после заголовка (ТЗ-09, правка ревью v2.1) */}
+      <div className="mt-2 flex items-center gap-2 text-sm text-zinc-600">
+        <span className="uppercase tracking-wide">{TYPE_LABELS[article.type] ?? article.type}</span>
+        {article.readingTime != null && (
+          <>
+            <span aria-hidden="true">·</span>
+            <ReadingTimeBadge minutes={article.readingTime} className="text-sm text-zinc-600" />
+          </>
         )}
       </div>
 

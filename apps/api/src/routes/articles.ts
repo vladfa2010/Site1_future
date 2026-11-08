@@ -10,6 +10,7 @@ import {
   companies, trends, articleCompanies, articleTrends, media,
   metaFields, articleViews, users,
   tickers, articleTickers, dealStages, articleDealStages,
+  calcReadingTime,
 } from '@newinvest/db';
 import { uniqueSlug, plainTextToHtml } from '../utils/slug.js';
 import { optionalAuth, authRequired, requireRole, ADMIN_ROLES } from '../middleware/auth.js';
@@ -97,6 +98,7 @@ articlesRouter.get('/', optionalAuth, async (req, res) => {
       publishedAt: articles.publishedAt,
       coverUrl: media.filePath,
       videoUrl: articles.videoUrl,
+      readingTime: articles.readingTime,
     })
     .from(articles)
     .leftJoin(media, eq(articles.coverMediaId, media.id))
@@ -189,7 +191,7 @@ articlesRouter.post('/', authRequired, requireRole('author', 'admin', 'super_adm
   try {
     const [row] = await db
       .insert(articles)
-      .values({ ...articleData, status, authorId: req.user!.id })
+      .values({ ...articleData, status, authorId: req.user!.id, readingTime: calcReadingTime(data.contentHtml) })
       .returning();
     if (metaDescription) {
       await saveMetaDescription(row.id, metaDescription);
@@ -235,6 +237,11 @@ articlesRouter.patch('/:id', authRequired, requireRole('author', 'admin', 'super
   const { metaDescription, ...updates } = parsed.data;
   if (!admin) delete updates.status; // автор не меняет статус
 
+  // ТЗ-09: контент пришёл — пересчитываем время чтения; без contentHtml колонку не трогаем
+  if (typeof updates.contentHtml === 'string') {
+    (updates as Record<string, unknown>).readingTime = calcReadingTime(updates.contentHtml);
+  }
+
   // Переходы статуса: снятие с публикации очищает дату, публикация через PATCH ставит её, если пусто
   if (updates.status === 'draft') {
     (updates as Record<string, unknown>).publishedAt = null;
@@ -274,6 +281,7 @@ articlesRouter.post('/propose', authRequired, async (req, res) => {
     sourceUrl: sourceUrl ?? null,
     authorId: req.user!.id,
     status: 'draft',
+    readingTime: calcReadingTime(text), // ТЗ-09: plain text до конвертации в HTML (результат тот же)
   }).returning({ id: articles.id, type: articles.type, slug: articles.slug, title: articles.title, status: articles.status });
   res.status(201).json({ article: row, roleUpgraded: req.user!.role === 'reader' });
 });

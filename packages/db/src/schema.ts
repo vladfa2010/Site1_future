@@ -32,6 +32,7 @@ export const users = pgTable('users', {
   tariffId: integer('tariff_id').references(() => tariffPlans.id), // пейволл: тариф юзера
   tariffExpiresAt: timestamp('tariff_expires_at', { withTimezone: true }), // null = бессрочно (выдача админом)
   oldWpId: integer('old_wp_id'),                                    // миграция из Ultimate Member
+  bio: text('bio'),                                                 // ТЗ-05: биография автора
   createdAt: createdAt(),
 });
 
@@ -181,6 +182,18 @@ export const articles = pgTable(
     thesis: text('thesis'), // тезис идеи (2–3 предложения «почему это инвестиция»)
     sourceUrl: text('source_url'), // дедупликация (как в wptg)
     videoUrl: text('video_url'), // type=video: ссылка на внешнее видео (YouTube/RuTube/VK → embed)
+    readingTime: integer('reading_time'), // минуты чтения, авто-пересчёт при сохранении (TODO 09); NULL = не рассчитано
+    // ТЗ-03: счётчики просмотров (база + авто-бамп)
+    viewsBaseOffset: integer('views_base_offset').notNull().default(0),
+    viewsAutoBumpEnabled: boolean('views_auto_bump_enabled').notNull().default(false),
+    viewsAutoBumpEveryHours: integer('views_auto_bump_every_hours'), // обязателен, если enabled (CHECK в миграции 0014)
+    viewsAutoBumpMin: integer('views_auto_bump_min').notNull().default(1),
+    viewsAutoBumpMax: integer('views_auto_bump_max').notNull().default(3),
+    viewsBumpAccumulated: integer('views_bump_accumulated').notNull().default(0),
+    viewsBumpLastAt: timestamp('views_bump_last_at', { withTimezone: true }),
+    // ТЗ-04: агрегаты лайков/шеров (источник истины — article_likes / article_share_events)
+    likesCount: integer('likes_count').notNull().default(0),
+    sharesCount: integer('shares_count').notNull().default(0),
     coverMediaId: integer('cover_media_id').references(() => media.id),
     authorId: integer('author_id').references(() => users.id, { onDelete: 'set null' }), // удаление аккаунта не трогает контент
     status: text('status').notNull().default('draft'), // draft | pending | published
@@ -436,7 +449,40 @@ export const articleViews = pgTable(
       .references(() => articles.id, { onDelete: 'cascade' }),
     viewedAt: timestamp('viewed_at', { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index('article_views_article_idx').on(t.articleId, t.viewedAt)],
+  (t) => [
+    index('article_views_article_idx').on(t.articleId, t.viewedAt),
+    index('article_views_viewed_at_idx').on(t.viewedAt), // ТЗ-07: тренды «популярное сейчас» по времени
+  ],
+);
+
+// ТЗ-04: лайки материалов (один юзер — один лайк; PK заменяет отдельный индекс)
+export const articleLikes = pgTable(
+  'article_likes',
+  {
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    articleId: integer('article_id')
+      .notNull()
+      .references(() => articles.id, { onDelete: 'cascade' }),
+    createdAt: createdAt(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.articleId] })],
+);
+
+// ТЗ-04: события шеров (канал: link | telegram | vk | ...; юзер nullable — анонимный шер)
+export const articleShareEvents = pgTable(
+  'article_share_events',
+  {
+    id: serial('id').primaryKey(),
+    articleId: integer('article_id')
+      .notNull()
+      .references(() => articles.id, { onDelete: 'cascade' }),
+    userId: integer('user_id').references(() => users.id, { onDelete: 'cascade' }),
+    channel: text('channel').notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [index('article_share_events_article_id_idx').on(t.articleId)],
 );
 
 // ---------- SEO и переезд ----------

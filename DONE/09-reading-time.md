@@ -345,3 +345,9 @@ npm-скрипты:
 7. Backfill UPDATE батчем (`where id in (...)`) вместо поштучного — меньше roundtrips.
 8. Канонический regex stripHtml — `/\+/` (как embed.ts:20), не `*`.
 9. Формулировка VideoCard: скрыт подтверждено; на странице видео-статьи (под плеером) — показываем.
+
+---
+
+## СТАТУС: ✅ РЕАЛИЗОВАНО (2026-11-08, агент-46, принято)
+
+Реализовано по ТЗ + правкам v2.1. Итог: text-utils.ts (канонический stripHtml/countWords/calcReadingTime wpm=170) + сабпас-exports с types; ОБЩАЯ миграция 0014_engagement применена целиком (все колонки ТЗ-03/04/05/07/09 + article_likes/article_share_events + индекс article_views(viewed_at) + CHECK); backfill 308 статей (0 NULL, идемпотентно); POST/PATCH/propose пересчитывают reading_time; список/деталь/screener отдают readingTime; ReadingTimeBadge на странице (meta-строка после h1 с переносом типа), карточки (IdeaCard только >=2 мин, VideoCard скрыт); 8/8 юнит-тестов; 4 дубля stripHtml заменены импортом. Отклонения: миграция написана вручную (drizzle-kit TTY-дрейф от 0012/0013 — известная практика репо); apps/admin/package.json добавлена зависимость @newinvest/db для сабпаса. Следующие ТЗ используют колонки 0014 без новых миграций (sort_order сюжетов — 0015, делает ТЗ-08).

@@ -13,4 +13,5 @@ const pool = new pg.Pool({
 
 export const db = drizzle(pool, { schema });
 export * from './schema.js';
+export * from './text-utils.js';
 export { schema };

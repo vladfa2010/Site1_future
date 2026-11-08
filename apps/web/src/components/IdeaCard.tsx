@@ -2,6 +2,7 @@ import { Link } from 'react-router';
 import type { Idea } from '../api';
 import { CoverThumb } from './CoverThumb';
 import { FavoriteButton } from './FavoriteButton';
+import { ReadingTimeBadge } from './ReadingTimeBadge';
 
 /**
  * Карточка идеи с вертикальной обложкой (как у донора) + бейджи
@@ -19,6 +20,12 @@ export function IdeaCard({ idea }: { idea: Idea }) {
           {badge}
         </span>
       </div>
+      {/* время чтения под обложкой, перед тезисом/чипсами (ТЗ-09: только при >= 2 мин) */}
+      {idea.readingTime != null && idea.readingTime >= 2 && (
+        <div className="mt-2">
+          <ReadingTimeBadge minutes={idea.readingTime} iconClassName="h-3 w-3" />
+        </div>
+      )}
       {(idea.thesis || idea.stages.length > 1 || idea.industries.length > 0) && (
         <div className="mt-2 flex flex-wrap items-start gap-1.5 text-xs">
           {idea.thesis && <p className="line-clamp-2 w-full text-sm text-zinc-400 group-hover:text-zinc-300">{idea.thesis}</p>}

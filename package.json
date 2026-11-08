@@ -12,7 +12,8 @@
     "db:migrate": "npm run migrate -w @newinvest/db",
     "db:migrate:wp": "npm run migrate:wp -w @newinvest/db",
     "db:studio": "npm run studio -w @newinvest/db",
-    "db:smoke": "npm run smoke -w @newinvest/db"
+    "db:smoke": "npm run smoke -w @newinvest/db",
+    "db:backfill:reading-time": "npm run backfill:reading-time -w @newinvest/db"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"

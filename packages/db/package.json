@@ -4,7 +4,11 @@
   "version": "0.0.1",
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./text-utils": {
+      "types": "./src/text-utils.ts",
+      "default": "./src/text-utils.ts"
+    }
   },
   "scripts": {
     "generate": "drizzle-kit generate",
@@ -12,7 +16,9 @@
     "migrate:wp": "tsx src/migrate-wp.ts",
     "studio": "drizzle-kit studio",
     "smoke": "tsx src/smoke.ts",
-    "embed": "tsx src/embed.ts"
+    "embed": "tsx src/embed.ts",
+    "backfill:reading-time": "tsx src/backfill-reading-time.ts",
+    "test": "tsx --test \"src/**/*.test.ts\""
   },
   "dependencies": {
     "dotenv": "^16.4.7",

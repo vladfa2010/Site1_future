@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useParams } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
+import { stripHtml } from '@newinvest/db/text-utils';
 import { api, type ArticleListItem } from '../api';
 import { ArticleCard, TYPE_LABELS } from '../components/ArticleCard';
 import { VideoCard } from '../components/VideoCard';
@@ -23,8 +24,6 @@ const SECTIONS: { type: string; title: string }[] = [
   { type: 'ideya', title: 'Идеи тренда' },
   { type: 'interesnoe', title: 'Интересное по тренду' },
 ];
-
-const stripHtml = (html: string) => html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
 
 export default function TrendPage() {
   const { slug = '' } = useParams();

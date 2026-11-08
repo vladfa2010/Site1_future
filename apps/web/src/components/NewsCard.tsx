@@ -1,6 +1,7 @@
 import { Link } from 'react-router';
 import type { ArticleListItem } from '../api';
 import { FavoriteButton } from './FavoriteButton';
+import { ReadingTimeBadge } from './ReadingTimeBadge';
 
 /**
  * Широкая новостная карточка как у донора: горизонтальная картинка сверху
@@ -26,8 +27,12 @@ export function NewsCard({ article }: { article: ArticleListItem }) {
         <h3 className="mt-3 line-clamp-2 font-semibold leading-snug text-zinc-100 group-hover:text-[#d6ff5c]">
           {article.title}
         </h3>
-        {article.publishedAt && (
-          <span className="mt-1.5 text-xs text-zinc-600">{article.publishedAt.slice(0, 10)}</span>
+        {(article.publishedAt || article.readingTime != null) && (
+          <div className="mt-1.5 flex items-center gap-1.5 text-xs text-zinc-600">
+            {article.publishedAt && <span>{article.publishedAt.slice(0, 10)}</span>}
+            {article.publishedAt && article.readingTime != null && <span aria-hidden="true">·</span>}
+            <ReadingTimeBadge minutes={article.readingTime ?? null} iconClassName="h-3 w-3" />
+          </div>
         )}
         {article.excerpt && (
           <p className="mt-2 line-clamp-3 text-sm leading-relaxed text-zinc-400">{article.excerpt}</p>

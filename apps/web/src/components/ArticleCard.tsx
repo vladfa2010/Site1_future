@@ -2,6 +2,7 @@ import { Link } from 'react-router';
 import type { ArticleListItem } from '../api';
 import { CoverThumb } from './CoverThumb';
 import { FavoriteButton } from './FavoriteButton';
+import { ReadingTimeBadge } from './ReadingTimeBadge';
 
 export const TYPE_LABELS: Record<string, string> = {
   novost: 'Новость',
@@ -21,6 +22,8 @@ export function ArticleCard({ article }: { article: ArticleListItem }) {
         {article.excerpt && (
           <p className="mt-2 line-clamp-2 text-sm text-zinc-400 group-hover:text-zinc-300">{article.excerpt}</p>
         )}
+        {/* время чтения под лидом (ТЗ-09); null → не рендерится */}
+        <ReadingTimeBadge minutes={article.readingTime ?? null} iconClassName="h-3 w-3" />
       </Link>
       <FavoriteButton entityType="article" entityId={article.id} className="absolute top-2 right-2" />
     </div>

@@ -10,6 +10,7 @@
  */
 import 'dotenv/config';
 import { db } from './index.js';
+import { stripHtml } from './text-utils.js';
 import {
   articles, companies, tickers, industries, trends,
   dealPhases, dealStages,
@@ -55,8 +56,6 @@ async function wpAll<T>(endpoint: string, params: Record<string, string> = {}): 
   }
   return out;
 }
-
-const stripHtml = (html: string) => html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
 
 async function main() {
   console.log(`Донор: ${WP}`);

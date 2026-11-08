@@ -18,6 +18,7 @@ export interface ArticleListItem {
   publishedAt: string | null;
   coverUrl: string | null;
   videoUrl?: string | null;
+  readingTime?: number | null; // ТЗ-09: минуты чтения, null = не рассчитано
 }
 
 export interface ArticleDetail extends ArticleListItem {
@@ -100,6 +101,7 @@ export interface Idea {
   thesis: string | null;
   publishedAt: string | null;
   coverUrl: string | null;
+  readingTime?: number | null; // ТЗ-09: минуты чтения (показываем в карточке при >= 2)
   phases: string[];
   stages: string[];
   industries: string[];
