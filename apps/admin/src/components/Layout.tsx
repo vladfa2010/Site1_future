@@ -17,6 +17,7 @@ const NAV = [
   { to: '/tariffs', label: 'Тарифы' },
   { to: '/features', label: 'Фичи' },
   { to: '/kimi', label: 'Настройки Kimi' },
+  { to: '/metrics', label: 'Метрики' },
   { to: '/stats', label: 'Аналитика' },
 ];
 

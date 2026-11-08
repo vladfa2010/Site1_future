@@ -45,6 +45,7 @@ export const loginLimiter = rateLimit({
   windowMs: 15 * 60_000,
   limit: 10,
   ...limiterDefaults,
+  skipSuccessfulRequests: true, // считаем только НЕУДАЧНЫЕ попытки — брутфорс, а не легитимные логины
   message: { error: 'too many attempts, try later' },
 });
 

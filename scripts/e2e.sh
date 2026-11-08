@@ -165,6 +165,13 @@ curl -s -o /dev/null -w "%{http_code}" -X POST "$B/api/admin/kimi-settings" -H "
 curl -s -o /dev/null -w "%{http_code}" -X POST "$B/api/articles" -H "$A" -H "$J" -d '{"type":"novost","slug":"e2e-xss","title":"x","contentHtml":"<p>x</p>","sourceUrl":"data:text/html,x"}' | grep -q 400 && ok || bad "security: data: URL 400"
 EXPTTL=$(curl -s -X POST "$B/api/auth/login" -H "$J" -d '{"email":"test@test.ru","password":"test"}' | python3 -c "import json,sys,base64; t=json.load(sys.stdin)['token']; p=t.split('.')[1]; p+='='*(-len(p)%4); d=json.loads(base64.urlsafe_b64decode(p)); print(d['exp']-d['iat'])")
 [ "$EXPTTL" = "43200" ] && ok || bad "security: admin JWT TTL 12h (got $EXPTTL)"
+# продуктовые метрики: все эндпоинты отвечают, anon 401
+for ep in "metrics/overview" "metrics/registrations?days=14" "metrics/engagement?days=7" "metrics/retention" "metrics/top-trends"; do
+  curl -s -o /dev/null -w "%{http_code}" "$B/api/admin/$ep" -H "$A" | grep -q 200 && ok || bad "metrics: GET /admin/$ep 200"
+done
+curl -s "$B/api/admin/metrics/overview" -H "$A" | grep -q '"dau"' && ok || bad "metrics: overview содержит DAU"
+curl -s -o /dev/null -w "%{http_code}" "$B/api/admin/metrics/overview" | grep -q 401 && ok || bad "metrics: anon 401"
+curl -s "$B/api/admin/metrics/top-trends" -H "$A" | grep -q '"views"' && ok || bad "metrics: top-trends содержит views"
 
 echo "════════════════════════════════════════"
 echo "  E2E: КАБИНЕТ — ПОДПИСКИ/ИЗБРАННОЕ/НАСТРОЙКИ"
