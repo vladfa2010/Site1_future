@@ -7,8 +7,7 @@ import { z } from 'zod';
 import { and, desc, eq, inArray, sql, type SQL } from 'drizzle-orm';
 import {
   db, favorites, subscriptions, articles, companies, trends, stories, users,
-  articleCompanies, articleTrends, articleIndustries, articleTickers, media,
-  notificationSettings, industries, tickers,
+  media, notificationSettings, industries, tickers,
 } from '@newinvest/db';
 import { authRequired } from '../middleware/auth.js';
 import { createLinkCode, tgStatus, disconnect, tgEnabled } from '../services/telegram.js';

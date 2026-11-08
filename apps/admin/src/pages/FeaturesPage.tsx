@@ -14,7 +14,6 @@ interface FeatureDef {
   integrationStatus: 'pending' | 'integrated' | 'deprecated';
 }
 
-const STATUS_LABELS: Record<string, string> = { pending: 'В ожидании', integrated: 'Подключена', deprecated: 'Устарела' };
 const EMPTY = { id: '', label: '', description: '', isActive: true };
 
 export default function FeaturesPage() {

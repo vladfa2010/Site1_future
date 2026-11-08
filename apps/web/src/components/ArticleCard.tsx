@@ -26,18 +26,3 @@ export function ArticleCard({ article }: { article: ArticleListItem }) {
     </div>
   );
 }
-
-/** Компактная карточка статьи (для гридов на страницах-архивах) */
-export function ArticleRowCard({ article }: { article: ArticleListItem }) {
-  return (
-    <Link to={`/${article.type}/${article.slug}`} className="flex gap-4 rounded-lg border border-[#2a2a2a] bg-[#191919] p-3 transition-colors hover:border-[#beff00]/50">
-      {article.coverUrl && (
-        <img src={article.coverUrl} alt="" loading="lazy" className="h-20 w-20 shrink-0 rounded-md object-cover" />
-      )}
-      <div>
-        <span className="text-xs uppercase tracking-wide text-zinc-500">{TYPE_LABELS[article.type] ?? article.type}</span>
-        <h3 className="mt-0.5 font-semibold leading-snug">{article.title}</h3>
-      </div>
-    </Link>
-  );
-}

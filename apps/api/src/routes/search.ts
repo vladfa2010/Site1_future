@@ -6,7 +6,7 @@
  * Пейволл соблюдается: аноним видит только public-опубликованное.
  */
 import { Router } from 'express';
-import { and, eq, sql } from 'drizzle-orm';
+import { sql } from 'drizzle-orm';
 import { db, articles, articleEmbeddings, media } from '@newinvest/db';
 import { optionalAuth, ADMIN_ROLES } from '../middleware/auth.js';
 import { accessCondition } from './articles.js';

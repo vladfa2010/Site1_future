@@ -7,6 +7,28 @@ export default function StatsPage() {
   const [days, setDays] = useState(30);
   const [data, setData] = useState<{ total: number; articles: StatRow[] } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [digestMsg, setDigestMsg] = useState<string | null>(null);
+  const [digestBusy, setDigestBusy] = useState(false);
+
+  const sendDigest = async (scope: 'daily' | 'weekly') => {
+    setDigestBusy(true);
+    setDigestMsg(null);
+    try {
+      const r = await api<{ sent?: number; skipped?: string | null }>('/notifications/send', {
+        method: 'POST',
+        body: JSON.stringify({ scope }),
+      });
+      setDigestMsg(
+        r.skipped
+          ? `Не отправлено: ${r.skipped}`
+          : `Отправлено: ${r.sent ?? 0} сообщений`,
+      );
+    } catch (e) {
+      setDigestMsg(e instanceof Error ? e.message : 'Ошибка');
+    } finally {
+      setDigestBusy(false);
+    }
+  };
 
   useEffect(() => {
     void api<{ total: number; articles: StatRow[] }>(`/stats/views?days=${days}`)
@@ -23,6 +45,14 @@ export default function StatsPage() {
         </select>
       </div>
       {error && <p className="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-400">{error}</p>}
+
+      {/* Ручной запуск дайджестов (автоматика: cron 20:00 daily, вс 20:00 weekly) */}
+      <div className="card flex flex-wrap items-center gap-3">
+        <span className="text-sm text-zinc-400">Дайджесты подписчикам (email + Telegram):</span>
+        <button className="btn-secondary" disabled={digestBusy} onClick={() => void sendDigest('daily')}>Отправить дневной</button>
+        <button className="btn-secondary" disabled={digestBusy} onClick={() => void sendDigest('weekly')}>Отправить недельный</button>
+        {digestMsg && <span className="text-sm text-[#c9ff2a]">{digestMsg}</span>}
+      </div>
 
       {data && (
         <>

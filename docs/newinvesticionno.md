@@ -306,16 +306,19 @@ market_classes (id, slug UNIQUE, name)        -- Классы рынков (4)
 articles (                         -- ОДНА таблица вместо 6 CPT
   id            SERIAL PRIMARY KEY,
   type          TEXT NOT NULL,          -- novost | sobytie | analitika |
-                                        -- interesnoe | ideya  → /{type}/{slug}/
+                                        -- interesnoe | ideya | video → /{type}/{slug}/
   slug          TEXT NOT NULL,
   title         TEXT NOT NULL,
   content_html  TEXT NOT NULL,
   excerpt       TEXT,
   thesis        TEXT,                   -- тезис идеи (для type='ideya')
   source_url    TEXT,                   -- дедупликация (как в wptg)
+  video_url     TEXT,                   -- type='video': внешнее видео (embed)
   cover_media_id INT REFERENCES media(id),
   author_id     INT REFERENCES users(id),
-  status        TEXT DEFAULT 'draft',   -- draft | published
+  status        TEXT DEFAULT 'draft',   -- draft | pending | published
+  access_level  TEXT DEFAULT 'public',  -- пейволл: public | auth | tariff
+  access_tariff_id INT REFERENCES tariff_plans(id),
   published_at  TIMESTAMPTZ,
   created_at, updated_at,
   old_wp_id     INT, old_wp_type TEXT,  -- миграция: сверка и 1:1 URL
@@ -329,9 +332,8 @@ article_industries   (article_id, industry_id,   PRIMARY KEY(article_id, industr
 article_trends       (article_id, trend_id,      PRIMARY KEY(article_id, trend_id))
 article_deal_stages  (article_id, stage_id,      PRIMARY KEY(article_id, stage_id))
 article_deal_phases  (article_id, phase_id,      PRIMARY KEY(article_id, phase_id))
-article_project_stages(article_id, stage_id,     PRIMARY KEY(article_id, stage_id))
-article_strategies   (article_id, strategy_id,   PRIMARY KEY(article_id, strategy_id))
-article_market_classes(article_id, class_id,     PRIMARY KEY(article_id, class_id))
+-- ВАЖНО: словари project_stages/strategies/market_classes существуют, но junction-таблицы
+-- к статьям НЕ заводили — привязки только через компании/тренды/индустрии (решение 2026-11-08)
 
 media (
   id, file_path TEXT, alt TEXT, source_url TEXT,  -- source_url — откуда скачано (OG)
@@ -345,6 +347,9 @@ media (
 users (
   id, email TEXT UNIQUE NOT NULL, password_hash TEXT,
   display_name TEXT, role TEXT DEFAULT 'reader',   -- super_admin | admin | author | reader
+  avatar TEXT,                                      -- эмодзи из пресета (10 шт)
+  tariff_id INT REFERENCES tariff_plans(id),        -- пейволл: тариф юзера
+  tariff_expires_at TIMESTAMPTZ,                    -- null = бессрочно
   old_wp_id INT,                                    -- миграция из Ultimate Member
   created_at
 )
@@ -352,10 +357,32 @@ bookmarks (                        -- закладки (было в UM)
   user_id, article_id, created_at,
   PRIMARY KEY (user_id, article_id)
 )
-subscriptions (                    -- подписка на тикер/компанию/тренд/индустрию
-  user_id, entity_type TEXT,        -- ticker | company | trend | industry
+subscriptions (                    -- подписка на тикер/компанию/тренд/индустрию/идею
+  user_id, entity_type TEXT,        -- ticker | company | trend | industry | article
   entity_id INT, created_at,
   PRIMARY KEY (user_id, entity_type, entity_id)
+)
+
+-- Пейволл и тарифы (модель PULSE PAYMENTS.md §3.1)
+tariff_plans (
+  id, slug TEXT UNIQUE, name, description,
+  price_monthly NUMERIC, price_yearly NUMERIC, yearly_discount INT,
+  features JSONB,              -- {telegram,email,aiSummary,earlyAccess,...}
+  is_active BOOL, coming_soon_label TEXT, sort_order INT,
+  created_at, updated_at
+)
+features_registry (               -- реестр фич для тогглов в админке
+  id TEXT PRIMARY KEY, label, description,
+  is_active BOOL, integration_status TEXT, created_at, updated_at
+)
+
+-- Уведомления и интеграции
+notification_settings (           -- 1:1 к users
+  user_id PRIMARY KEY, email_daily BOOL, email_weekly BOOL,
+  last_daily_sent_at, last_weekly_sent_at
+)
+tg_bindings (user_id PRIMARY KEY, chat_id BIGINT, tg_username, connected_at)
+tg_link_codes (code TEXT PRIMARY KEY, user_id, expires_at)  -- одноразовые deep-link коды
 )
 article_views (                    -- аналитика чтения
   user_id, article_id, viewed_at
@@ -408,7 +435,7 @@ CREATE INDEX ON article_embeddings USING hnsw (embedding vector_cosine_ops);
 
 ### 6.1 Стек (решено 2026-11-06 — унификация со вторым проектом)
 
-**Бэкенд**: Node.js 20, Express, TypeScript, PostgreSQL, bcrypt + JWT, node-cron, axios.
+**Бэкенд**: Node.js 20, Express, TypeScript, PostgreSQL, bcrypt + JWT, node-cron (HTTP — fetch/node:http, axios нет)
 **Фронтенд**: React 19 + TypeScript, Vite, Tailwind CSS 3.4, shadcn/ui, Framer Motion, Lucide, React Router.
 
 Важная поправка к схеме «SQLite dev / PostgreSQL prod» второго проекта: **здесь в dev тоже PostgreSQL** (Docker-контейнер) — иначе недоступны pgvector, полнотекстовый поиск и часть миграций.
@@ -468,7 +495,7 @@ investicionno_rf/
 │   │   └── src/routes/       # auth, articles, entities, stories, bindings, screener,
 │   │                         # media (+generate-text), admin (users/redirects/stats),
 │   │                         # market (MOEX ISS), cabinet (favorites/subscriptions/feed/
-│   │                         # tg-link/propose), features, tariffs, search (hybrid FTS+
+│   │                         # tg-link/propose), features, search (hybrid FTS+
 │   │                         # vector), kimiSettings
 │   │   └── src/services/     # mediaGen (обложки), textGen (лиды/SEO, персоны editor|seo),
 │   │                         # embeddings (Moonshot /embeddings), kimiSettings (ключ+модели
@@ -494,7 +521,7 @@ investicionno_rf/
 │                               # из медиатеки), EntityCloud (облака тегов: дроплист+создание
 │                               # по Enter), SearchInput (дебаунс), Layout
 ├── packages/
-│   ├── db/                   # Drizzle ORM: схема (раздел 5), миграции 0000–0012,
+│   ├── db/                   # Drizzle ORM: схема (раздел 5), миграции 0000–0013,
 │   │   └── src/migrate-wp.ts # импорт контента с донора (WP REST API)
 │   │   └── src/embed.ts      # бэкфилл эмбеддингов (npm run embed)
 │   ├── shared/               # (зарезервировано) общие TS-типы, DTO, константы
@@ -503,7 +530,7 @@ investicionno_rf/
 │   ├── docker-compose.yml    # PostgreSQL + pgvector (для сервера; локально — Homebrew PG)
 │   └── docker/               # Dockerfile для api/web/admin
 ├── scripts/
-│   └── e2e.sh                # E2E-сьют (77 проверок: auth, админка, юзер-сценарии, поиск,
+│   └── e2e.sh                # E2E-сьют (119 проверок: auth, админка, юзер-сценарии, поиск,
 │                             # безопасность) — API_URL=http://localhost:4000 bash scripts/e2e.sh
 ├── reference/                # локальные копии репозиториев PULSE (в .gitignore)
 ├── docs/
@@ -513,7 +540,7 @@ investicionno_rf/
 
 Решения:
 
-- **npm workspaces** — одна установка зависимостей в корне, `packages/shared` подключается во все три приложения
+- **npm workspaces** — одна установка зависимостей в корне; приложения зависят только от `@newinvest/db` (packages/shared и packages/config — пустые-заготовки, типы дублируются)
 - **ORM — Drizzle** (а не Prisma): SQL-first, нативная работа с pgvector и полнотекстовым поиском, миграции — обычные .sql
 - **Миграции БД** — Drizzle-kit генерирует (`npm run db:generate`), применяются `npm run db:migrate`
 - **dev-окружение**: локально Homebrew Postgres 17 + pgvector (Docker на машине нет); на сервере — docker-compose
@@ -525,12 +552,12 @@ investicionno_rf/
 
 | Слой | Что | Статус |
 |---|---|---|
-| `packages/db` | Схема 29+ таблиц (раздел 5), миграции 0000–0012 (FTS search_tsv + pgvector), смоук-тест pgvector | ✅ |
+| `packages/db` | Схема 29+ таблиц (раздел 5), миграции 0000–0013 (FTS search_tsv + pgvector + video_url), смоук-тест pgvector | ✅ |
 | `apps/api` | JWT-авторизация, роли (super_admin/admin/author/reader); статьи (CRUD+публикация+возврат в черновик, paywall public/auth/tariff); граф знаний + привязки + автоподстановка цепочки; скринер; раунды; тарифы (каталог+фичи, из PULSE); поиск гибридный FTS+vector (RRF); генерация: обложки (Kimi Images), тексты/лиды/SEO (Chat Completions, персоны), эмбеддинги; email-дайджесты (Resend: день 20:00 + недельный вс 20:00); TG-контур (deep-link + polling + дайджесты); настройки Kimi API из БД; аудит безопасности 2 раунда (XSS/CORS/лимиты/alg-pinning/транзакции/magic bytes) | ✅ |
 | миграция контента | 306 статей, 73 компании, 24 тикера, 26 индустрий, 16 трендов, связи (383/118/366/334) | ✅ |
 | `apps/web` | Главная как у донора (палитра чёрный #000 + лайм #beff00), статья (thesis, чипсы, график MOEX при «Торги на бирже», breadcrumbs), тренд-лендинг, сюжет-хронология, скринер, **/search** (гибридный, бейдж «векторный+текстовый»), /pricing (тарифы из БД), /cabinet (избранное, подписки→лента, настройки уведомлений email/TG, удаление аккаунта), AuthModal 1:1 PULSE, «Предложить идею» | ✅ |
 | `apps/admin` | Все экраны: статьи (TipTap, авто-slug, обложка — генерация/загрузка/выбор из медиатеки, привязки EntityCloud с созданием по Enter, генерация лида и SEO-description, превью десктоп/планшет/мобайл, публикация/возврат в черновик, paywall-уровни), компании, тренды, индустрии, тикеры, сюжеты, медиатека, редиректы, пользователи (роли), тарифы, фичи, аналитика, **настройки Kimi API** (/kimi) | ✅ |
-| E2E | scripts/e2e.sh — 115 проверок (реестр механик — раздел 6.6), зелёные | ✅ |
+| E2E | scripts/e2e.sh — 119 проверок (реестр механик — раздел 6.6), зелёные | ✅ |
 
 **Запуск с нуля:**
 
@@ -543,7 +570,7 @@ npm run seed -w @newinvest/api          # супер-админ admin@local.dev 
 npm run seed:test -w @newinvest/api     # тестовый админ test@test.ru / test
 npm run db:migrate:wp                   # контент с донора (опционально, ~30 с)
 npm run dev                             # api :4000 + web :5173 + admin :5174
-API_URL=http://localhost:4000 bash scripts/e2e.sh   # E2E-регрессия (77 проверок)
+API_URL=http://localhost:4000 bash scripts/e2e.sh   # E2E-регрессия (119 проверок)
 # векторный поиск после ввода ключа в /kimi:
 MOONSHOT_API_KEY=… MOONSHOT_EMBED_MODEL=… npm run embed -w @newinvest/db
 ```
@@ -562,7 +589,7 @@ MOONSHOT_API_KEY=… MOONSHOT_EMBED_MODEL=… npm run embed -w @newinvest/db
 
 ### 6.6 Реестр механик и покрытие E2E (2026-11-08)
 
-Полный список механик платформы. Каждая — минимум один тест в `scripts/e2e.sh` (115 проверок, `API_URL=http://localhost:4000 bash scripts/e2e.sh`).
+Полный список механик платформы. Каждая — минимум один тест в `scripts/e2e.sh` (119 проверок, `API_URL=http://localhost:4000 bash scripts/e2e.sh`).
 
 **Авторизация и роли**
 
@@ -658,7 +685,7 @@ MOONSHOT_API_KEY=… MOONSHOT_EMBED_MODEL=… npm run embed -w @newinvest/db
 
 ### 7.1 Совпадение стека
 
-Подтверждено по `TECH_STACK.md` (дата сверки 2026-10-27): Node 20 + Express 4 + TS 5.9, `pg` 8, bcrypt + jsonwebtoken, node-cron, axios; React 19 + Vite 6 + Tailwind 3.4 + shadcn-паттерны + Framer Motion 12 + Lucide, React Query 5, ECharts 6.
+Подтверждено по `TECH_STACK.md` (дата сверки 2026-10-27): Node 20 + Express 4 + TS 5.9, `pg` 8, bcrypt + jsonwebtoken, node-cron (axios заявлен в PULSE, у нас нет); React 19 + Vite 6 + Tailwind 3.4 + shadcn-паттерны + Framer Motion 12 + Lucide, React Query 5, ECharts 6.
 
 Отличия, которые важны нам:
 
@@ -826,3 +853,4 @@ MOONSHOT_API_KEY=… MOONSHOT_EMBED_MODEL=… npm run embed -w @newinvest/db
 | 2026-11-08 | **NewsCard — широкие новостные карточки как у донора**: горизонтальная картинка 2:1 сверху (зум при наведении), под ней заголовок (2 строки), дата, лид (3 строки); избранное в углу картинки. Используется: главная «Свежие новости», архив /novost, карусели идеи «Новости по идее» и TypeCarousel при type=novost. Остальные типы — книжные 3:4 как раньше | страницы 200 |
 | 2026-11-08 | **Скринер: компании, тренды и стадия финансирования на карточках**: /api/screener возвращает companies[], trends[] (бейджи-агрегаты по junction) и fundingStage (последний раунд компаний идеи из funding_rounds, order by date desc). IdeaCard (карусели): компания (лайм, 1) → тренд (1) → 💰 fundingStage → стадии → индустрии. PipelinePage (скринер): фазы → компании (2) → тренды (2) → 💰 fundingStage → стадии → индустрии. Порядок бейджей: от конкретного к общему | E2E 115/115 |
 | 2026-11-08 | **Тип контента «video» (курация, embed как в WordPress)** — закрывает главный пробел концепта (видео как вход в тему): миграция 0013 (articles.video_url), ARTICLE_TYPES+video. Редактор: поле «Ссылка на видео» (YouTube/RuTube/VK/Vimeo/Dailymotion) с валидацией платформы. Фронт: lib/video.ts toEmbedUrl (watch/youtu.be/shorts→youtube.com/embed, rutube→play/embed, vk→video_ext) + videoThumbnail (ytimg для превью); VideoCard (16:9, play-кнопка, лаймовая плашка «Видео»); страница статьи — iframe-плеер над текстом. Воронка на TrendPage: Видео → Аналитика → Новости → События → Идеи → Интересное. Меню: «Портфель» → «Стартапы» (точка входа концепта). /video — архив и роут работают автоматически | E2E 119/119 (+4) |
+| 2026-11-08 | **Аудит двумя агентами + приёмка**: (1) мёртвый код — удалён ArticleRowCard, videoThumbnail из admin/lib (дубль web), зомби config.databaseUrl, 12 неиспользуемых импортов (cabinet/digest/kimiSettings/admin/articles/screener/search/VideoCard/ArticlePage/FeaturesPage); digest.ts переведён на getKimiSettings (ключ из админки теперь работает и для AI-сводки недели); кнопки ручного запуска дайджестов в «Аналитике». (2) документация — убраны 3 фантомные таблицы (article_project_stages/strategies/market_classes — junction не заводили), раздел 5 дополнен (video_url, пейволл-колонки, users.avatar/tariff, tariff_plans/features_registry/notification_settings/tg_*), счётчики E2E 77/115→119, убран axios, infra описание приведено к реальности. (3) СОЗДАНА инфра для деплоя: infra/docker-compose.yml (pgvector+api+web+admin+caddy), Dockerfile.{api,web,admin}, nginx.spa.conf, Caddyfile (TLS, admin-поддомен, /api-прокси), infra/.env.example. Фикс git-индекса миграции 0013 + snapshot 0013 (чистый клон не сломается) | типизация всех приложений чистая |

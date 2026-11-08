@@ -3,8 +3,7 @@ import 'dotenv/config';
 export const config = {
   port: Number(process.env.PORT ?? 4000),
   jwtSecret: process.env.JWT_SECRET ?? 'dev-secret-change-me',
-  databaseUrl:
-    process.env.DATABASE_URL ?? 'postgres://localhost:5432/newinvest',
+  // DATABASE_URL читает напрямую packages/db (drizzle), здесь не дублируем
   adminEmail: process.env.ADMIN_EMAIL ?? 'admin@local',
   adminPassword: process.env.ADMIN_PASSWORD ?? 'admin123',
   // Генерация обложек через Moonshot/Kimi Images API.

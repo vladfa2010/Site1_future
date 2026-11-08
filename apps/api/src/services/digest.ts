@@ -2,13 +2,14 @@
  * Дайджесты: ежедневный (конец дня) и недельный репорт (как в PULSE).
  * Получатели — юзеры с подписками и включённым каналом (настройки по умолчанию: вкл).
  */
-import { and, desc, eq, gte, inArray, sql, type SQL } from 'drizzle-orm';
+import { and, desc, eq, gte, sql, type SQL } from 'drizzle-orm';
 import {
-  db, users, subscriptions, notificationSettings, articles, articleViews, media,
+  db, users, subscriptions, notificationSettings, articles, articleViews,
   tgBindings,
 } from '@newinvest/db';
 import { sendEmail, emailEnabled, renderDailyDigest, renderWeeklyReport } from './email.js';
 import { sendTelegramMessage, tgEnabled } from './telegram.js';
+import { getKimiSettings } from './kimiSettings.js';
 
 const anyChannel = () => emailEnabled() || tgEnabled();
 
@@ -142,22 +143,22 @@ export async function runWeeklyReport(): Promise<{ sent: number; skipped: string
   return { sent, skipped: null };
 }
 
-/** опциональная AI-сводка недели (Moonshot; без ключа — без сводки) */
+/** опциональная AI-сводка недели (Moonshot; без ключа — без сводки). Ключ/модель — из настроек админки */
 async function aiSummaryWeek(
   count: number,
   top: { title: string }[],
   subscribed: { title: string }[],
 ): Promise<string | null> {
-  const key = process.env.MOONSHOT_API_KEY;
-  if (!key) return null;
+  const s = await getKimiSettings();
+  if (!s.apiKey) return null;
   const prompt = `Сайт инвестиционно.рф, венчурные тренды и идеи. За неделю вышло ${count} материалов. ` +
     `Топ: ${top.map((a) => `«${a.title}»`).join('; ') || '—'}. ` +
     `По подпискам читателя: ${subscribed.slice(0, 8).map((a) => `«${a.title}»`).join('; ') || '—'}. ` +
     'Напиши 2-3 предложения дружелюбной сводки недели для подписчика на русском, без воды и эмодзи.';
-  const res = await fetch(`${process.env.MOONSHOT_BASE_URL ?? 'https://api.moonshot.ai/v1'}/chat/completions`, {
+  const res = await fetch(`${s.baseUrl}/chat/completions`, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model: process.env.MOONSHOT_TEXT_MODEL ?? 'moonshot-v1-8k', messages: [{ role: 'user', content: prompt }], max_tokens: 300 }),
+    headers: { Authorization: `Bearer ${s.apiKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model: s.textModel, messages: [{ role: 'user', content: prompt }], max_tokens: 300 }),
     signal: AbortSignal.timeout(30_000),
   });
   if (!res.ok) throw new Error(`moonshot ${res.status}`);

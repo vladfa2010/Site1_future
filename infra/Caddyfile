@@ -1,0 +1,44 @@
+# Caddy: TLS + прокси. Домены — punycode: xn--b1aghca0aeahc1am7c.xn--p1ai = инвестиционно.рф
+{
+  email invest@inside-trade.ru
+}
+
+(security) {
+  encode zstd gzip
+  header {
+    X-Content-Type-Options nosniff
+    X-Frame-Options DENY
+    Referrer-Policy strict-origin-when-cross-origin
+    -Server
+  }
+}
+
+# Основной сайт (API и uploads — тот же origin, фронт ходит на /api относительно)
+xn--b1aghca0aeahc1am7c.xn--p1ai {
+  import security
+
+  handle_path /api/* {
+    reverse_proxy api:4000
+  }
+  handle_path /uploads/* {
+    reverse_proxy api:4000
+  }
+  handle {
+    reverse_proxy web:80
+  }
+}
+
+# Админка — отдельный поддомен
+admin.xn--b1aghca0aeahc1am7c.xn--p1ai {
+  import security
+
+  handle_path /api/* {
+    reverse_proxy api:4000
+  }
+  handle_path /uploads/* {
+    reverse_proxy api:4000
+  }
+  handle {
+    reverse_proxy admin:80
+  }
+}

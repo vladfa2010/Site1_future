@@ -17,7 +17,6 @@ export interface KimiSettings {
 }
 
 const OWNER = { ownerType: 'app', ownerId: 0 };
-const KEYS = ['kimi_api_key', 'kimi_base_url', 'kimi_text_model', 'kimi_image_model', 'kimi_embed_model'] as const;
 
 let cache: KimiSettings | null = null;
 

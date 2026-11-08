@@ -1,0 +1,68 @@
+# Инвестиционно.рф — серверный стек (PostgreSQL + pgvector + приложения).
+# Локально НЕ используется (Homebrew PG); для сервера: docker compose up -d
+services:
+  db:
+    image: pgvector/pgvector:pg17
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: newinvest
+      POSTGRES_USER: ${POSTGRES_USER:-newinvest}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:? задайте в .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U $${POSTGRES_USER:-newinvest}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: ..
+      dockerfile: infra/docker/Dockerfile.api
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-newinvest}:${POSTGRES_PASSWORD}@db:5432/newinvest
+      JWT_SECRET: ${JWT_SECRET:? задайте в .env}
+      CORS_ORIGINS: ${CORS_ORIGINS:-https://инвестиционно.рф,https://admin.инвестиционно.рф}
+      UPLOAD_DIR: /app/uploads
+      # ключи/модели Kimi удобнее задавать в админке (/kimi) — env как fallback:
+      MOONSHOT_API_KEY: ${MOONSHOT_API_KEY:-}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      TG_BOT_TOKEN: ${TG_BOT_TOKEN:-}
+      PUBLIC_SITE_URL: ${PUBLIC_SITE_URL:-https://инвестиционно.рф}
+    volumes:
+      - uploads:/app/uploads
+
+  web:
+    build:
+      context: ..
+      dockerfile: infra/docker/Dockerfile.web
+    restart: unless-stopped
+    depends_on: [api]
+
+  admin:
+    build:
+      context: ..
+      dockerfile: infra/docker/Dockerfile.admin
+    restart: unless-stopped
+    depends_on: [api]
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - '80:80'
+      - '443:443'
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+    depends_on: [web, admin, api]
+
+volumes:
+  pgdata:
+  uploads:
+  caddy_data:

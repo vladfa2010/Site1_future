@@ -1,0 +1,14 @@
+# Админка: vite build → nginx (отдельный поддомен)
+FROM node:20-slim AS build
+WORKDIR /app
+COPY package.json package-lock.json ./
+COPY packages/db/package.json packages/db/
+COPY apps/admin/package.json apps/admin/
+RUN npm ci --workspace @newinvest/admin --include-workspace-root=false
+COPY apps/admin apps/admin
+RUN npm run build -w @newinvest/admin
+
+FROM nginx:alpine
+COPY --from=build /app/apps/admin/dist /usr/share/nginx/html
+COPY infra/docker/nginx.spa.conf /etc/nginx/conf.d/default.conf
+EXPOSE 80

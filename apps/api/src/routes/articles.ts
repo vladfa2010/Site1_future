@@ -4,7 +4,7 @@
  */
 import { Router } from 'express';
 import { z } from 'zod';
-import { and, desc, eq, sql, type SQL } from 'drizzle-orm';
+import { and, eq, sql, type SQL } from 'drizzle-orm';
 import {
   db, articles, ARTICLE_TYPES, type ArticleType,
   companies, trends, articleCompanies, articleTrends, media,

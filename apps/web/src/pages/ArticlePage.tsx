@@ -1,6 +1,6 @@
 import { useParams } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
-import { api, type ArticleListItem } from '../api';
+import { api } from '../api';
 import { EntityChips } from '../components/EntityChips';
 import { Breadcrumbs } from '../components/Breadcrumbs';
 import { sanitizeArticleHtml } from '../lib/sanitize';

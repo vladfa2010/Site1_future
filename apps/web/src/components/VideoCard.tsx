@@ -1,7 +1,7 @@
 import { Link } from 'react-router';
 import type { ArticleListItem } from '../api';
 import { FavoriteButton } from './FavoriteButton';
-import { toEmbedUrl, videoThumbnail } from '../lib/video';
+import { videoThumbnail } from '../lib/video';
 
 /**
  * Карточка видео (type=video): превью с play-кнопкой (как у донора).

@@ -3,7 +3,7 @@
  */
 import { Router } from 'express';
 import { z } from 'zod';
-import { and, desc, eq, gte, sql, type SQL } from 'drizzle-orm';
+import { and, desc, eq, gte, sql } from 'drizzle-orm';
 import { db, users, redirects, articleViews, articles, tariffPlans } from '@newinvest/db';
 import { authRequired, requireRole, ADMIN_ROLES } from '../middleware/auth.js';
 import { runDailyDigest, runWeeklyReport } from '../services/digest.js';

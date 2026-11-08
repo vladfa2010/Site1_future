@@ -4,7 +4,7 @@
  * Возвращает идеи с бейджами стадий/фаз/индустрий.
  */
 import { Router } from 'express';
-import { and, desc, eq, sql, type SQL } from 'drizzle-orm';
+import { and, eq, sql, type SQL } from 'drizzle-orm';
 import { db, articles, dealPhases, dealStages, industries, media } from '@newinvest/db';
 
 export const screenerRouter = Router();

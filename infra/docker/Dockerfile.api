@@ -1,0 +1,16 @@
+# API: prod (запуск через tsx — компиляция не требуется)
+FROM node:20-slim
+WORKDIR /app
+ENV NODE_ENV=production
+
+COPY package.json package-lock.json ./
+COPY packages/db/package.json packages/db/
+COPY apps/api/package.json apps/api/
+RUN npm ci --workspace @newinvest/api --include-workspace-root=false
+
+COPY packages/db packages/db
+COPY apps/api apps/api
+
+EXPOSE 4000
+# миграции идемпотентны; затем сервер
+CMD ["sh", "-c", "npm run migrate -w @newinvest/db && npx tsx apps/api/src/index.ts"]
