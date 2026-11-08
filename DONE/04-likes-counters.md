@@ -297,3 +297,9 @@ UPDATE articles a SET shares_count = COALESCE(c.cnt, 0)
 9. Дрейф счётчиков: в той же транзакции писать `likes_count = (SELECT COUNT(*) FROM article_likes WHERE article_id = ?)` — самосхождение к истине вместо +/-1 (цена ничтожна).
 10. Комментарий в 0014: каналы `telegram | vk | whatsapp | copylink | native_share` (убрать `ok`).
 11. Инвариант: раз в сутки сверка `likes_count` vs COUNT reconcile-скриптом (копипаста SQL миграции) — добавить в объём, npm script.
+
+---
+
+## СТАТУС: ✅ РЕАЛИЗОВАНО (2026-11-08, агент-48, принято)
+
+По ТЗ + правкам v2.1. routes/engagement.ts (PUT/DELETE like — count-based самосхождение к истине в транзакции, детект по returning; POST share — whitelist→unknown, лимитеры ВНУТРИ после optionalAuth: 30/час юзер / 10/час аноним IP + per-article throttle 10мин → 429; черновики 404), likesCount/sharesCount/liked в списках/детали/screener, LikeButton (bottom-2 left-2 на карточках, оптимистичный+откат, аноним→AuthModal login), счётчик шеров (иконка+число без слов) в шапке статьи, reconcile-engagement.ts (починил 32 дрейфа ручных тестов), cwd-независимая подгрузка .env в db (чинит db:smoke), e2e +20 (итог 189/189). Отклонения: LikeButton также в NewsCard/IdeaCard (шире U2); IdeaCard liked=false локально (скринер публичный — состояние сбросится после рефетча, принято); e2e-блок требует чистого прогона.

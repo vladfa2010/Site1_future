@@ -11,6 +11,7 @@ import { articlesRouter } from './routes/articles.js';
 import { entitiesRouter } from './routes/entities.js';
 import { storiesRouter } from './routes/stories.js';
 import { bindingsRouter } from './routes/bindings.js';
+import { engagementRouter } from './routes/engagement.js';
 import { screenerRouter } from './routes/screener.js';
 import { mediaRouter } from './routes/media.js';
 import { adminRouter } from './routes/admin.js';
@@ -56,6 +57,7 @@ app.get('/api/health', (_req, res) => {
 
 app.use('/api/auth', authRouter);
 app.use('/api', bindingsRouter); // ПЕРЕД articlesRouter: пути /articles/:id/...
+app.use('/api', engagementRouter); // ТЗ-04: /articles/:id/like|share — ПЕРЕД articlesRouter (тот же конфликт :id vs :type)
 app.use('/api/articles', articlesRouter);
 app.use('/api/search', searchRouter);
 app.use('/api', kimiSettingsRouter); // /admin/kimi-settings — ПЕРЕД cabinet (у него router-wide auth)

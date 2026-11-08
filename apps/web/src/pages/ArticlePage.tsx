@@ -13,7 +13,10 @@ import { ReadingTimeBadge } from '../components/ReadingTimeBadge';
 import { ViewsBadge } from '../components/ViewsBadge';
 import { Carousel, CAROUSEL_ITEM } from '../components/Carousel';
 import { FavoriteButton } from '../components/FavoriteButton';
+import { LikeButton } from '../components/LikeButton';
 import { SubscribeButton } from '../components/SubscribeButton';
+import { Share2 } from 'lucide-react';
+import { formatCount } from '../lib/format';
 
 /** Карусель «материалы по этой идее» — общие привязки (компании/тикеры/индустрии/тренды) */
 function IdeaEvents({ articleId, type, title }: { articleId: number; type: string; title: string }) {
@@ -97,13 +100,23 @@ export default function ArticlePage() {
       />
       <div className="flex items-start justify-between gap-4">
         <h1 className="mt-2 text-3xl font-bold leading-tight">{article.title}</h1>
-        {/* избранное + подписка на идею */}
-        {article.type === 'ideya' && (
-          <span className="flex shrink-0 gap-2 pt-2">
-            <FavoriteButton entityType="article" entityId={article.id} />
-            <SubscribeButton entityType="article" entityId={article.id} label="Подписаться на идею" />
+        {/* ТЗ-04: лайк + счётчик шеров (иконка + число без слов, ревью v2.1 №5) + избранное + подписка на идею */}
+        <span className="flex shrink-0 items-center gap-2 pt-2">
+          <LikeButton articleId={article.id} liked={data.liked} likesCount={data.likesCount} />
+          <span
+            className="flex h-8 items-center gap-1 rounded-full bg-black/60 px-2.5 text-zinc-300 backdrop-blur-sm"
+            title="Поделились"
+          >
+            <Share2 size={15} />
+            <span className="min-w-[2ch] text-center text-xs font-semibold tabular-nums">
+              {formatCount(data.sharesCount)}
+            </span>
           </span>
-        )}
+          <FavoriteButton entityType="article" entityId={article.id} />
+          {article.type === 'ideya' && (
+            <SubscribeButton entityType="article" entityId={article.id} label="Подписаться на идею" />
+          )}
+        </span>
       </div>
 
       {/* meta-строка «тип · N мин чтения · 👁 просмотры» сразу после заголовка (ТЗ-09, ТЗ-03) */}

@@ -161,6 +161,65 @@ curl -s "$B/api/articles/novost/spacex-lider-po-kolichestvu-sputnikov" | grep -q
 curl -s "$B/api/screener?stage=pre-ipo-transaction-stages" | grep -q ideas && ok || bad "screener: фильтр стадии"
 
 echo "════════════════════════════════════════"
+echo "  E2E: ТЗ-04 — ЛАЙКИ / ШЕРЫ (engagement)"
+echo "  ДАННЫЕ НЕ УДАЛЯЮТСЯ (правка ревью v2.1 №4) — прогон только на dev-БД"
+echo "════════════════════════════════════════"
+# ВНИМАНИЕ на порядок шагов (ревью v2.1 №3): лимитер юзера 30/час тестируется на РАЗНЫХ
+# материалах отдельным свежим юзером — иначе per-article throttle даст 429 раньше.
+# L1: анонимный лайк — 401, счётчик не меняется
+curl -s -o /dev/null -w "%{http_code}" -X PUT "$B/api/articles/$ART/like" | grep -q 401 && ok || bad "likes: anon PUT 401"
+curl -s -o /dev/null -w "%{http_code}" -X DELETE "$B/api/articles/$ART/like" | grep -q 401 && ok || bad "likes: anon DELETE 401"
+# L2/L4: лайк юзера → идемпотентность повторного PUT (счётчик +1 суммарно, одна строка в БД)
+LINIT=$(psql -d newinvest -tAc "SELECT likes_count FROM articles WHERE id=$ART" 2>/dev/null)
+curl -s -X PUT "$B/api/articles/$ART/like" -H "$UA" | grep -q '"liked":true' && ok || bad "likes: PUT liked:true"
+LC1=$(curl -s -X PUT "$B/api/articles/$ART/like" -H "$UA" | jqget "d['likesCount']")
+[ "$LC1" = "$((LINIT+1))" ] 2>/dev/null && ok || bad "likes: повторный PUT идемпотентен (LC1=$LC1 LINIT=$LINIT)"
+psql -d newinvest -tAc "SELECT count(*) FROM article_likes WHERE article_id=$ART" 2>/dev/null | grep -q ^1$ && ok || bad "likes: ровно 1 строка в article_likes"
+# L3/L4: отмена повторным кликом; повторный DELETE идемпотентен, не ниже 0
+curl -s -X DELETE "$B/api/articles/$ART/like" -H "$UA" | grep -q '"liked":false' && ok || bad "likes: DELETE liked:false"
+LC2=$(curl -s -X DELETE "$B/api/articles/$ART/like" -H "$UA" | jqget "d['likesCount']")
+[ "$LC2" = "$LINIT" ] 2>/dev/null && ok || bad "likes: повторный DELETE идемпотентен (LC2=$LC2 LINIT=$LINIT)"
+# список отдаёт счётчики всем (L5); liked анониму — false
+curl -s "$B/api/articles?limit=5" | python3 -c "import json,sys; a=json.load(sys.stdin)['articles']; assert all('likesCount' in x and 'sharesCount' in x and x.get('liked')==False for x in a); print('ok')" > /dev/null 2>&1 && ok || bad "likes: likesCount/sharesCount/liked в списке"
+# S2/S6: анонимный шер telegram → 201; богус-канал → 201 с 'unknown' в БД (не 400)
+SH1=$(curl -s -X POST "$B/api/articles/$ART/share" -H "$J" -d '{"channel":"telegram"}')
+echo "$SH1" | grep -q '"sharesCount"' && ok || bad "shares: anon telegram 201"
+curl -s -o /dev/null -w "%{http_code}" -X POST "$B/api/articles/$ART/share" -H "$J" -d '{"channel":"bogus-channel"}' | grep -q 201 && ok || bad "shares: богус-канал 201 (не 400)"
+psql -d newinvest -tAc "SELECT channel='unknown' FROM article_share_events WHERE article_id=$ART ORDER BY id DESC LIMIT 1" 2>/dev/null | grep -q t && ok || bad "shares: богус-канал записан как 'unknown'"
+# черновики: like/share → 404 (действие над материалом, но черновик лайкать нельзя, §4.5)
+DRAFT=$(curl -s -X POST "$B/api/articles/propose" -H "$UA" -H "$J" -d '{"type":"ideya","title":"E2E идея лайков","text":"Текст идеи более двадцати символов для валидации"}' | jqget "d['article']['id']")
+[ -n "$DRAFT" ] && ok || bad "likes: draft-статья создана"
+curl -s -o /dev/null -w "%{http_code}" -X PUT "$B/api/articles/$DRAFT/like" -H "$UA" | grep -q 404 && ok || bad "likes: draft PUT 404"
+curl -s -o /dev/null -w "%{http_code}" -X POST "$B/api/articles/$DRAFT/share" -H "$J" -d '{"channel":"telegram"}' | grep -q 404 && ok || bad "shares: draft POST 404"
+# S3 per-article throttle: 2-й шер залогиненного на ту же статью < 10 мин → 429
+curl -s -o /dev/null -w "%{http_code}" -X POST "$B/api/articles/$ART/share" -H "$UA" -H "$J" -d '{"channel":"vk"}' | grep -q 201 && ok || bad "shares: первый шер юзера 201"
+curl -s -o /dev/null -w "%{http_code}" -X POST "$B/api/articles/$ART/share" -H "$UA" -H "$J" -d '{"channel":"vk"}' | grep -q 429 && ok || bad "shares: per-article throttle 429"
+# S3 анонимный IP-лимит 10/час: добираем до исчерпания — остаток 201, затем 429
+ANON_OK=0; ANON_429=0
+for i in $(seq 1 12); do
+  code=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$B/api/articles/$ART/share" -H "$J" -d '{"channel":"copylink"}')
+  [ "$code" = "201" ] && ANON_OK=$((ANON_OK+1))
+  [ "$code" = "429" ] && ANON_429=$((ANON_429+1))
+done
+[ "$ANON_OK" -le 10 ] && [ "$ANON_429" -ge 1 ] 2>/dev/null && ok || bad "shares: анонимный лимит 10/час (ok=$ANON_OK 429=$ANON_429)"
+# S3 лимит юзера 30/час — на РАЗНЫХ материалах (ревью v2.1 №3), свежий юзер = свежий бакет
+curl -s -X POST $B/api/auth/register -H "$J" -d '{"username":"E2EEngage","email":"e2e-engage@test.ru","password":"E2ePass123"}' > /dev/null
+ET=$(curl -s -X POST $B/api/auth/login -H "$J" -d '{"email":"e2e-engage@test.ru","password":"E2ePass123"}' | jqget "d['token']")
+EA="Authorization: Bearer $ET"
+IDS=$(curl -s "$B/api/articles?limit=100" | jqget "' '.join(str(x['id']) for x in d['articles'] if x['id'] != $ART)")
+U_OK=0; U_429=0; i=0
+for id in $IDS; do
+  i=$((i+1)); [ "$i" -gt 31 ] && break
+  code=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$B/api/articles/$id/share" -H "$EA" -H "$J" -d '{"channel":"telegram"}')
+  [ "$code" = "201" ] && U_OK=$((U_OK+1))
+  [ "$code" = "429" ] && U_429=$((U_429+1))
+done
+[ "$U_OK" -eq 30 ] && [ "$U_429" -eq 1 ] 2>/dev/null && ok || bad "shares: лимит юзера 30/час на разных материалах (ok=$U_OK 429=$U_429)"
+# инвариант БД + reconcile-скрипт (ревью v2.1 №11): после сверки расхождений 0
+psql -d newinvest -tAc "SELECT count(*) FROM articles WHERE likes_count <> (SELECT count(*) FROM article_likes al WHERE al.article_id=articles.id) OR shares_count <> (SELECT count(*) FROM article_share_events se WHERE se.article_id=articles.id)" 2>/dev/null | grep -q ^0$ && ok || bad "engagement: инвариант likes/shares до reconcile"
+(cd "$(dirname "$0")/.." && npm run reconcile:engagement -w @newinvest/db 2>&1 | grep -q "OK:") && ok || bad "engagement: npm run reconcile:engagement"
+
+echo "════════════════════════════════════════"
 echo "  E2E: БЕЗОПАСНОСТЬ / ОГРАНИЧЕНИЯ"
 echo "════════════════════════════════════════"
 curl -s -o /dev/null -w "%{http_code}" -H "Origin: http://evil.example" "$B/api/articles?limit=1" | grep -q 403 && ok || bad "CORS: чужой origin 403"

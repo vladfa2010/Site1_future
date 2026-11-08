@@ -2,6 +2,7 @@ import { Link } from 'react-router';
 import type { Idea } from '../api';
 import { CoverThumb } from './CoverThumb';
 import { FavoriteButton } from './FavoriteButton';
+import { LikeButton } from './LikeButton';
 import { ReadingTimeBadge } from './ReadingTimeBadge';
 import { ViewsBadge } from './ViewsBadge';
 
@@ -20,6 +21,8 @@ export function IdeaCard({ idea }: { idea: Idea }) {
         <span className="absolute top-3 left-3 rounded-full bg-black/80 px-2.5 py-1 text-xs text-[#c9ff2a] backdrop-blur">
           {badge}
         </span>
+        {/* ТЗ-04: лайк на обложке, угол противоположный Favorite */}
+        <LikeButton articleId={idea.id} liked={false} likesCount={idea.likesCount ?? 0} className="absolute bottom-2 left-2" />
       </div>
       {/* время чтения под обложкой, перед тезисом/чипсами (ТЗ-09: только при >= 2 мин) */}
       {idea.readingTime != null && idea.readingTime >= 2 && (

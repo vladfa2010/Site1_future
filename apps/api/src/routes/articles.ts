@@ -4,12 +4,13 @@
  */
 import { Router } from 'express';
 import { z } from 'zod';
-import { and, eq, sql, type SQL } from 'drizzle-orm';
+import { and, eq, isNotNull, sql, type SQL } from 'drizzle-orm';
 import {
   db, articles, ARTICLE_TYPES, type ArticleType,
   companies, trends, articleCompanies, articleTrends, media,
   metaFields, articleViews, users,
   tickers, articleTickers, dealStages, articleDealStages,
+  articleLikes,
   calcReadingTime,
 } from '@newinvest/db';
 import { uniqueSlug, plainTextToHtml } from '../utils/slug.js';
@@ -102,7 +103,7 @@ articlesRouter.get('/', optionalAuth, async (req, res) => {
   }
 
   const where = conditions.length > 0 ? and(...conditions) : undefined;
-  const rows = await db
+  const query = db
     .select({
       id: articles.id,
       type: articles.type,
@@ -115,15 +116,30 @@ articlesRouter.get('/', optionalAuth, async (req, res) => {
       videoUrl: articles.videoUrl,
       readingTime: articles.readingTime,
       viewsCount: virtualViewsSql, // ТЗ-03: виртуальный счётчик (реальные + seed + докрутка)
+      // ТЗ-04: счётчики вовлечения видны всем (L5); liked — через один leftJoin для залогиненного
+      likesCount: articles.likesCount,
+      sharesCount: articles.sharesCount,
+      liked: req.user
+        ? isNotNull(articleLikes.userId)
+        : sql<boolean>`false`,
     })
     .from(articles)
     .leftJoin(media, eq(articles.coverMediaId, media.id))
+    .$dynamic();
+  if (req.user) {
+    // не N+1 подзапросов: один джойн по паре (article, user) — NULL в liked = не лайкал
+    query.leftJoin(
+      articleLikes,
+      and(eq(articleLikes.articleId, articles.id), eq(articleLikes.userId, req.user.id)),
+    );
+  }
+  const list = await query
     .where(where)
     .orderBy(sql`coalesce(${articles.publishedAt}, ${articles.createdAt}) desc`)
     .limit(limit)
     .offset((page - 1) * limit);
 
-  res.json({ articles: rows, page, limit });
+  res.json({ articles: list, page, limit });
 });
 
 // GET /api/articles/:type/:slug — публичный просмотр
@@ -178,10 +194,23 @@ articlesRouter.get('/:type/:slug', optionalAuth, async (req, res) => {
   const [meta] = await db.select({ value: metaFields.value }).from(metaFields)
     .where(and(eq(metaFields.ownerType, 'article'), eq(metaFields.ownerId, article.id), eq(metaFields.key, 'meta_description')))
     .limit(1);
+  // ТЗ-04: состояние «я лайкнул» для текущего юзера (анониму — false)
+  let liked = false;
+  if (req.user) {
+    const [likeRow] = await db
+      .select({ userId: articleLikes.userId })
+      .from(articleLikes)
+      .where(and(eq(articleLikes.articleId, article.id), eq(articleLikes.userId, req.user.id)))
+      .limit(1);
+    liked = likeRow !== undefined;
+  }
   res.json({
     article,
     viewsCount: row.viewsCount, // ТЗ-03 R1.2: виртуальный счётчик отдельным полем в корне
     coverUrl: row.coverUrl,
+    likesCount: article.likesCount, // ТЗ-04: счётчики + liked отдельными полями в корне
+    sharesCount: article.sharesCount,
+    liked,
     meta: { description: meta?.value ?? null },
     relations: { companies: relCompanies, trends: relTrends, tickers: relTickers },
     stages: stagesRows.map((s) => s.name),

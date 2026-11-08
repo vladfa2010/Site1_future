@@ -2,6 +2,7 @@ import { Link } from 'react-router';
 import type { ArticleListItem } from '../api';
 import { CoverThumb } from './CoverThumb';
 import { FavoriteButton } from './FavoriteButton';
+import { LikeButton } from './LikeButton';
 import { ReadingTimeBadge } from './ReadingTimeBadge';
 import { ViewsBadge } from './ViewsBadge';
 
@@ -33,6 +34,8 @@ export function ArticleCard({ article }: { article: ArticleListItem }) {
         <ReadingTimeBadge minutes={article.readingTime ?? null} iconClassName="h-3 w-3" />
       </Link>
       <FavoriteButton entityType="article" entityId={article.id} className="absolute top-2 right-2" />
+      {/* ТЗ-04: лайк в противоположном углу обложки — наложения с Favorite нет (ревью v2.1 №6) */}
+      <LikeButton articleId={article.id} liked={article.liked ?? false} likesCount={article.likesCount ?? 0} className="absolute bottom-2 left-2" />
     </div>
   );
 }

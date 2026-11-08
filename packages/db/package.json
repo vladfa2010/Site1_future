@@ -18,6 +18,7 @@
     "smoke": "tsx src/smoke.ts",
     "embed": "tsx src/embed.ts",
     "backfill:reading-time": "tsx src/backfill-reading-time.ts",
+    "reconcile:engagement": "tsx src/reconcile-engagement.ts",
     "test": "tsx --test \"src/**/*.test.ts\""
   },
   "dependencies": {

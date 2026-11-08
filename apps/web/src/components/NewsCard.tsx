@@ -1,6 +1,7 @@
 import { Link } from 'react-router';
 import type { ArticleListItem } from '../api';
 import { FavoriteButton } from './FavoriteButton';
+import { LikeButton } from './LikeButton';
 import { ReadingTimeBadge } from './ReadingTimeBadge';
 import { ViewsBadge } from './ViewsBadge';
 
@@ -24,6 +25,8 @@ export function NewsCard({ article }: { article: ArticleListItem }) {
             />
           )}
           <div className="absolute inset-0 bg-gradient-to-t from-zinc-950/70 to-transparent" />
+          {/* ТЗ-04: лайк на обложке, угол противоположный Favorite */}
+          <LikeButton articleId={article.id} liked={article.liked ?? false} likesCount={article.likesCount ?? 0} className="absolute bottom-2 left-2" />
         </div>
         <h3 className="mt-3 line-clamp-2 font-semibold leading-snug text-zinc-100 group-hover:text-[#d6ff5c]">
           {article.title}

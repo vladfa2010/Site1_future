@@ -15,3 +15,8 @@ export function formatViews(n: number): string {
   if (n < 1000) return String(n);
   return `${Math.floor(n / 100) / 10}k`;
 }
+
+/** Компактное число для лайков/шеров (ТЗ-04 U5): общий форматтер, < 1000 — как есть, дальше — k. */
+export function formatCount(n: number): string {
+  return formatViews(n);
+}
