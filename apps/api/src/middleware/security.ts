@@ -88,3 +88,15 @@ export const searchLimiter = rateLimit({
   ...limiterDefaults,
   message: { error: 'search limit reached, try later' },
 });
+
+/**
+ * ТЗ-10: bot-рендер — лёгкий собственный лимитер (60 req/min/IP).
+ * ВНЕ /api/-лимитеров (иначе краулер обрежется на общем лимите 300/мин,
+ * §6.1 «вне /api/ лимитеров, но со своим лёгким лимитом»).
+ */
+export const renderLimiter = rateLimit({
+  windowMs: 60_000,
+  limit: 60,
+  ...limiterDefaults,
+  message: { error: 'render limit reached, try later' },
+});

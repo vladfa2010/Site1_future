@@ -8,6 +8,7 @@ import { db, users, redirects, articleViews, articles, tariffPlans } from '@newi
 import { authRequired, requireRole, ADMIN_ROLES } from '../middleware/auth.js';
 import { runDailyDigest, runWeeklyReport } from '../services/digest.js';
 import { runViewsBump, virtualViewsSql } from '../services/viewsBump.js';
+import { invalidateRedirectsCache } from '../services/botRender.js';
 
 export const adminRouter = Router();
 
@@ -132,11 +133,13 @@ adminRouter.post('/redirects', authRequired, requireRole(...ADMIN_ROLES), async 
   const [row] = await db.insert(redirects).values(parsed.data)
     .onConflictDoUpdate({ target: redirects.oldPath, set: { newPath: parsed.data.newPath, httpCode: parsed.data.httpCode } })
     .returning();
+  invalidateRedirectsCache(); // ТЗ-10 (ревью v2.1 №5): иначе бот-хиты ещё 15 мин по старому кэшу
   res.status(201).json({ redirect: row });
 });
 
 adminRouter.delete('/redirects/:oldPath', authRequired, requireRole(...ADMIN_ROLES), async (req, res) => {
   await db.delete(redirects).where(eq(redirects.oldPath, decodeURIComponent(req.params.oldPath)));
+  invalidateRedirectsCache(); // ТЗ-10 (ревью v2.1 №5)
   res.json({ ok: true });
 });
 

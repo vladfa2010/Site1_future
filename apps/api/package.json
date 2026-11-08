@@ -8,7 +8,8 @@
     "start": "tsx src/index.ts",
     "seed": "tsx src/seed.ts",
     "seed:test": "tsx src/seed-test.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test \"test/**/*.test.ts\""
   },
   "dependencies": {
     "@newinvest/db": "*",

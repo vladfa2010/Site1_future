@@ -509,3 +509,18 @@ ab -n 500 -c 10 -A "Googlebot/2.1" $HOST/novost/$SLUG | grep -E '95%|Requests pe
 8. **Шаблоны entity-страниц** (компания/тренд/сюжет) — отдельный абзац в §6.2: какие данные, og:type (`website`/`profile`, не article), JSON-LD тип (Organization/CollectionPage — или без), og:image (лого тренда/компании).
 9. Риск клоакинга — зафиксировать митигацию в §10: «мета/JSON-LD описывают только то, что видно в отданном HTML; бот получает МЕНЬШЕ, не подмену» (leaky-paywall паттерн, допустим Google).
 10. Проверить og:image абсолютный URL (PUBLIC_SITE_URL + coverUrl) — подтверждено в v2, добавить в чек-лист.
+
+---
+
+## СТАТУС: ✅ РЕАЛИЗОВАНО (2026-11-08, агент-55, принято)
+
+**Реализация:** botRender — `services/botRender.ts` (классификация пути зеркалом App.tsx; шаблоны: статья public→100 слов / paywall→тизер без текста, компания с Organization JSON-LD, тренд/сюжет, ленты рубрик, главная, 15 статики; серверные 301 из redirects со своим кэшем TTL 15 мин + invalidateRedirectsCache при POST/DELETE /api/redirects; кэш рендера 15 мин + invalidateArticleSeo при POST/PATCH/publish статей), `utils/html.ts` (escapeHtml/escapeAttr/escapeXml, htmlToText с лимитом слов, absoluteUrl с отсечкой javascript:/data:, encodePathSegment), `services/botUa.ts` (единый UA-список + BOT_UA_PATTERN_SOURCE для Caddyfile). BreadcrumbList — ИМПОРТ buildBreadcrumbList/serializeJsonLd из @newinvest/db/breadcrumbs (контракт ТЗ-01, последний без item). `routes/render.ts` GET /render?path= (prod: без X-Bot-Render:1 → 404, dev пропуск; renderLimiter 60/мин). `routes/seo.ts`: /sitemap.xml (419 URL: статьи+компании+тренды+сюжеты+статика, lastmod=coalesce(publishedAt,updatedAt), escapeXml+percent-encoding, кэш 15 мин, заготовка sitemapindex при >50k) + /robots.txt (Disallow /cabinet /api /render, Sitemap из origin). Express 4 не ловит async-ошибки — роуты в try/catch. `infra/Caddyfile`: sitemap/robots ДО @bots; @bots с `not path /uploads/* /api/*` (v2.1 №1 — иначе og:image 404) и UA-регекспом (RU-боты seznambot/Mail.RU_Bot/exabot); rewrite → /render?path={uri} с header_up X-Bot-Render 1 и пробросом исходного UA. apps/web/index.html: статичные og:site_name/og:type/twitter:card.
+
+**Отклонения от ТЗ (приняты):**
+1. Slug не режется по `[a-z0-9-]+` — в БД реально есть slug с кириллической «о» (analitika/ipо-spacex-razbor): путь `[^/]+`, XSS закрыт экранированием, в sitemap percent-encoding (v2.1 №4).
+2. У трендов/сюжетов только BreadcrumbList без entity JSON-LD (v2.1 №8 разрешает); twitter:card фиксирован summary_large_image.
+3. `caddy validate` локально недоступен — синтаксис сверен с документацией Caddy 2, исполняется на сервере.
+
+**Приёмка:** tsc чисто (api+web), unit 15/15 (эскейпинг, UA-список vs браузеры, контракт BreadcrumbList, </script>/U+2028-29, sitemap urlset), curl: рендер всех классов с валидным JSON-LD, 100 слов ровно, 301 redirects, sitemap парсится XML-парсером, эскейпинг проверен статьёй с кавычками/угловыми, инвалидация кэша по PATCH, защита /render в prod. E2E 250/250 (+26).
+
+**E2E: 250/250. ВСЕ 10 ТЗ ЦИКЛА РЕАЛИЗОВАНЫ.**

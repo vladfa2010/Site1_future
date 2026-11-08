@@ -17,14 +17,46 @@
 xn--b1aghca0aeahc1am7c.xn--p1ai {
   import security
 
+  # ТЗ-10: sitemap.xml + robots.txt — динамическая генерация на API.
+  # Порядок важен: ДО @bots, чтобы краулер получил XML, а не HTML-рендер.
+  handle_path /sitemap.xml {
+      reverse_proxy api:4000
+  }
+  handle_path /robots.txt {
+      reverse_proxy api:4000
+  }
+
+  # ТЗ-10: бот-детект — поисковые/соцботы получают серверный HTML-рендер.
+  # Серверные 301 из таблицы redirects отдаёт сам /render (первым шагом, §6.1)
+  # — отдельный блок не нужен: rewrite ниже передаёт исходный path без изменений.
+  #
+  # 🔴 Правка ревью v2.1 №1: matcher ОБЯЗАН исключать /uploads/* и /api/* —
+  # иначе TelegramBot/Googlebot-Images, скачивая og:image с /uploads/...,
+  # попадают в rewrite на /render → 404 → превью без обложки.
+  @bots {
+      not path /uploads/* /api/*
+      header_regexp User-Agent (?i)(googlebot|google-inspectiontool|bingbot|yandex(bot|accessibility|images|metrika|video)|duckduckbot|slurp|baiduspider|applebot|telegrambot|vkshare|facebookexternalhit|twitterbot|linkedinbot|whatsapp|discordbot|pinterestbot|redditbot|bytespider|seznambot|Mail\.RU_Bot|exabot)
+  }
+  handle @bots {
+      # Исходный путь уходит как ?path=; API вернёт 301 (redirects),
+      # 404 (неподдерживаемый) или HTML-рендер
+      rewrite * /render?path={uri}
+      reverse_proxy api:4000 {
+          header_up X-Bot-Render 1
+          # без этого Caddy при rewrite передаёт своё дефолтное UA;
+          # API логирует и классифицирует именно исходный
+          header_up User-Agent {http.request.header.User-Agent}
+      }
+  }
+
   handle_path /api/* {
-    reverse_proxy api:4000
+      reverse_proxy api:4000
   }
   handle_path /uploads/* {
-    reverse_proxy api:4000
+      reverse_proxy api:4000
   }
   handle {
-    reverse_proxy web:80
+      reverse_proxy web:80
   }
 }
 
@@ -32,13 +64,21 @@ xn--b1aghca0aeahc1am7c.xn--p1ai {
 admin.xn--b1aghca0aeahc1am7c.xn--p1ai {
   import security
 
+  # ТЗ-10: админка не должна попасть в индекс — статичный noindex-robots
+  respond /robots.txt 200 {
+      body "User-agent: *
+Disallow: /
+"
+      content_type text/plain
+  }
+
   handle_path /api/* {
-    reverse_proxy api:4000
+      reverse_proxy api:4000
   }
   handle_path /uploads/* {
-    reverse_proxy api:4000
+      reverse_proxy api:4000
   }
   handle {
-    reverse_proxy admin:80
+      reverse_proxy admin:80
   }
 }

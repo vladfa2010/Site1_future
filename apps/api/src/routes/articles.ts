@@ -16,6 +16,8 @@ import {
 import { uniqueSlug, plainTextToHtml } from '../utils/slug.js';
 import { optionalAuth, authRequired, requireRole, ADMIN_ROLES } from '../middleware/auth.js';
 import { virtualViewsSql } from '../services/viewsBump.js';
+import { invalidateRenderCache } from '../services/botRender.js';
+import { invalidateSitemapCache } from '../routes/seo.js';
 
 export const articlesRouter = Router();
 
@@ -58,6 +60,13 @@ const patchSchema = createSchema.partial().extend({
 });
 
 export const isAdmin = (role?: string) => role !== undefined && ADMIN_ROLES.includes(role);
+
+/** ТЗ-10: публикация/правка → инвалидация bot-рендера и sitemap (≤ мгновенно вместо TTL 15 мин) */
+function invalidateArticleSeo(type: string, slug: string): void {
+  invalidateRenderCache(`/${type}/${slug}`);
+  invalidateRenderCache(`/${type}`); // лента рубрики содержит заголовок
+  invalidateSitemapCache();
+}
 
 // ---------- Пейволл: условие доступа к материалам ----------
 // public — всем; auth — залогиненным; tariff — юзерам с нужным НЕпросроченным тарифом.
@@ -253,6 +262,7 @@ articlesRouter.post('/', authRequired, requireRole('author', 'admin', 'super_adm
     if (metaDescription) {
       await saveMetaDescription(row.id, metaDescription);
     }
+    invalidateArticleSeo(row.type, row.slug);
     res.status(201).json({ article: row });
   } catch (e) {
     // pg unique violation = code 23505 (constraint может быть в e или в e.cause)
@@ -334,6 +344,7 @@ articlesRouter.patch('/:id', authRequired, requireRole('author', 'admin', 'super
     if (metaDescription) {
       await saveMetaDescription(id, metaDescription);
     }
+    invalidateArticleSeo(existing.type, existing.slug);
     res.json({ article: existing });
     return;
   }
@@ -341,6 +352,10 @@ articlesRouter.patch('/:id', authRequired, requireRole('author', 'admin', 'super
   const [row] = await db.update(articles).set(updates).where(eq(articles.id, id)).returning();
   if (metaDescription) {
     await saveMetaDescription(id, metaDescription);
+  }
+  invalidateArticleSeo(existing.type, existing.slug);
+  if (row.slug !== existing.slug || row.type !== existing.type) {
+    invalidateArticleSeo(row.type, row.slug); // slug не меняется (нет в patch-полях), но на будущее
   }
   res.json({ article: row });
 });
@@ -378,6 +393,11 @@ articlesRouter.post('/propose', authRequired, async (req, res) => {
 // POST /api/articles/:id/publish — только admin/super_admin
 articlesRouter.post('/:id/publish', authRequired, requireRole(...ADMIN_ROLES), async (req, res) => {
   const id = Number(req.params.id);
+  const [existing] = await db
+    .select({ type: articles.type, slug: articles.slug })
+    .from(articles)
+    .where(eq(articles.id, id))
+    .limit(1);
   const [row] = await db
     .update(articles)
     .set({ status: 'published', publishedAt: new Date() })
@@ -387,5 +407,6 @@ articlesRouter.post('/:id/publish', authRequired, requireRole(...ADMIN_ROLES), a
     res.status(404).json({ error: 'not found' });
     return;
   }
+  if (existing) invalidateArticleSeo(existing.type, existing.slug); // ТЗ-10: рендер/sitemap сразу актуальны
   res.json({ article: row });
 });

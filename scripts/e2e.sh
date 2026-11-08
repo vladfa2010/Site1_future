@@ -462,6 +462,72 @@ curl -s "$B/api/stories/e2e-playlist" | python3 -c "import json,sys; a=json.load
 curl -s -X PUT "$B/api/stories/$PLSID/articles" -H "$A" -H "$J" -d "{\"articleIds\":[$PL1,$PL2,$PL3]}" > /dev/null
 
 echo "════════════════════════════════════════"
+echo "  E2E: ТЗ-10 — SSR/PRERENDER ДЛЯ БОТОВ + SITEMAP/ROBOTS"
+echo "════════════════════════════════════════"
+# dev-режим: /render пропускает без заголовка X-Bot-Render (в prod отдаёт 404)
+curl -s -o /dev/null -w "%{http_code}" "$B/render?path=/novost/spacex-lider-po-sputnikam" | grep -q 200 && ok || bad "bot-render: 200 на опубликованную статью"
+BOTHTML=$(curl -s "$B/render?path=/novost/spacex-lider-po-sputnikam")
+echo "$BOTHTML" | grep -q '<meta property="og:title"' && ok || bad "bot-render: og:title"
+echo "$BOTHTML" | grep -q '<meta name="twitter:card" content="summary_large_image"' && ok || bad "bot-render: twitter:card"
+echo "$BOTHTML" | grep -q 'application/ld+json' && ok || bad "bot-render: JSON-LD блоки"
+echo "$BOTHTML" | grep -q '"@type":"BreadcrumbList"' && ok || bad "bot-render: BreadcrumbList JSON-LD"
+echo "$BOTHTML" | grep -q '"@type":"NewsArticle"' && ok || bad "bot-render: NewsArticle JSON-LD"
+echo "$BOTHTML" | grep -q '<h1>' && ok || bad "bot-render: h1 в body"
+echo "$BOTHTML" | grep -q 'Открыть полную версию' && ok || bad "bot-render: ссылка на полную версию"
+OGIMG=$(echo "$BOTHTML" | grep -o 'og:image" content="[^"]*' | head -1 | sed 's/.*content="//')
+if [ -n "$OGIMG" ]; then
+  echo "$OGIMG" | grep -q '^https\?://' && ok || bad "bot-render: og:image абсолютный (got $OGIMG)"
+else
+  echo "  (у статьи нет обложки — og:image не рендерится, ок)"
+fi
+curl -s -o /dev/null -w "%{http_code}" "$B/render?path=/novost/net-takogo-sluga-abcdef" | grep -q 404 && ok || bad "bot-render: несуществующий slug → 404"
+curl -s -o /dev/null -w "%{http_code}" "$B/render?path=/cabinet" | grep -q 404 && ok || bad "bot-render: /cabinet → 404 (не SPA-200)"
+# эскейпинг: статья с кавычками/угловыми скобками в title (ТЗ-10 §6.1 — XSS в bot-render катастрофа)
+SEOJSON=$(python3 -c 'import json; print(json.dumps({"type":"novost","slug":"e2e-seo","title":"E2E \"кавычки\" <уголки> & амп","contentHtml":"<p>Слово один два три четыре пять шесть семь восемь девять десять.</p>","excerpt":"Экспонат","status":"published"}))')
+curl -s -X POST "$B/api/articles" -H "$A" -H "$J" -d "$SEOJSON" > /dev/null
+SEOHTML=$(curl -s "$B/render?path=/novost/e2e-seo")
+echo "$SEOHTML" | grep -q '&quot;кавычки&quot; &lt;уголки&gt; &amp; амп' && ok || bad "bot-render: title экранирован в <title>/OG"
+echo "$SEOHTML" | grep -q '<уголки>' && bad "bot-render: сырой <уголки> в HTML (XSS!)" || ok
+echo "$SEOHTML" | python3 -c "
+import json,sys,re
+html=sys.stdin.read()
+blocks=re.findall(r'<script type=\"application/ld\+json\">(.*?)</script>', html, re.S)
+assert blocks, 'нет JSON-LD'
+for b in blocks: json.loads(b)  # валидный JSON, '</script' не ломает разметку
+print('ok')" > /dev/null 2>&1 && ok || bad "bot-render: JSON-LD валиден при кавычках в title"
+# пейволл-тизер: метаданные есть, 100 слов нет
+curl -s -X PATCH "$B/api/articles/$ART" -H "$A" -H "$J" -d '{"accessLevel":"tariff","accessTariffId":1}' > /dev/null
+PAYHTML=$(curl -s "$B/render?path=/novost/e2e-novost")
+echo "$PAYHTML" | grep -q 'og:title' && ok || bad "bot-render: paywall-тизер отдаёт метаданные"
+echo "$PAYHTML" | grep -q 'Полная версия доступна по подписке' && ok || bad "bot-render: paywall-заметка в body"
+curl -s -X PATCH "$B/api/articles/$ART" -H "$A" -H "$J" -d '{"accessLevel":"auth"}' > /dev/null # как было
+# серверные 301 из redirects для ботов (WP-миграция) — через /render
+OLDP=$(psql -d newinvest -tAc "SELECT old_path FROM redirects LIMIT 1" 2>/dev/null)
+if [ -n "$OLDP" ]; then
+  REDIR=$(curl -s -o /dev/null -w "%{http_code} %{redirect_url}" "$B/render?path=$OLDP")
+  echo "$REDIR" | grep -q '^301 ' && ok || bad "bot-render: серверный 301 из redirects (got $REDIR)"
+  NEWP=$(psql -d newinvest -tAc "SELECT new_path FROM redirects WHERE old_path='$OLDP'" 2>/dev/null)
+  echo "$REDIR" | grep -q "$NEWP" && ok || bad "bot-render: Location ведёт на newPath ($NEWP)"
+else
+  bad "bot-render: в redirects нет строк для проверки 301"
+fi
+# sitemap.xml: валидный XML, все опубликованные статьи, абсолютные loc
+SM=$(curl -s "$B/sitemap.xml")
+echo "$SM" | grep -q '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' && ok || bad "sitemap: urlset с namespace"
+echo "$SM" | python3 -c "import sys,xml.etree.ElementTree as ET; ET.fromstring(sys.stdin.read()); print('ok')" > /dev/null 2>&1 && ok || bad "sitemap: XML парсится"
+SMN=$(psql -d newinvest -tAc "SELECT count(*) FROM articles WHERE status='published'" 2>/dev/null)
+LOCN=$(echo "$SM" | grep -c '<loc>')
+[ "$LOCN" -ge "$SMN" ] 2>/dev/null && ok || bad "sitemap: loc ($LOCN) ≥ published-статей ($SMN)"
+echo "$SM" | grep -q 'spacex-lider-po-sputnikam' && ok || bad "sitemap: содержит опубликованную статью"
+echo "$SM" | grep -q '<loc>http' && ok || bad "sitemap: абсолютные loc"
+curl -s -o /dev/null -w "%{content_type}" "$B/sitemap.xml" | grep -q 'application/xml' && ok || bad "sitemap: Content-Type application/xml"
+# robots.txt
+RB=$(curl -s "$B/robots.txt")
+echo "$RB" | grep -q '^Sitemap: http' && ok || bad "robots: Sitemap с абсолютным URL"
+echo "$RB" | grep -q 'Disallow: /cabinet' && ok || bad "robots: Disallow /cabinet"
+echo "$RB" | grep -q 'Disallow: /render' && ok || bad "robots: Disallow /render"
+
+echo "════════════════════════════════════════"
 echo "  E2E: TRENDING NOW (ТЗ-07)"
 echo "════════════════════════════════════════"
 # публичный эндпоинт, дефолт окно 6 ч / лимит 10
@@ -503,7 +569,7 @@ echo "════════════════════════�
 
 # очистка e2e-данных
 psql -d newinvest -q -c "
-DELETE FROM articles WHERE slug IN ('e2e-novost','e2e-insider','e2e-video','e2e-author-tariff','e2e-pl-1','e2e-pl-2','e2e-pl-3') OR title LIKE 'E2E идея%' OR title LIKE 'E2E просмотры%';
+DELETE FROM articles WHERE slug IN ('e2e-novost','e2e-insider','e2e-video','e2e-seo','e2e-author-tariff','e2e-pl-1','e2e-pl-2','e2e-pl-3') OR title LIKE 'E2E идея%' OR title LIKE 'E2E просмотры%';
 DELETE FROM stories WHERE slug IN ('e2e-story','e2e-playlist');
 DELETE FROM companies WHERE slug='e2e-corp';
 DELETE FROM trends WHERE slug='e2e-trend';

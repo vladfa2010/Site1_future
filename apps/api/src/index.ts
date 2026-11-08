@@ -2,10 +2,12 @@ import express from 'express';
 import path from 'node:path';
 import cron from 'node-cron';
 import { config } from './config.js';
-import { securityHeaders, corsAllowlist, apiLimiter, loginLimiter, registerLimiter, generateLimiter, generateTextLimiter, telegramLinkLimiter, searchLimiter } from './middleware/security.js';
+import { securityHeaders, corsAllowlist, apiLimiter, loginLimiter, registerLimiter, generateLimiter, generateTextLimiter, telegramLinkLimiter, searchLimiter, renderLimiter } from './middleware/security.js';
 import { runDailyDigest, runWeeklyReport } from './services/digest.js';
 import { runViewsBump } from './services/viewsBump.js';
 import { startTelegramPolling } from './services/telegram.js';
+import { renderRouter } from './routes/render.js';
+import { seoRouter } from './routes/seo.js';
 import { authRouter } from './routes/auth.js';
 import { articlesRouter } from './routes/articles.js';
 import { authorsRouter } from './routes/authors.js';
@@ -47,6 +49,8 @@ app.use('/api/media/generate', generateLimiter);
 app.use('/api/media/generate-text', generateTextLimiter);
 app.use('/api/telegram/link', telegramLinkLimiter);
 app.use('/api/search', searchLimiter);
+// ТЗ-10: bot-рендер — вне /api/-лимитеров, со своим лёгким лимитом
+app.use('/render', renderLimiter);
 
 app.use(express.json({ limit: '2mb' }));
 
@@ -74,6 +78,10 @@ app.use('/api', adminRouter);      // /users /redirects /stats
 app.use('/api', marketRouter);     // /market/chart
 app.use('/api', featuresRouter);   // /features + /admin/features (ПЕРЕД cabinet: у него router-wide auth)
 app.use('/api', cabinetRouter);    // /favorites /subscriptions /feed (auth) — ПОСЛЕДНИЙ: router.use(authRequired)
+
+// ТЗ-10: bot-рендер + sitemap/robots — ПЕРЕД 404-хэндлером и вне /api/ (Caddy шлёт сюда напрямую)
+app.use('/render', renderRouter);
+app.use(seoRouter);
 
 app.use((_req, res) => {
   res.status(404).json({ error: 'not found' });
