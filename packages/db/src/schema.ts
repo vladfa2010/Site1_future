@@ -275,6 +275,7 @@ export const articleStories = pgTable(
       .references(() => stories.id, { onDelete: 'cascade' }),
     isPrimary: boolean('is_primary').notNull().default(false), // главная статья сюжета
     addedVia: text('added_via').notNull().default('manual'), // manual | vector
+    sortOrder: integer('sort_order').notNull().default(0), // ТЗ-08: порядок серий в сюжете (индекс массива articleIds)
   },
   (t) => [primaryKey({ columns: [t.articleId, t.storyId] })],
 );

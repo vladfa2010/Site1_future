@@ -116,7 +116,7 @@ export interface TrendDetail {
 
 export interface StoryDetail {
   story: { id: number; slug: string; name: string; description: string | null };
-  articles: (ArticleListItem & { isPrimary: boolean })[];
+  articles: (ArticleListItem & { isPrimary: boolean; videoUrl: string | null })[]; // ТЗ-08 R7: videoUrl для плеера плейлиста
 }
 
 export const api = {

@@ -31,13 +31,14 @@ storiesRouter.get('/stories/:slug', async (req, res) => {
       excerpt: articles.excerpt,
       publishedAt: articles.publishedAt,
       status: articles.status,
+      videoUrl: articles.videoUrl, // ТЗ-08 R7: без него плеер на StoryPage не построить
       isPrimary: articleStories.isPrimary,
       viewsCount: virtualViewsSql, // ТЗ-03
     })
     .from(articleStories)
     .innerJoin(articles, eq(articleStories.articleId, articles.id))
     .where(and(eq(articleStories.storyId, story.id), eq(articles.status, 'published')))
-    .orderBy(asc(articles.publishedAt))
+    .orderBy(asc(articleStories.sortOrder), asc(articles.publishedAt)) // ТЗ-08 R6: порядок серий, fallback на дату
     .limit(100);
   res.json({ story, articles: storyArticles });
 });
@@ -77,11 +78,11 @@ storiesRouter.patch('/stories/:id', authRequired, requireRole('admin', 'super_ad
 // GET /api/stories/:id/articles — состав (admin)
 storiesRouter.get('/stories/:id/articles', authRequired, requireRole('admin', 'super_admin'), async (req, res) => {
   const rows = await db
-    .select({ articleId: articles.id, title: articles.title, publishedAt: articles.publishedAt, isPrimary: articleStories.isPrimary })
+    .select({ articleId: articles.id, title: articles.title, publishedAt: articles.publishedAt, isPrimary: articleStories.isPrimary, sortOrder: articleStories.sortOrder })
     .from(articleStories)
     .innerJoin(articles, eq(articleStories.articleId, articles.id))
     .where(eq(articleStories.storyId, Number(req.params.id)))
-    .orderBy(articles.publishedAt);
+    .orderBy(asc(articleStories.sortOrder), asc(articles.publishedAt)); // ТЗ-08 R6
   res.json({ articles: rows });
 });
 
@@ -104,17 +105,18 @@ storiesRouter.put('/stories/:id/articles', authRequired, requireRole('admin', 's
     await tx.delete(articleStories).where(eq(articleStories.storyId, storyId));
     if (articleIds.length) {
       await tx.insert(articleStories).values(
-        articleIds.map((articleId) => ({ articleId, storyId, isPrimary: articleId === primaryArticleId })),
+        // ТЗ-08 R6: индекс массива articleIds — порядок серий (sort_order)
+        articleIds.map((articleId, i) => ({ articleId, storyId, isPrimary: articleId === primaryArticleId, sortOrder: i })),
       );
     }
     await tx.update(stories).set({ primaryArticleId: primaryArticleId ?? null }).where(eq(stories.id, storyId));
   });
 
   const storyArticlesRows = await db
-    .select({ articleId: articles.id, title: articles.title, publishedAt: articles.publishedAt, isPrimary: articleStories.isPrimary })
+    .select({ articleId: articles.id, title: articles.title, publishedAt: articles.publishedAt, isPrimary: articleStories.isPrimary, sortOrder: articleStories.sortOrder })
     .from(articleStories)
     .innerJoin(articles, eq(articleStories.articleId, articles.id))
     .where(eq(articleStories.storyId, storyId))
-    .orderBy(articles.publishedAt);
+    .orderBy(asc(articleStories.sortOrder), asc(articles.publishedAt)); // ТЗ-08 R6
   res.json({ articles: storyArticlesRows });
 });

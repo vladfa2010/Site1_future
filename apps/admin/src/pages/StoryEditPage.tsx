@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'react-router';
 import { api } from '../api';
 
-interface StoryArticle { articleId: number; title: string; publishedAt: string | null; isPrimary: boolean }
+interface StoryArticle { articleId: number; title: string; publishedAt: string | null; isPrimary: boolean; sortOrder: number }
 interface Story { id: number; slug: string; name: string; description: string | null; status: string; primaryArticleId: number | null }
 interface ArticleOpt { id: number; title: string; type: string }
 
@@ -61,6 +61,22 @@ export default function StoryEditPage() {
     });
   };
 
+  // ТЗ-08 R8: ↑/↓ — переупорядочивание выбранных материалов (порядок массива selected = sort_order)
+  const move = (articleId: number, dir: -1 | 1) => {
+    setSelected((s) => {
+      const i = s.indexOf(articleId);
+      const j = i + dir;
+      if (i < 0 || j < 0 || j >= s.length) return s;
+      const next = [...s];
+      [next[i], next[j]] = [next[j], next[i]];
+      return next;
+    });
+  };
+
+  // Ревью v2.1 №6: динамический индикатор — сюжет станет плейлистом, пока все выбранные — видео
+  const selectedTypes = selected.map((id) => allArticles.find((a) => a.id === id)?.type);
+  const isPlaylistPreview = selected.length > 0 && selectedTypes.every((t) => t === 'video');
+
   if (error && !story) return <p className="text-red-400">{error}</p>;
   if (!story) return <p className="text-zinc-400">Загрузка…</p>;
 
@@ -96,6 +112,35 @@ export default function StoryEditPage() {
 
       <div className="card space-y-3">
         <h2 className="font-semibold">Состав сюжета ({selected.length})</h2>
+        {/* ТЗ-08 R8: динамический индикатор плейлист-режима при изменении состава */}
+        {isPlaylistPreview ? (
+          <p className="rounded-lg bg-[#beff00]/10 px-3 py-2 text-sm text-[#beff00]">
+            ▶ Все материалы сюжета — видео: страница станет плейлистом ({selected.length} серий)
+          </p>
+        ) : (
+          <p className="rounded-lg bg-zinc-800/50 px-3 py-2 text-sm text-zinc-500">
+            Если все материалы сюжета — видео, страница станет плейлистом (главный плеер + список серий)
+          </p>
+        )}
+        {selected.length > 0 && (
+          <div>
+            <h3 className="label">Порядок серий (sort_order — сверху вниз)</h3>
+            <ol className="max-h-48 space-y-1 overflow-y-auto">
+              {selected.map((id, i) => {
+                const a = allArticles.find((x) => x.id === id);
+                return (
+                  <li key={id} className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm hover:bg-zinc-800/50">
+                    <span className="w-6 text-center text-zinc-500">{i + 1}</span>
+                    <span className="flex-1 truncate">{a?.title ?? `id ${id}`}</span>
+                    <span className="text-xs text-zinc-500">{a?.type}</span>
+                    <button type="button" disabled={i === 0} onClick={() => move(id, -1)} className="btn-xs" title="Выше">↑</button>
+                    <button type="button" disabled={i === selected.length - 1} onClick={() => move(id, 1)} className="btn-xs" title="Ниже">↓</button>
+                  </li>
+                );
+              })}
+            </ol>
+          </div>
+        )}
         <div className="max-h-64 space-y-1 overflow-y-auto">
           {allArticles.map((a) => (
             <label key={a.id} className="flex cursor-pointer items-center gap-3 rounded-lg px-2 py-1.5 hover:bg-zinc-800/50">

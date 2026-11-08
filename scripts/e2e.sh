@@ -439,6 +439,29 @@ NULLSLUG=$(psql -d newinvest -tAc "SELECT type||'/'||slug FROM articles WHERE au
 curl -s -o /dev/null -w "%{http_code}" "$W/avtor/$ADMID" | grep -q 200 && ok || bad "authors: /avtor/:id SPA 200"
 
 echo "════════════════════════════════════════"
+echo "  E2E: ТЗ-08 — ПЛЕЙЛИСТЫ / SORT_ORDER"
+echo "════════════════════════════════════════"
+PL1=$(curl -s -X POST "$B/api/articles" -H "$A" -H "$J" -d '{"type":"video","slug":"e2e-pl-1","title":"E2E Плейлист 1","contentHtml":"<p>x</p>","videoUrl":"https://www.youtube.com/watch?v=dQw4w9WgXcQ","status":"published"}' | jqget "d['article']['id']")
+PL2=$(curl -s -X POST "$B/api/articles" -H "$A" -H "$J" -d '{"type":"video","slug":"e2e-pl-2","title":"E2E Плейлист 2","contentHtml":"<p>x</p>","videoUrl":"https://youtu.be/abc12345xyz","status":"published"}' | jqget "d['article']['id']")
+PL3=$(curl -s -X POST "$B/api/articles" -H "$A" -H "$J" -d '{"type":"video","slug":"e2e-pl-3","title":"E2E Плейлист 3","contentHtml":"<p>x</p>","videoUrl":"https://rutube.ru/video/abcdef012345/","status":"published"}' | jqget "d['article']['id']")
+[ -n "$PL1" ] && [ -n "$PL2" ] && [ -n "$PL3" ] && ok || bad "playlist: 3 видео-материала созданы"
+PLSID=$(curl -s -X POST "$B/api/stories" -H "$A" -H "$J" -d '{"slug":"e2e-playlist","name":"E2E Плейлист"}' | jqget "d['story']['id']")
+[ -n "$PLSID" ] && ok || bad "playlist: сюжет создан"
+# ТЗ-08 R6: PUT — индекс массива articleIds → sort_order; R5: isPrimary независим от позиции
+curl -s -X PUT "$B/api/stories/$PLSID/articles" -H "$A" -H "$J" -d "{\"articleIds\":[$PL2,$PL1,$PL3],\"primaryArticleId\":$PL1}" | python3 -c "import json,sys; a=json.load(sys.stdin)['articles']; assert [x['articleId'] for x in a]==[$PL2,$PL1,$PL3] and [x['sortOrder'] for x in a]==[0,1,2] and [x['isPrimary'] for x in a]==[False,True,False]; print('ok')" > /dev/null 2>&1 && ok || bad "playlist: PUT пишет sort_order по индексу, ответ отсортирован (R5/R6)"
+curl -s "$B/api/stories/$PLSID/articles" -H "$A" | grep -q '"sortOrder"' && ok || bad "playlist: admin GET отдаёт sortOrder (R7)"
+# публичный GET: тот же порядок, videoUrl у каждой серии (R7), isPrimary (ревью v2.1 №5)
+curl -s "$B/api/stories/e2e-playlist" | python3 -c "import json,sys; a=json.load(sys.stdin)['articles']; assert [x['id'] for x in a]==[$PL2,$PL1,$PL3] and all(x.get('videoUrl') for x in a) and [x['isPrimary'] for x in a]==[False,True,False]; print('ok')" > /dev/null 2>&1 && ok || bad "playlist: public GET — порядок sort_order, videoUrl, isPrimary"
+# повторное переупорядочивание: [3,1,2], главную сняли → публичный порядок меняется
+curl -s -X PUT "$B/api/stories/$PLSID/articles" -H "$A" -H "$J" -d "{\"articleIds\":[$PL3,$PL1,$PL2]}" > /dev/null
+curl -s "$B/api/stories/e2e-playlist" | python3 -c "import json,sys; a=json.load(sys.stdin)['articles']; assert [x['id'] for x in a]==[$PL3,$PL1,$PL2]; print('ok')" > /dev/null 2>&1 && ok || bad "playlist: повторный PUT меняет публичный порядок"
+psql -d newinvest -tAc "SELECT sort_order FROM article_stories WHERE story_id=$PLSID ORDER BY sort_order" 2>/dev/null | tr '\n' ' ' | grep -q "0 1 2" && ok || bad "playlist: sort_order в БД 0,1,2"
+# R1: смешанный состав (видео + текст) отдаётся как есть — плейлист-режим выключается на фронте
+curl -s -X PUT "$B/api/stories/$PLSID/articles" -H "$A" -H "$J" -d "{\"articleIds\":[$PL1,$PL2,$ART],\"primaryArticleId\":$PL1}" > /dev/null
+curl -s "$B/api/stories/e2e-playlist" | python3 -c "import json,sys; a=json.load(sys.stdin)['articles']; assert any(x['type']!='video' for x in a); print('ok')" > /dev/null 2>&1 && ok || bad "playlist: смешанный состав отдаётся (R1 — хронология на фронте)"
+curl -s -X PUT "$B/api/stories/$PLSID/articles" -H "$A" -H "$J" -d "{\"articleIds\":[$PL1,$PL2,$PL3]}" > /dev/null
+
+echo "════════════════════════════════════════"
 echo "  E2E: TRENDING NOW (ТЗ-07)"
 echo "════════════════════════════════════════"
 # публичный эндпоинт, дефолт окно 6 ч / лимит 10
@@ -480,8 +503,8 @@ echo "════════════════════════�
 
 # очистка e2e-данных
 psql -d newinvest -q -c "
-DELETE FROM articles WHERE slug IN ('e2e-novost','e2e-insider','e2e-video','e2e-author-tariff') OR title LIKE 'E2E идея%' OR title LIKE 'E2E просмотры%';
-DELETE FROM stories WHERE slug='e2e-story';
+DELETE FROM articles WHERE slug IN ('e2e-novost','e2e-insider','e2e-video','e2e-author-tariff','e2e-pl-1','e2e-pl-2','e2e-pl-3') OR title LIKE 'E2E идея%' OR title LIKE 'E2E просмотры%';
+DELETE FROM stories WHERE slug IN ('e2e-story','e2e-playlist');
 DELETE FROM companies WHERE slug='e2e-corp';
 DELETE FROM trends WHERE slug='e2e-trend';
 DELETE FROM industries WHERE slug='e2e-ind';

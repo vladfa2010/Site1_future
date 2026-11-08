@@ -251,3 +251,15 @@
 6. В конструкторе сюжетов — динамический индикатор «сюжет станет плейлистом / перестал быть» при изменении состава (не только статичная подсказка).
 7. try/catch на JSON.parse localStorage (Safari private mode).
 8. Миграция sort_order — отдельная 0015 после общей 0014 (подтверждено).
+
+---
+
+## СТАТУС: ✅ РЕАЛИЗОВАНО (2026-11-08, агент-54, принято)
+
+**Реализация:** миграция `0015_sort_order_article_stories` (ручная, паттерн 0014: SQL + journal idx 15 + snapshot; применена psql, backfill не нужен — fallback на published_at сохраняет прежний порядок R6). API: GET /stories/:slug отдаёт videoUrl, сортировка asc(sortOrder), asc(publishedAt); isPrimary уже был; GET/PUT /stories/:id/articles с sortOrder, PUT пишет sort_order по индексу массива. Web: StoryPlaylist (счётчик «Серия N из M», стартовый индекс по isPrimary; YouTube — IFrame API: ленивый inject один раз с guard, `declare global Window.YT`, Player в useEffect, автопереход ENDED→loadVideoById НЕ сменой src, без автозапуска первой серии, destroy+cancelled на unmount; серия без embed — превью-заглушка, в автоплее перепрыгивается; тумблер автоперехода localStorage, только для YouTube R3), StoryPage: isPlaylist = все статьи типа video (R1), при плейлисте хронология в аккордеон. Admin: StoryEditPage блок «Порядок серий» с ↑/↓ и динамическим индикатором «станет плейлистом (N серий)».
+
+**Отклонения от ТЗ (приняты):** имя миграции по ТЗ §5; paywall-фильтр существующий (status=published) не менял — ТЗ требований по access_level не содержал; UI YouTube-API (чек-лист §7: autoplay через seekTo, RuTube-тумблер) — ручной проход, код-ревью по аддендуму v2.1 №2–4.
+
+**Приёмка:** tsc чисто (api+web+admin), curl: сортировка [PL2,PL1,PL3] с isPrimary на среднем, БД sort_order 0,1,2, E2E 224/224 (+8: создание/PUT/GET sort_order/isPrimary/публичный порядок/повторный PUT/БД/смешанный состав R1).
+
+**E2E: 224/224.**
