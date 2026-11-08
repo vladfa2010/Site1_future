@@ -243,3 +243,9 @@ ALTER TABLE "articles" ADD COLUMN "reading_time" integer;
 10. Скрытие секции по роли: UI показывать только admin/super_admin (авторы в админке бывают, сервер всё равно 403).
 11. ⚠️ Этика/риски (дополнить §8.4): внешний аудит (рекламодатели, продажа по просмотрам) — докрученные цифры в публичном поле = репутационно-юридический риск; скриншоты счётчиков живут вечно. Решение владельца принято осознанно.
 12. Тиккер (ТЗ-07) использует реальные просмотры за окно — консистентность подтверждена, 👁 из тиккера убирается (правка в ТЗ-07).
+
+---
+
+## СТАТУС: ✅ РЕАЛИЗОВАНО (2026-11-08, агент-47, принято)
+
+По ТЗ + правкам v2.1. services/viewsBump.ts (virtualViewsSql + runViewsBump, один бамп/проход, CTE+UPDATE RETURNING), cron 7 * * * *, POST /api/admin/views/bump, patchSchema.extend (не createSchema — автор не может задать seed), viewsAutoBump .nullable()+refine, не-админу поля игнорируются, viewsCount во ВСЕХ списках (entities/stories/bindings/screener/search/cabinet + деталь), ViewsBadge+formatViews (floor 9.9k) на всех карточках и странице, stats/views: realViews/virtualViews/baseOffset/accumulated раздельно + кнопка «Начислить сейчас», админка: collapsible-секция только admin/super_admin, e2e +18 (итог 169/169). Отклонения: автор-доступ к полям — молчаливый игнор (не 403, по решению приёма); форматтер 1000→'1k'; найден и исправлен баг: пустой .set() в PATCH крашил процесс.

@@ -24,6 +24,7 @@ import {
 } from '@newinvest/db';
 import { optionalAuth, authRequired, requireRole, ADMIN_ROLES } from '../middleware/auth.js';
 import { accessCondition } from './articles.js';
+import { virtualViewsSql } from '../services/viewsBump.js';
 
 export const bindingsRouter = Router();
 
@@ -144,6 +145,7 @@ bindingsRouter.get('/articles/:id/events', optionalAuth, async (req, res) => {
       excerpt: articles.excerpt,
       publishedAt: articles.publishedAt,
       coverUrl: media.filePath,
+      viewsCount: virtualViewsSql, // ТЗ-03
     })
     .from(articles)
     .leftJoin(media, eq(articles.coverMediaId, media.id))

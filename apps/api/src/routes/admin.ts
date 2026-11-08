@@ -7,6 +7,7 @@ import { and, desc, eq, gte, sql } from 'drizzle-orm';
 import { db, users, redirects, articleViews, articles, tariffPlans } from '@newinvest/db';
 import { authRequired, requireRole, ADMIN_ROLES } from '../middleware/auth.js';
 import { runDailyDigest, runWeeklyReport } from '../services/digest.js';
+import { runViewsBump, virtualViewsSql } from '../services/viewsBump.js';
 
 export const adminRouter = Router();
 
@@ -149,6 +150,12 @@ adminRouter.post('/notifications/send', authRequired, requireRole(...ADMIN_ROLES
 
 // ---------- Аналитика просмотров ----------
 
+// POST /api/admin/views/bump — ручной триггер одного прохода автодокрутки (R2.4, для e2e/проверок)
+adminRouter.post('/admin/views/bump', authRequired, requireRole(...ADMIN_ROLES), async (_req, res) => {
+  const result = await runViewsBump();
+  res.json(result);
+});
+
 adminRouter.get('/stats/views', authRequired, requireRole(...ADMIN_ROLES), async (req, res) => {
   const days = Math.min(90, Math.max(1, Number(req.query.days ?? 30)));
   const since = new Date(Date.now() - days * 86400_000);
@@ -158,13 +165,20 @@ adminRouter.get('/stats/views', authRequired, requireRole(...ADMIN_ROLES), async
       title: articles.title,
       type: articles.type,
       slug: articles.slug,
-      views: sql<number>`count(*)`,
+      // ТЗ-03 R4: реальные и виртуальные просмотры — РАЗДЕЛЬНО, total только по реальным
+      realViews: sql<number>`count(*)::int`,
+      virtualViews: virtualViewsSql,
+      baseOffset: articles.viewsBaseOffset,
+      accumulatedBump: articles.viewsBumpAccumulated,
       uniqueUsers: sql<number>`count(distinct ${articleViews.userId})`,
     })
     .from(articleViews)
     .innerJoin(articles, eq(articleViews.articleId, articles.id))
     .where(gte(articleViews.viewedAt, since))
-    .groupBy(articleViews.articleId, articles.title, articles.type, articles.slug)
+    .groupBy(
+      articleViews.articleId, articles.id, articles.title, articles.type, articles.slug,
+      articles.viewsBaseOffset, articles.viewsBumpAccumulated, // колонки виртуального счётчика
+    )
     .orderBy(desc(sql`count(*)`))
     .limit(50);
   const total = (await db.select({ n: sql<number>`count(*)` }).from(articleViews).where(gte(articleViews.viewedAt, since)))[0].n;

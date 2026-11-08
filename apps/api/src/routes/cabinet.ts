@@ -11,6 +11,7 @@ import {
 } from '@newinvest/db';
 import { authRequired } from '../middleware/auth.js';
 import { createLinkCode, tgStatus, disconnect, tgEnabled } from '../services/telegram.js';
+import { virtualViewsSql } from '../services/viewsBump.js';
 
 export const cabinetRouter = Router();
 cabinetRouter.use(authRequired); // весь роутер — только для залогиненных
@@ -92,7 +93,7 @@ cabinetRouter.get('/favorites', async (req, res) => {
 
   const [articleRows, companyRows, trendRows, storyRows] = await Promise.all([
     articleIds.length
-      ? db.select({ id: articles.id, type: articles.type, slug: articles.slug, title: articles.title, excerpt: articles.excerpt, publishedAt: articles.publishedAt, coverUrl: media.filePath })
+      ? db.select({ id: articles.id, type: articles.type, slug: articles.slug, title: articles.title, excerpt: articles.excerpt, publishedAt: articles.publishedAt, coverUrl: media.filePath, viewsCount: virtualViewsSql })
           .from(articles).leftJoin(media, eq(articles.coverMediaId, media.id))
           .where(inArray(articles.id, articleIds))
       : Promise.resolve([]),
@@ -260,6 +261,7 @@ cabinetRouter.get('/feed', async (req, res) => {
     .select({
       id: articles.id, type: articles.type, slug: articles.slug, title: articles.title,
       excerpt: articles.excerpt, publishedAt: articles.publishedAt, coverUrl: media.filePath,
+      viewsCount: virtualViewsSql, // ТЗ-03
     })
     .from(articles)
     .leftJoin(media, eq(articles.coverMediaId, media.id))

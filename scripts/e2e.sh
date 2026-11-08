@@ -113,6 +113,44 @@ curl -s -o /dev/null -w "%{http_code}" -X POST "$B/api/articles/propose" -H "$J"
 curl -s -X POST "$B/api/articles" -H "$A" -H "$J" -d '{"type":"analitika","slug":"e2e-insider","title":"E2E Инсайд","contentHtml":"<p>x</p>","status":"published","accessLevel":"tariff","accessTariffId":1}' > /dev/null
 curl -s -o /dev/null -w "%{http_code}" "$B/api/articles/analitika/e2e-insider" | grep -q 403 && ok || bad "paywall: anon 403 на tariff"
 curl -s -o /dev/null -w "%{http_code}" "$B/api/articles/analitika/e2e-insider" -H "$UA" | grep -q 200 && ok || bad "paywall: юзер с тарифом 200"
+
+echo "════════════════════════════════════════"
+echo "  E2E: ТЗ-03 — СЧЁТЧИКИ ПРОСМОТРОВ / ДОКРУТКА"
+echo "════════════════════════════════════════"
+# виртуальный счётчик: offset от admin → 200, viewsCount в списке отражает offset
+curl -s -X PATCH "$B/api/articles/$ART" -H "$A" -H "$J" -d '{"viewsBaseOffset":100}' | grep -q '"viewsBaseOffset":100' && ok || bad "views: admin PATCH viewsBaseOffset 200"
+VDET=$(curl -s "$B/api/articles/novost/e2e-novost" -H "$A" | jqget "d['viewsCount']")
+[ "$VDET" -ge 100 ] 2>/dev/null && ok || bad "views: detail viewsCount ≥ offset (got $VDET)"
+VLIST=$(curl -s "$B/api/articles?limit=100" -H "$A" | python3 -c "import json,sys; a=[x for x in json.load(sys.stdin)['articles'] if x['id']==$ART][0]; print(a.get('viewsCount',-1))" 2>/dev/null)
+[ "$VLIST" -ge 100 ] 2>/dev/null && ok || bad "views: viewsCount в списке ≥ 100 (got $VLIST)"
+# валидация настроек докрутки
+curl -s -o /dev/null -w "%{http_code}" -X PATCH "$B/api/articles/$ART" -H "$A" -H "$J" -d '{"viewsAutoBump":{"enabled":true,"everyHours":24,"min":50,"max":10}}' | grep -q 400 && ok || bad "views: max<min → 400"
+curl -s -o /dev/null -w "%{http_code}" -X PATCH "$B/api/articles/$ART" -H "$A" -H "$J" -d '{"viewsAutoBump":{"enabled":true,"everyHours":0,"min":1,"max":3}}' | grep -q 400 && ok || bad "views: everyHours=0 → 400"
+curl -s -o /dev/null -w "%{http_code}" -X PATCH "$B/api/articles/$ART" -H "$A" -H "$J" -d '{"viewsAutoBump":{"enabled":true}}' | grep -q 400 && ok || bad "views: частичный объект → 400"
+curl -s -o /dev/null -w "%{http_code}" -X PATCH "$B/api/articles/$ART" -H "$A" -H "$J" -d '{"viewsBaseOffset":-5}' | grep -q 400 && ok || bad "views: offset=-5 → 400"
+# автор (UA, роль author): поле докрутки проигнорировано — 403 нет, значение не изменилось
+PAID=$(curl -s -X POST "$B/api/articles/propose" -H "$UA" -H "$J" -d '{"type":"ideya","title":"E2E просмотры от автора","text":"Текст идеи более двадцати символов для валидации"}' | jqget "d['article']['id']")
+[ -n "$PAID" ] && ok || bad "views: propose статьи автором"
+curl -s -o /dev/null -w "%{http_code}" -X PATCH "$B/api/articles/$PAID" -H "$UA" -H "$J" -d '{"viewsBaseOffset":999}' | grep -q 200 && ok || bad "views: author PATCH без 403 (поле игнорируется)"
+psql -d newinvest -tAc "SELECT views_base_offset FROM articles WHERE id=$PAID" 2>/dev/null | grep -q ^0$ && ok || bad "views: author не изменил offset"
+# ручной бамп: anon 401; admin ok; added ∈ [min,max]; повтор подряд — идемпотентность
+curl -s -o /dev/null -w "%{http_code}" -X POST "$B/api/admin/views/bump" | grep -q 401 && ok || bad "views/bump: anon 401"
+curl -s -X PATCH "$B/api/articles/$ART" -H "$A" -H "$J" -d '{"viewsAutoBump":{"enabled":true,"everyHours":1,"min":10,"max":20}}' | grep -q '"viewsAutoBumpEnabled":true' && ok || bad "views: авто-бамп включён"
+BV1=$(psql -d newinvest -tAc "SELECT views_bump_accumulated FROM articles WHERE id=$ART" 2>/dev/null)
+curl -s -X POST "$B/api/admin/views/bump" -H "$A" | grep -q '"processed"' && ok || bad "views/bump: admin ok"
+BV2=$(psql -d newinvest -tAc "SELECT views_bump_accumulated FROM articles WHERE id=$ART" 2>/dev/null)
+ADDED=$((BV2 - BV1))
+[ "$ADDED" -ge 10 ] && [ "$ADDED" -le 20 ] 2>/dev/null && ok || bad "views: бамп в диапазоне [10,20] (added=$ADDED)"
+BP=$(curl -s -X POST "$B/api/admin/views/bump" -H "$A" | jqget "d['processed']")
+[ "$BP" = "0" ] && ok || bad "views: повторный бамп processed=0 (got $BP)"
+# честность аналитики: realViews/virtualViews раздельно, total — по реальным
+SV=$(curl -s "$B/api/stats/views?days=30" -H "$A")
+echo "$SV" | grep -q '"realViews"' && ok || bad "views: stats отдаёт realViews"
+echo "$SV" | grep -q '"virtualViews"' && ok || bad "views: stats отдаёт virtualViews"
+echo "$SV" | grep -q '"total"' && ok || bad "views: stats total по реальным"
+# сброс настроек докрутки (null выключает, диапазон сохраняется)
+curl -s -X PATCH "$B/api/articles/$ART" -H "$A" -H "$J" -d '{"viewsBaseOffset":0,"viewsAutoBump":null}' > /dev/null
+psql -d newinvest -tAc "SELECT views_base_offset=0 AND NOT views_auto_bump_enabled AND views_auto_bump_min=10 AND views_auto_bump_max=20 FROM articles WHERE id=$ART" 2>/dev/null | grep -q t && ok || bad "views: null выключает, диапазон сохраняется"
 # главная/публичные страницы
 for ep in "trends" "articles?type=novost&limit=3" "screener?phase=portfel" "trends/kosmos" "companies/spacex" "market/chart?symbol=SBER" "tariff-plans"; do
   curl -s -o /dev/null -w "%{http_code}" "$B/api/$ep" | grep -q 200 && ok || bad "public GET /api/$ep"
@@ -291,7 +329,7 @@ echo "════════════════════════�
 
 # очистка e2e-данных
 psql -d newinvest -q -c "
-DELETE FROM articles WHERE slug IN ('e2e-novost','e2e-insider','e2e-video') OR title LIKE 'E2E идея%';
+DELETE FROM articles WHERE slug IN ('e2e-novost','e2e-insider','e2e-video') OR title LIKE 'E2E идея%' OR title LIKE 'E2E просмотры%';
 DELETE FROM stories WHERE slug='e2e-story';
 DELETE FROM companies WHERE slug='e2e-corp';
 DELETE FROM trends WHERE slug='e2e-trend';

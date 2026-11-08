@@ -3,9 +3,10 @@
  */
 import { Router } from 'express';
 import { z } from 'zod';
-import { and, asc, eq } from 'drizzle-orm';
+import { and, asc, eq, sql } from 'drizzle-orm';
 import { db, stories, articles, articleStories } from '@newinvest/db';
 import { authRequired, requireRole } from '../middleware/auth.js';
+import { virtualViewsSql } from '../services/viewsBump.js';
 
 export const storiesRouter = Router();
 
@@ -31,6 +32,7 @@ storiesRouter.get('/stories/:slug', async (req, res) => {
       publishedAt: articles.publishedAt,
       status: articles.status,
       isPrimary: articleStories.isPrimary,
+      viewsCount: virtualViewsSql, // ТЗ-03
     })
     .from(articleStories)
     .innerJoin(articles, eq(articleStories.articleId, articles.id))

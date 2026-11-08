@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import { api } from '../api';
+import { api, adminViewsBump } from '../api';
 
-interface StatRow { articleId: number; title: string; type: string; slug: string; views: number; uniqueUsers: number }
+// ТЗ-03 R4: реальные и виртуальные просмотры — раздельно
+interface StatRow { articleId: number; title: string; type: string; slug: string; realViews: number; virtualViews: number; baseOffset: number; accumulatedBump: number; uniqueUsers: number }
 
 export default function StatsPage() {
   const [days, setDays] = useState(30);
@@ -9,6 +10,22 @@ export default function StatsPage() {
   const [error, setError] = useState<string | null>(null);
   const [digestMsg, setDigestMsg] = useState<string | null>(null);
   const [digestBusy, setDigestBusy] = useState(false);
+  const [bumpMsg, setBumpMsg] = useState<string | null>(null);
+  const [bumpBusy, setBumpBusy] = useState(false);
+
+  // ТЗ-03 R2.4: ручной бамп — немедленный проход автодокрутки по всем «созревшим» статьям
+  const runBump = async () => {
+    setBumpBusy(true);
+    setBumpMsg(null);
+    try {
+      const r = await adminViewsBump();
+      setBumpMsg(`Докручено: ${r.processed} статей`);
+    } catch (e) {
+      setBumpMsg(e instanceof Error ? e.message : 'Ошибка');
+    } finally {
+      setBumpBusy(false);
+    }
+  };
 
   const sendDigest = async (scope: 'daily' | 'weekly') => {
     setDigestBusy(true);
@@ -54,13 +71,20 @@ export default function StatsPage() {
         {digestMsg && <span className="text-sm text-[#c9ff2a]">{digestMsg}</span>}
       </div>
 
+      {/* ТЗ-03: ручной проход автодокрутки (автоматика: cron 7 * * * *) */}
+      <div className="card flex flex-wrap items-center gap-3">
+        <span className="text-sm text-zinc-400">Автодокрутка просмотров (статьям с включённой настройкой):</span>
+        <button className="btn-secondary" disabled={bumpBusy} onClick={() => void runBump()}>{bumpBusy ? 'Начисляем…' : 'Начислить сейчас'}</button>
+        {bumpMsg && <span className="text-sm text-[#c9ff2a]">{bumpMsg}</span>}
+      </div>
+
       {data && (
         <>
-          <p className="text-sm text-zinc-400">Всего просмотров: <span className="font-semibold text-zinc-100">{data.total}</span></p>
+          <p className="text-sm text-zinc-400">Всего просмотров (реальные): <span className="font-semibold text-zinc-100">{data.total}</span></p>
           <div className="card overflow-x-auto p-0">
             <table className="w-full">
               <thead className="border-b border-zinc-800">
-                <tr><th className="th">#</th><th className="th">Статья</th><th className="th">Тип</th><th className="th">Просмотры</th><th className="th">Уникальные</th></tr>
+                <tr><th className="th">#</th><th className="th">Статья</th><th className="th">Тип</th><th className="th">Реальные</th><th className="th">Виртуальные</th><th className="th">Seed</th><th className="th">Докручено</th><th className="th">Уникальные</th></tr>
               </thead>
               <tbody>
                 {data.articles.map((r, i) => (
@@ -70,7 +94,10 @@ export default function StatsPage() {
                       <a href={`http://localhost:5173/${r.type}/${r.slug}`} target="_blank" rel="noreferrer" className="hover:underline">{r.title}</a>
                     </td>
                     <td className="td text-zinc-500">{r.type}</td>
-                    <td className="td font-semibold">{r.views}</td>
+                    <td className="td font-semibold">{r.realViews}</td>
+                    <td className="td text-zinc-300">{r.virtualViews}</td>
+                    <td className="td text-zinc-500">{r.baseOffset}</td>
+                    <td className="td text-zinc-500">{r.accumulatedBump}</td>
                     <td className="td text-zinc-400">{r.uniqueUsers}</td>
                   </tr>
                 ))}

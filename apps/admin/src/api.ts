@@ -28,3 +28,8 @@ export interface AdminUser {
 }
 
 export const isAdminRole = (role?: string) => role === 'admin' || role === 'super_admin';
+
+/** Ручной триггер одного прохода автодокрутки просмотров (ТЗ-03 R2.4). */
+export async function adminViewsBump(): Promise<{ processed: number; details: { articleId: number; added: number }[] }> {
+  return api('/admin/views/bump', { method: 'POST' });
+}

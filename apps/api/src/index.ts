@@ -4,6 +4,7 @@ import cron from 'node-cron';
 import { config } from './config.js';
 import { securityHeaders, corsAllowlist, apiLimiter, loginLimiter, registerLimiter, generateLimiter, generateTextLimiter, telegramLinkLimiter, searchLimiter } from './middleware/security.js';
 import { runDailyDigest, runWeeklyReport } from './services/digest.js';
+import { runViewsBump } from './services/viewsBump.js';
 import { startTelegramPolling } from './services/telegram.js';
 import { authRouter } from './routes/auth.js';
 import { articlesRouter } from './routes/articles.js';
@@ -86,6 +87,10 @@ app.listen(config.port, () => {
   });
   cron.schedule('0 20 * * 0', () => {
     void runWeeklyReport().then((r) => console.log('[cron] weekly report:', r)).catch((e) => console.error('[cron] weekly', e));
+  });
+  // ТЗ-03: автодокрутка просмотров — раз в час на 7-й минуте (не :00/:30 — не совпадает с дайджестами)
+  cron.schedule('7 * * * *', () => {
+    void runViewsBump().then((r) => console.log(`[cron] views bump: ${r.processed}`)).catch((e) => console.error('[cron] views bump', e));
   });
   if (!process.env.RESEND_API_KEY) {
     console.log('[notifications] RESEND_API_KEY не задан — email-дайджесты отключены');

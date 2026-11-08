@@ -10,6 +10,7 @@ import { Paywall } from '../components/Paywall';
 import { ArticleCard, TYPE_LABELS } from '../components/ArticleCard';
 import { NewsCard } from '../components/NewsCard';
 import { ReadingTimeBadge } from '../components/ReadingTimeBadge';
+import { ViewsBadge } from '../components/ViewsBadge';
 import { Carousel, CAROUSEL_ITEM } from '../components/Carousel';
 import { FavoriteButton } from '../components/FavoriteButton';
 import { SubscribeButton } from '../components/SubscribeButton';
@@ -105,13 +106,19 @@ export default function ArticlePage() {
         )}
       </div>
 
-      {/* meta-строка «тип · N мин чтения» сразу после заголовка (ТЗ-09, правка ревью v2.1) */}
+      {/* meta-строка «тип · N мин чтения · 👁 просмотры» сразу после заголовка (ТЗ-09, ТЗ-03) */}
       <div className="mt-2 flex items-center gap-2 text-sm text-zinc-600">
         <span className="uppercase tracking-wide">{TYPE_LABELS[article.type] ?? article.type}</span>
         {article.readingTime != null && (
           <>
             <span aria-hidden="true">·</span>
             <ReadingTimeBadge minutes={article.readingTime} className="text-sm text-zinc-600" />
+          </>
+        )}
+        {data.viewsCount != null && (
+          <>
+            <span aria-hidden="true">·</span>
+            <ViewsBadge views={data.viewsCount} className="text-sm text-zinc-600" />
           </>
         )}
       </div>

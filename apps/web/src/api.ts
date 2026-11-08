@@ -19,6 +19,7 @@ export interface ArticleListItem {
   coverUrl: string | null;
   videoUrl?: string | null;
   readingTime?: number | null; // ТЗ-09: минуты чтения, null = не рассчитано
+  viewsCount?: number; // ТЗ-03: виртуальный счётчик (реальные + seed + докрутка); undefined — бейдж не рендерится
 }
 
 export interface ArticleDetail extends ArticleListItem {
@@ -77,7 +78,7 @@ export const api = {
   articles: (type?: string) =>
     get<{ articles: ArticleListItem[] }>(`/articles${type ? `?type=${type}` : ''}`),
   article: (type: string, slug: string) =>
-    get<{ article: ArticleDetail; coverUrl: string | null; relations: ArticleRelations; stages: string[] }>(`/articles/${type}/${slug}`),
+    get<{ article: ArticleDetail; viewsCount: number; coverUrl: string | null; relations: ArticleRelations; stages: string[] }>(`/articles/${type}/${slug}`),
   company: (slug: string) => get<CompanyDetail>(`/companies/${slug}`),
   trend: (slug: string) => get<TrendDetail>(`/trends/${slug}`),
   story: (slug: string) => get<StoryDetail>(`/stories/${slug}`),
@@ -102,6 +103,7 @@ export interface Idea {
   publishedAt: string | null;
   coverUrl: string | null;
   readingTime?: number | null; // ТЗ-09: минуты чтения (показываем в карточке при >= 2)
+  viewsCount?: number; // ТЗ-03: виртуальный счётчик
   phases: string[];
   stages: string[];
   industries: string[];

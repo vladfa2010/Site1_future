@@ -14,6 +14,7 @@ import {
 } from '@newinvest/db';
 import { uniqueSlug, plainTextToHtml } from '../utils/slug.js';
 import { optionalAuth, authRequired, requireRole, ADMIN_ROLES } from '../middleware/auth.js';
+import { virtualViewsSql } from '../services/viewsBump.js';
 
 export const articlesRouter = Router();
 
@@ -39,7 +40,21 @@ const createSchema = z.object({
   status: z.enum(['draft', 'published']).default('draft'),
 });
 
-const patchSchema = createSchema.partial();
+const patchSchema = createSchema.partial().extend({
+  // ТЗ-03: докрутка счётчиков — только через PATCH и только admin (в createSchema НЕ добавлять,
+  // иначе автор сможет задать seed при POST — правка ревью v2.1 №4)
+  viewsBaseOffset: z.number().int().min(0).max(1000000).optional(),
+  viewsAutoBump: z
+    .object({
+      enabled: z.boolean(),
+      everyHours: z.number().int().min(1).max(168),
+      min: z.number().int().min(0).max(10000),
+      max: z.number().int().min(0).max(10000),
+    })
+    .nullable() // явный null принимаем (выключить, диапазон сохранить — R3.4)
+    .optional()
+    .refine((v) => v == null || v.max >= v.min, { message: 'viewsAutoBump: max должен быть ≥ min' }),
+});
 
 const isAdmin = (role?: string) => role !== undefined && ADMIN_ROLES.includes(role);
 
@@ -99,6 +114,7 @@ articlesRouter.get('/', optionalAuth, async (req, res) => {
       coverUrl: media.filePath,
       videoUrl: articles.videoUrl,
       readingTime: articles.readingTime,
+      viewsCount: virtualViewsSql, // ТЗ-03: виртуальный счётчик (реальные + seed + докрутка)
     })
     .from(articles)
     .leftJoin(media, eq(articles.coverMediaId, media.id))
@@ -114,7 +130,7 @@ articlesRouter.get('/', optionalAuth, async (req, res) => {
 articlesRouter.get('/:type/:slug', optionalAuth, async (req, res) => {
   const { type, slug } = req.params;
   const [row] = await db
-    .select({ article: articles, coverUrl: media.filePath })
+    .select({ article: articles, coverUrl: media.filePath, viewsCount: virtualViewsSql })
     .from(articles)
     .leftJoin(media, eq(articles.coverMediaId, media.id))
     .where(and(eq(articles.type, type), eq(articles.slug, slug)))
@@ -164,6 +180,7 @@ articlesRouter.get('/:type/:slug', optionalAuth, async (req, res) => {
     .limit(1);
   res.json({
     article,
+    viewsCount: row.viewsCount, // ТЗ-03 R1.2: виртуальный счётчик отдельным полем в корне
     coverUrl: row.coverUrl,
     meta: { description: meta?.value ?? null },
     relations: { companies: relCompanies, trends: relTrends, tickers: relTickers },
@@ -234,8 +251,30 @@ articlesRouter.patch('/:id', authRequired, requireRole('author', 'admin', 'super
     res.status(403).json({ error: 'authors can edit only their own unpublished articles' });
     return;
   }
-  const { metaDescription, ...updates } = parsed.data;
+  const { metaDescription, viewsBaseOffset, viewsAutoBump, ...updates } = parsed.data;
   if (!admin) delete updates.status; // автор не меняет статус
+  // ТЗ-03 R2: поля докрутки — только admin/super_admin; не-админу молча игнорируются
+  // (403 нет — поведение как у status, значение не изменяется)
+  if (admin) {
+    if (viewsBaseOffset !== undefined) {
+      (updates as Record<string, unknown>).viewsBaseOffset = viewsBaseOffset;
+    }
+    if (viewsAutoBump !== undefined) {
+      if (viewsAutoBump === null) {
+        // выключить; колонки диапазона СОХРАНЯЮТСЯ — повторное включение не требует ввода (R3.4)
+        (updates as Record<string, unknown>).viewsAutoBumpEnabled = false;
+      } else {
+        (updates as Record<string, unknown>).viewsAutoBumpEnabled = viewsAutoBump.enabled;
+        (updates as Record<string, unknown>).viewsAutoBumpEveryHours = viewsAutoBump.everyHours;
+        (updates as Record<string, unknown>).viewsAutoBumpMin = viewsAutoBump.min;
+        (updates as Record<string, unknown>).viewsAutoBumpMax = viewsAutoBump.max;
+        // включение → перезапуск цикла: первый тик на ближайшем проходе (R3.4)
+        if (viewsAutoBump.enabled) {
+          (updates as Record<string, unknown>).viewsBumpLastAt = null;
+        }
+      }
+    }
+  }
 
   // ТЗ-09: контент пришёл — пересчитываем время чтения; без contentHtml колонку не трогаем
   if (typeof updates.contentHtml === 'string') {
@@ -247,6 +286,16 @@ articlesRouter.patch('/:id', authRequired, requireRole('author', 'admin', 'super
     (updates as Record<string, unknown>).publishedAt = null;
   } else if (updates.status === 'published' && !existing.publishedAt) {
     (updates as Record<string, unknown>).publishedAt = new Date();
+  }
+
+  // PATCH только полями докрутки от не-админа (или пустым телом) — нечего обновлять:
+  // пустой .set() крашил процесс, теперь отдаём текущую статью без изменений
+  if (Object.keys(updates).length === 0) {
+    if (metaDescription) {
+      await saveMetaDescription(id, metaDescription);
+    }
+    res.json({ article: existing });
+    return;
   }
 
   const [row] = await db.update(articles).set(updates).where(eq(articles.id, id)).returning();

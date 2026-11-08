@@ -10,6 +10,7 @@ import { sql } from 'drizzle-orm';
 import { db, articles, articleEmbeddings, media } from '@newinvest/db';
 import { optionalAuth, ADMIN_ROLES } from '../middleware/auth.js';
 import { accessCondition } from './articles.js';
+import { virtualViewsSql } from '../services/viewsBump.js';
 import { embedText } from '../services/embeddings.js';
 
 export const searchRouter = Router();
@@ -19,6 +20,7 @@ const isAdmin = (role?: string) => role !== undefined && ADMIN_ROLES.includes(ro
 interface Hit {
   id: number; type: string; slug: string; title: string;
   excerpt: string | null; coverUrl: string | null; publishedAt: string | null;
+  viewsCount: number; // ТЗ-03
   score: number;
   source: 'fts' | 'vector';
 }
@@ -42,10 +44,11 @@ searchRouter.get('/', optionalAuth, async (req, res) => {
     ? await db.execute<{
         id: number; type: string; slug: string; title: string;
         excerpt: string | null; cover_url: string | null; published_at: string | null;
-        rank: number;
+        views_count: number; rank: number;
       }>(sql`
         select ${articles.id}, ${articles.type}, ${articles.slug}, ${articles.title},
                ${articles.excerpt}, ${media.filePath} as cover_url, ${articles.publishedAt},
+               ${virtualViewsSql} as views_count,
                ts_rank(articles.search_tsv, websearch_to_tsquery('russian', ${q})) as rank
         from ${articles}
         left join ${media} on ${articles.coverMediaId} = ${media.id}
@@ -60,6 +63,7 @@ searchRouter.get('/', optionalAuth, async (req, res) => {
   const ftsHits: Hit[] = ftsRows.rows.map((r) => ({
     id: r.id, type: r.type, slug: r.slug, title: r.title,
     excerpt: r.excerpt, coverUrl: r.cover_url, publishedAt: r.published_at,
+    viewsCount: Number(r.views_count),
     score: Number(r.rank), source: 'fts',
   }));
 
@@ -72,10 +76,11 @@ searchRouter.get('/', optionalAuth, async (req, res) => {
         const vRows = await db.execute<{
           id: number; type: string; slug: string; title: string;
           excerpt: string | null; cover_url: string | null; published_at: string | null;
-          distance: number;
+          views_count: number; distance: number;
         }>(sql`
           select ${articles.id}, ${articles.type}, ${articles.slug}, ${articles.title},
                  ${articles.excerpt}, ${media.filePath} as cover_url, ${articles.publishedAt},
+                 ${virtualViewsSql} as views_count,
                  (${articleEmbeddings.embedding} <=> ${`[${embedded.vector.join(',')}]`}::vector) as distance
           from ${articleEmbeddings}
           inner join ${articles} on ${articles.id} = ${articleEmbeddings.articleId}
@@ -88,6 +93,7 @@ searchRouter.get('/', optionalAuth, async (req, res) => {
         vectorHits = vRows.rows.map((r) => ({
           id: r.id, type: r.type, slug: r.slug, title: r.title,
           excerpt: r.excerpt, coverUrl: r.cover_url, publishedAt: r.published_at,
+          viewsCount: Number(r.views_count),
           score: 1 / (1 + Number(r.distance)), source: 'vector',
         }));
       }

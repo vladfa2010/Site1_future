@@ -1,7 +1,8 @@
 import { useEffect, useState, useRef, lazy, Suspense } from 'react';
 import { useParams, useNavigate } from 'react-router';
 import { stripHtml } from '@newinvest/db/text-utils';
-import { api } from '../api';
+import { api, isAdminRole } from '../api';
+import { useAuth } from '../auth';
 import PreviewModal from '../components/PreviewModal';
 import MediaPickerModal from '../components/MediaPickerModal';
 import EntityCloud from '../components/EntityCloud';
@@ -26,6 +27,8 @@ export default function ArticleEditPage() {
   const { type: urlType, slug } = useParams();
   const isNew = !slug;
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const canEditViews = isAdminRole(user?.role); // ТЗ-03: секция докрутки — только admin/super_admin
 
   const [form, setForm] = useState({
     type: 'novost', slug: '', title: '', excerpt: '', thesis: '', contentHtml: '', status: 'draft', metaDescription: '',
@@ -55,6 +58,12 @@ export default function ArticleEditPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // ТЗ-03: настройки счётчиков просмотров (докрутка) — только admin/super_admin
+  const [viewsBaseOffset, setViewsBaseOffset] = useState('0');
+  const [bumpEnabled, setBumpEnabled] = useState(false);
+  const [bumpEveryHours, setBumpEveryHours] = useState('24');
+  const [bumpMin, setBumpMin] = useState('1');
+  const [bumpMax, setBumpMax] = useState('3');
 
   useEffect(() => {
     void (async () => {
@@ -69,7 +78,7 @@ export default function ArticleEditPage() {
       setTariffPlans(plans.plans);
 
       if (!isNew && urlType && slug) {
-        const detail = await api<{ article: { id: number; type: string; slug: string; title: string; excerpt: string | null; thesis: string | null; contentHtml: string; status: string; coverMediaId: number | null; accessLevel: string | null; accessTariffId: number | null; videoUrl: string | null }; coverUrl: string | null; meta: { description: string | null } }>(`/articles/${urlType}/${slug}`);
+        const detail = await api<{ article: { id: number; type: string; slug: string; title: string; excerpt: string | null; thesis: string | null; contentHtml: string; status: string; coverMediaId: number | null; accessLevel: string | null; accessTariffId: number | null; videoUrl: string | null; viewsBaseOffset: number; viewsAutoBumpEnabled: boolean; viewsAutoBumpEveryHours: number | null; viewsAutoBumpMin: number; viewsAutoBumpMax: number }; coverUrl: string | null; meta: { description: string | null } }>(`/articles/${urlType}/${slug}`);
         const a = detail.article;
         setForm({
           type: a.type, slug: a.slug, title: a.title, excerpt: a.excerpt ?? '', thesis: a.thesis ?? '',
@@ -77,6 +86,12 @@ export default function ArticleEditPage() {
           accessLevel: a.accessLevel ?? 'public', accessTariffId: a.accessTariffId ? String(a.accessTariffId) : '',
           videoUrl: a.videoUrl ?? '',
         });
+        // ТЗ-03: предзаполнение настроек докрутки (детальный GET отдаёт колонки целиком)
+        setViewsBaseOffset(String(a.viewsBaseOffset ?? 0));
+        setBumpEnabled(a.viewsAutoBumpEnabled ?? false);
+        setBumpEveryHours(String(a.viewsAutoBumpEveryHours ?? 24));
+        setBumpMin(String(a.viewsAutoBumpMin ?? 1));
+        setBumpMax(String(a.viewsAutoBumpMax ?? 3));
         setArticleId(a.id);
         setCoverMediaId(a.coverMediaId);
         setCoverPreview(detail.coverUrl ? (detail.coverUrl.startsWith('/') ? `${window.location.origin}${detail.coverUrl}` : detail.coverUrl) : null);
@@ -136,11 +151,23 @@ export default function ArticleEditPage() {
     setNotice(null);
     try {
       let id = articleId;
-      const payload = {
+      const payload: Record<string, unknown> = {
         ...form,
         coverMediaId: coverMediaId ?? undefined,
         accessTariffId: form.accessLevel === 'tariff' && form.accessTariffId ? Number(form.accessTariffId) : undefined,
       };
+      // ТЗ-03: настройки докрутки — только существующей статье и только админу (сервер всё равно 403/игнор)
+      if (!isNew && id && canEditViews) {
+        payload.viewsBaseOffset = Number(viewsBaseOffset) || 0;
+        payload.viewsAutoBump = bumpEnabled
+          ? {
+              enabled: true,
+              everyHours: Math.min(168, Math.max(1, Number(bumpEveryHours) || 24)),
+              min: Math.max(0, Number(bumpMin) || 0),
+              max: Math.max(0, Number(bumpMax) || 0),
+            }
+          : null; // выключить; диапазон на сервере сохраняется (R3.4)
+      }
       if (isNew) {
         const created = await api<{ article: { id: number } }>('/articles', { method: 'POST', body: JSON.stringify(payload) });
         id = created.article.id;
@@ -491,6 +518,54 @@ export default function ArticleEditPage() {
           </div>
         )}
       </div>
+
+      {/* ТЗ-03: счётчики просмотров — collapsible, только admin/super_admin (ревью v2.1 №9, №10) */}
+      {canEditViews && (
+        <details className="card space-y-4">
+          <summary className="cursor-pointer font-semibold">Счётчики просмотров (докрутка)</summary>
+          {!isNew ? (
+            <div className="grid gap-4 sm:grid-cols-4">
+              <div>
+                <label className="label">Стартовые просмотры (seed)</label>
+                <input
+                  className="input"
+                  type="number"
+                  min={0}
+                  max={1000000}
+                  value={viewsBaseOffset}
+                  onChange={(e) => setViewsBaseOffset(e.target.value)}
+                />
+                <p className="mt-1 text-xs text-zinc-500">Прибавляется к реальным просмотрам на карточках.</p>
+              </div>
+              <div className="sm:col-span-3">
+                <label className="flex items-center gap-2">
+                  <input type="checkbox" checked={bumpEnabled} onChange={(e) => setBumpEnabled(e.target.checked)} />
+                  <span className="label">Автодокрутка (раз в N часов добавляется случайное число из диапазона)</span>
+                </label>
+                {bumpEnabled && (
+                  <div className="mt-3 grid gap-4 sm:grid-cols-3">
+                    <div>
+                      <label className="label">Каждые, часов (1–168)</label>
+                      <input className="input" type="number" min={1} max={168} value={bumpEveryHours} onChange={(e) => setBumpEveryHours(e.target.value)} />
+                    </div>
+                    <div>
+                      <label className="label">Мин. добавка</label>
+                      <input className="input" type="number" min={0} max={10000} value={bumpMin} onChange={(e) => setBumpMin(e.target.value)} />
+                    </div>
+                    <div>
+                      <label className="label">Макс. добавка</label>
+                      <input className="input" type="number" min={0} max={10000} value={bumpMax} onChange={(e) => setBumpMax(e.target.value)} />
+                    </div>
+                  </div>
+                )}
+                {!bumpEnabled && <p className="mt-1 text-xs text-zinc-500">Выключено — диапазон сохранится для повторного включения.</p>}
+              </div>
+            </div>
+          ) : (
+            <p className="text-sm text-zinc-500">Сохраните статью — затем появятся настройки счётчиков.</p>
+          )}
+        </details>
+      )}
 
       <div className="card space-y-4">
         <div className="flex items-center justify-between">

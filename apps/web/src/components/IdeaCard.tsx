@@ -3,6 +3,7 @@ import type { Idea } from '../api';
 import { CoverThumb } from './CoverThumb';
 import { FavoriteButton } from './FavoriteButton';
 import { ReadingTimeBadge } from './ReadingTimeBadge';
+import { ViewsBadge } from './ViewsBadge';
 
 /**
  * Карточка идеи с вертикальной обложкой (как у донора) + бейджи
@@ -26,9 +27,11 @@ export function IdeaCard({ idea }: { idea: Idea }) {
           <ReadingTimeBadge minutes={idea.readingTime} iconClassName="h-3 w-3" />
         </div>
       )}
-      {(idea.thesis || idea.stages.length > 1 || idea.industries.length > 0) && (
+      {(idea.thesis || idea.stages.length > 1 || idea.industries.length > 0 || idea.viewsCount != null) && (
         <div className="mt-2 flex flex-wrap items-start gap-1.5 text-xs">
           {idea.thesis && <p className="line-clamp-2 w-full text-sm text-zinc-400 group-hover:text-zinc-300">{idea.thesis}</p>}
+          {/* ТЗ-03: счётчик просмотров в строке бейджей (рядом с бейджами компании) */}
+          <ViewsBadge views={idea.viewsCount} />
           {idea.companies.slice(0, 1).map((c) => (
             <span key={c} className="rounded-full bg-[#beff00]/10 px-2 py-0.5 font-medium text-[#c9ff2a]">{c}</span>
           ))}

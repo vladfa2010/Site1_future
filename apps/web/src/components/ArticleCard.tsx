@@ -3,6 +3,7 @@ import type { ArticleListItem } from '../api';
 import { CoverThumb } from './CoverThumb';
 import { FavoriteButton } from './FavoriteButton';
 import { ReadingTimeBadge } from './ReadingTimeBadge';
+import { ViewsBadge } from './ViewsBadge';
 
 export const TYPE_LABELS: Record<string, string> = {
   novost: 'Новость',
@@ -21,6 +22,12 @@ export function ArticleCard({ article }: { article: ArticleListItem }) {
         <CoverThumb title={article.title} coverUrl={article.coverUrl} subtitle={TYPE_LABELS[article.type] ?? article.type} />
         {article.excerpt && (
           <p className="mt-2 line-clamp-2 text-sm text-zinc-400 group-hover:text-zinc-300">{article.excerpt}</p>
+        )}
+        {/* счётчик просмотров под лидом (ТЗ-03); undefined → бейдж не рендерится */}
+        {article.viewsCount != null && (
+          <div className="mt-2">
+            <ViewsBadge views={article.viewsCount} />
+          </div>
         )}
         {/* время чтения под лидом (ТЗ-09); null → не рендерится */}
         <ReadingTimeBadge minutes={article.readingTime ?? null} iconClassName="h-3 w-3" />

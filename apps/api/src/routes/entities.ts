@@ -20,6 +20,7 @@ import {
   tariffPlans,
 } from '@newinvest/db';
 import { authRequired, requireRole } from '../middleware/auth.js';
+import { virtualViewsSql } from '../services/viewsBump.js';
 
 export const entitiesRouter = Router();
 
@@ -60,6 +61,7 @@ entitiesRouter.get('/companies/:slug', async (req, res) => {
       title: articles.title,
       excerpt: articles.excerpt,
       publishedAt: articles.publishedAt,
+      viewsCount: virtualViewsSql, // ТЗ-03: счётчик на карточках (покрытие всех списков)
     })
     .from(articleCompanies)
     .innerJoin(articles, eq(articleCompanies.articleId, articles.id))
@@ -302,6 +304,7 @@ entitiesRouter.get('/trends/:slug', async (req, res) => {
       publishedAt: articles.publishedAt,
       coverUrl: media.filePath,
       videoUrl: articles.videoUrl,
+      viewsCount: virtualViewsSql, // ТЗ-03
     })
     .from(articleTrends)
     .innerJoin(articles, eq(articleTrends.articleId, articles.id))

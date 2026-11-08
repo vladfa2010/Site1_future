@@ -1,6 +1,7 @@
 import { Link } from 'react-router';
 import type { ArticleListItem } from '../api';
 import { FavoriteButton } from './FavoriteButton';
+import { ViewsBadge } from './ViewsBadge';
 import { videoThumbnail } from '../lib/video';
 
 /**
@@ -38,6 +39,12 @@ export function VideoCard({ article }: { article: ArticleListItem & { videoUrl?:
           <span className="absolute bottom-2 left-2 rounded bg-black/70 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-[#c9ff2a]">Видео</span>
         </div>
         <h3 className="mt-2 line-clamp-2 font-semibold leading-snug text-zinc-100 group-hover:text-[#d6ff5c]">{article.title}</h3>
+        {/* ТЗ-03: счётчик под заголовком (даты в VideoCard нет — ревью v2.1 №6); undefined → скрыт */}
+        {article.viewsCount != null && (
+          <div className="mt-1">
+            <ViewsBadge views={article.viewsCount} />
+          </div>
+        )}
         {article.excerpt && <p className="mt-1 line-clamp-2 text-sm text-zinc-400">{article.excerpt}</p>}
       </Link>
       <FavoriteButton entityType="article" entityId={article.id} className="absolute right-2 top-2" />

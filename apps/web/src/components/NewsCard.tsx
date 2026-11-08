@@ -2,6 +2,7 @@ import { Link } from 'react-router';
 import type { ArticleListItem } from '../api';
 import { FavoriteButton } from './FavoriteButton';
 import { ReadingTimeBadge } from './ReadingTimeBadge';
+import { ViewsBadge } from './ViewsBadge';
 
 /**
  * Широкая новостная карточка как у донора: горизонтальная картинка сверху
@@ -27,11 +28,14 @@ export function NewsCard({ article }: { article: ArticleListItem }) {
         <h3 className="mt-3 line-clamp-2 font-semibold leading-snug text-zinc-100 group-hover:text-[#d6ff5c]">
           {article.title}
         </h3>
-        {(article.publishedAt || article.readingTime != null) && (
+        {(article.publishedAt || article.readingTime != null || article.viewsCount != null) && (
           <div className="mt-1.5 flex items-center gap-1.5 text-xs text-zinc-600">
             {article.publishedAt && <span>{article.publishedAt.slice(0, 10)}</span>}
-            {article.publishedAt && article.readingTime != null && <span aria-hidden="true">·</span>}
+            {article.publishedAt && (article.readingTime != null || article.viewsCount != null) && <span aria-hidden="true">·</span>}
             <ReadingTimeBadge minutes={article.readingTime ?? null} iconClassName="h-3 w-3" />
+            {(article.publishedAt || article.readingTime != null) && article.viewsCount != null && <span aria-hidden="true">·</span>}
+            {/* ТЗ-03: счётчик просмотров в одну строку с датой; цвет как у даты (ревью v2.1 №7) */}
+            <ViewsBadge views={article.viewsCount} />
           </div>
         )}
         {article.excerpt && (
