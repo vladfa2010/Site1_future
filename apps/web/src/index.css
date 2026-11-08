@@ -20,3 +20,34 @@
 .carousel-scroll::-webkit-scrollbar {
   display: none;
 }
+
+/* ТЗ-07: Trending Now — marquee на transform (GPU), пауза при hover */
+.ticker-track {
+  animation-name: ticker-scroll;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+  will-change: transform;
+}
+.ticker:hover .ticker-track {
+  animation-play-state: paused;
+}
+@keyframes ticker-scroll {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+.ticker-viewport {
+  overflow: hidden;
+}
+/* touch-устройства и prefers-reduced-motion: autoplay выключен, ручной скролл (решение ТЗ) */
+@media (hover: none), (prefers-reduced-motion: reduce) {
+  .ticker-track {
+    animation: none;
+  }
+  .ticker-viewport {
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .ticker-viewport::-webkit-scrollbar {
+    display: none;
+  }
+}

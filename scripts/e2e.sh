@@ -432,6 +432,40 @@ NULLSLUG=$(psql -d newinvest -tAc "SELECT type||'/'||slug FROM articles WHERE au
 # фронт: /avtor/:id рендерит SPA-страницу (fallback dev-сервера)
 curl -s -o /dev/null -w "%{http_code}" "$W/avtor/$ADMID" | grep -q 200 && ok || bad "authors: /avtor/:id SPA 200"
 
+echo "════════════════════════════════════════"
+echo "  E2E: TRENDING NOW (ТЗ-07)"
+echo "════════════════════════════════════════"
+# публичный эндпоинт, дефолт окно 6 ч / лимит 10
+curl -s "$B/api/trending" | python3 -c "import json,sys; d=json.load(sys.stdin); assert d['windowHours']==6 and len(d['items'])<=10 and isinstance(d['items'],list); print('ok')" > /dev/null 2>&1 && ok || bad "trending: 200, windowHours=6, до 10 items"
+# кламп параметров: hours 1–24, limit 1–20
+curl -s "$B/api/trending?hours=30&limit=99" | python3 -c "import json,sys; d=json.load(sys.stdin); assert d['windowHours']==24 and len(d['items'])<=20; print('ok')" > /dev/null 2>&1 && ok || bad "trending: кламп hours=30→24, limit≤20"
+curl -s "$B/api/trending?hours=0" | python3 -c "import json,sys; assert json.load(sys.stdin)['windowHours']==1; print('ok')" > /dev/null 2>&1 && ok || bad "trending: кламп hours=0→1"
+# формат item: белый список полей (id/type/slug/title/views)
+curl -s "$B/api/trending" | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+assert all(set(i.keys())=={'id','type','slug','title','views'} for i in d['items']), d['items'][:1]
+print('ok')" > /dev/null 2>&1 && ok || bad "trending: поля item — белый список"
+# кэш: два подряд — тот же computedAt (чистый TTL, без инвалидации по max(viewed_at))
+TC1=$(curl -s "$B/api/trending" | jqget "d['computedAt']")
+sleep 1
+TC2=$(curl -s "$B/api/trending" | jqget "d['computedAt']")
+[ -n "$TC1" ] && [ "$TC1" = "$TC2" ] && ok || bad "trending: кэш-hit — computedAt не изменился"
+# пейволл: auth-статья (e2e-novost) с массой просмотров НЕ попадает в топ
+if [ -n "$ART" ]; then
+  psql -d newinvest -q -c "INSERT INTO article_views (article_id) SELECT $ART FROM generate_series(1,50);" 2>/dev/null
+  curl -s "$B/api/trending?limit=20" | python3 -c "import json,sys; d=json.load(sys.stdin); assert all(i['id']!=$ART for i in d['items']); print('ok')" > /dev/null 2>&1 && ok || bad "trending: auth-статья с просмотрами отсутствует (пейволл)"
+  psql -d newinvest -q -c "DELETE FROM article_views WHERE article_id=$ART;" 2>/dev/null
+else
+  bad "trending: нет ART для пейволл-проверки"
+fi
+# draft-статья с просмотрами тоже отсутствует (готовим через тот же ART: unpublish → залить просмотры → проверить → вернуть)
+if [ -n "$ART" ]; then
+  psql -d newinvest -q -c "UPDATE articles SET status='draft', access_level='public' WHERE id=$ART; INSERT INTO article_views (article_id) SELECT $ART FROM generate_series(1,50);" 2>/dev/null
+  curl -s "$B/api/trending?limit=20&hours=1" | python3 -c "import json,sys; d=json.load(sys.stdin); assert all(i['id']!=$ART for i in d['items']); print('ok')" > /dev/null 2>&1 && ok || bad "trending: draft-статья с просмотрами отсутствует"
+  psql -d newinvest -q -c "DELETE FROM article_views WHERE article_id=$ART; UPDATE articles SET status='published', access_level='auth' WHERE id=$ART;" 2>/dev/null
+fi
+
 echo ""
 echo "════════════════════════════════════════"
 echo "  ИТОГ: PASS=$PASS FAIL=$FAIL"

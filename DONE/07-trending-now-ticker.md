@@ -145,3 +145,15 @@
 5. `aria-hidden="true"` на дублирующей копии marquee (screen reader читал дважды).
 6. Исчезновение посреди сессии (окно опустело): держать последний непустой снапшот до 2×TTL — строка в §рендер.
 7. N=10, autoplay на touch выключен, высоту не резервировать — подтверждено.
+
+---
+
+## СТАТУС: ✅ РЕАЛИЗОВАНО (2026-11-08, агент-52, принято)
+
+**Реализация:** API — `routes/trending.ts` GET /api/trending (публичный, окно 6ч по дефолту, кламп hours 1–24 / limit 1–20; SQL article_views ⋈ articles status=published AND access_level=public, order by views desc; чистый in-memory кэш Map TTL 5 мин БЕЗ инвалидации по max(viewed_at) — аддендум v2.1 №3; ответ {items:[{id,type,slug,title,views}], windowHours, computedAt}). Фронт — `TrendingTicker.tsx` в Layout под шапкой: скрыт на /:type/:slug через ARTICLE_PAGE_RE по типам материалов (оставлен на /kompaniya, /trend и др.); счётчик 👁 НЕ рендерится (№1), views только в ответе API для ранжирования; пустой список → null (4.3); снапшот последнего непустого списка до 2×TTL (№6); marquee-дубль aria-hidden (№5), длительность цикла из ширины ленты (~55px/с, мин 40с), пауза при hover, hover:none и prefers-reduced-motion → ручной скролл; refetchInterval = бэкенд-TTL (фронт не долбит API чаще кэша).
+
+**Отклонения от ТЗ (приняты):** существенных нет; инвалидация §3.3 v2 отменена аддендумом v2.1 №3 (реализовано по аддендуму).
+
+**Приёмка:** tsc чисто (api+web), curl: дефолт/кламп/кэш-hit/фильтр draft и auth-пейволл (ручной сверкой с SQL), web build успешен, E2E 214/214 (+7: формат, кламп ×2, белый список, кэш-hit, пейволл auth/draft). Отладочная статья e2e-dbg (1144) из приёмки ТЗ-02 удалена.
+
+**E2E: 214/214.**

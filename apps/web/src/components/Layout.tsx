@@ -3,6 +3,7 @@ import { useAuth } from '../auth';
 import { useAuthModal } from '../authModal';
 import AuthModal from './AuthModal';
 import { Avatar } from './Avatar';
+import { TrendingTicker } from './TrendingTicker';
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
@@ -42,6 +43,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
           )}
         </nav>
       </header>
+      <TrendingTicker />
       <main className="flex-1 py-8">{children}</main>
       <AuthModal />
       <footer className="mt-12 border-t border-[#2a2a2a] bg-black">

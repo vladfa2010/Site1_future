@@ -47,6 +47,14 @@ export interface ArticleListItem {
   liked?: boolean; // ТЗ-04: лайкнул ли текущий юзер (анониму — false)
 }
 
+export interface TrendingItem {
+  id: number;
+  type: string;
+  slug: string;
+  title: string;
+  views: number; // просмотры за окно; в тиккере не показываем (аддендум v2.1 №1 — конфликт с ТЗ-03)
+}
+
 // ТЗ-05: автор материала / публичный профиль автора (белый список полей, без email)
 export interface ArticleAuthor {
   id: number;
@@ -130,6 +138,9 @@ export const api = {
   // лента по типу (для каруселей «все …» на странице идеи)
   byType: (type: string, limit = 10) =>
     get<{ articles: ArticleListItem[] }>(`/articles?type=${type}&limit=${limit}`),
+  // ТЗ-07: Trending Now — топ по реальным просмотрам за окно (счётчик в тиккере не рендерим — аддендум v2.1)
+  trending: () =>
+    get<{ items: TrendingItem[]; windowHours: number; computedAt: string }>('/trending'),
   // ТЗ-04: вовлечение — ответы отдают актуальный серверный счётчик (клиент подтягивает его после оптимистичного апдейта)
   like: (articleId: number) =>
     send<{ ok: boolean; liked: boolean; likesCount: number }>(`/articles/${articleId}/like`, 'PUT'),
