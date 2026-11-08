@@ -530,7 +530,7 @@ investicionno_rf/
 │   ├── docker-compose.yml    # PostgreSQL + pgvector (для сервера; локально — Homebrew PG)
 │   └── docker/               # Dockerfile для api/web/admin
 ├── scripts/
-│   └── e2e.sh                # E2E-сьют (119 проверок: auth, админка, юзер-сценарии, поиск,
+│   └── e2e.sh                # E2E-сьют (123 проверки: auth, админка, юзер-сценарии, поиск,
 │                             # безопасность) — API_URL=http://localhost:4000 bash scripts/e2e.sh
 ├── reference/                # локальные копии репозиториев PULSE (в .gitignore)
 ├── docs/
@@ -557,7 +557,7 @@ investicionno_rf/
 | миграция контента | 306 статей, 73 компании, 24 тикера, 26 индустрий, 16 трендов, связи (383/118/366/334) | ✅ |
 | `apps/web` | Главная как у донора (палитра чёрный #000 + лайм #beff00), статья (thesis, чипсы, график MOEX при «Торги на бирже», breadcrumbs), тренд-лендинг, сюжет-хронология, скринер, **/search** (гибридный, бейдж «векторный+текстовый»), /pricing (тарифы из БД), /cabinet (избранное, подписки→лента, настройки уведомлений email/TG, удаление аккаунта), AuthModal 1:1 PULSE, «Предложить идею» | ✅ |
 | `apps/admin` | Все экраны: статьи (TipTap, авто-slug, обложка — генерация/загрузка/выбор из медиатеки, привязки EntityCloud с созданием по Enter, генерация лида и SEO-description, превью десктоп/планшет/мобайл, публикация/возврат в черновик, paywall-уровни), компании, тренды, индустрии, тикеры, сюжеты, медиатека, редиректы, пользователи (роли), тарифы, фичи, аналитика, **настройки Kimi API** (/kimi) | ✅ |
-| E2E | scripts/e2e.sh — 119 проверок (реестр механик — раздел 6.6), зелёные | ✅ |
+| E2E | scripts/e2e.sh — 123 проверки (реестр механик — раздел 6.6), зелёные | ✅ |
 
 **Запуск с нуля:**
 
@@ -570,7 +570,7 @@ npm run seed -w @newinvest/api          # супер-админ admin@local.dev 
 npm run seed:test -w @newinvest/api     # тестовый админ test@test.ru / test
 npm run db:migrate:wp                   # контент с донора (опционально, ~30 с)
 npm run dev                             # api :4000 + web :5173 + admin :5174
-API_URL=http://localhost:4000 bash scripts/e2e.sh   # E2E-регрессия (119 проверок)
+API_URL=http://localhost:4000 bash scripts/e2e.sh   # E2E-регрессия (123 проверки)
 # векторный поиск после ввода ключа в /kimi:
 MOONSHOT_API_KEY=… MOONSHOT_EMBED_MODEL=… npm run embed -w @newinvest/db
 ```
@@ -585,11 +585,11 @@ MOONSHOT_API_KEY=… MOONSHOT_EMBED_MODEL=… npm run embed -w @newinvest/db
 - [ ] SSO со вторым проектом; бот wptg не переподключён к новому API
 - [ ] Редиректы 301 и SEO-поля: таблицы есть, наполнение — при переезде
 - [ ] `packages/shared` и `packages/config` — пустые (типы дублируются между web/admin)
-- [ ] Прод-бэклог безопасности (из аудита раунда 2): trust proxy за реверс-прокси, HSTS+CSP для SPA, httpOnly-cookie вместо localStorage JWT, one-click unsubscribe в email, верификация email, ротация/отзыв JWT, ротация article_views
+- [ ] Бэклог безопасности «первый месяц» (аудиты раундов 2–3, вердикт лида: не блокируют запуск): SSO одноразовый код вместо ?auth=, смена пароля, аудит-лог admin-мутаций, CSP на фронтах + HSTS, per-account login-лимит, верификация email + one-click unsubscribe, квота на propose, шифрование kimi_api_key at-rest. Позже: tokenVersion/отзыв JWT, httpOnly-cookie, article_views retention
 
 ### 6.6 Реестр механик и покрытие E2E (2026-11-08)
 
-Полный список механик платформы. Каждая — минимум один тест в `scripts/e2e.sh` (119 проверок, `API_URL=http://localhost:4000 bash scripts/e2e.sh`).
+Полный список механик платформы. Каждая — минимум один тест в `scripts/e2e.sh` (123 проверки, `API_URL=http://localhost:4000 bash scripts/e2e.sh`).
 
 **Авторизация и роли**
 
@@ -610,6 +610,7 @@ MOONSHOT_API_KEY=… MOONSHOT_EMBED_MODEL=… npm run embed -w @newinvest/db
 | Автор не публикует напрямую; автор правит только свои draft | POST/PATCH /articles | ✅ (частично — e2e-юзер author) |
 | Предложить материал (reader→author upgrade) | POST /articles/propose | ✅ |
 | Пейволл public/auth/tariff + просроченный тариф 403 | GET /articles/:type/:slug | ✅ |
+| Пейволл на ВСЕХ выборках: скринер, /feed, дайджесты (тариф из БД), поиск FTS+vector, events | /screener, /feed, digest | ✅ (аудиты 3 раундов) |
 | Привязки к графу (PUT), автоподстановка цепочки | /articles/:id/relations, /bindings-suggest | ✅ |
 | Материалы по идее (?type=), валидация типа 400 | GET /articles/:id/events | ✅ |
 | SEO meta description (meta_fields) | POST/PATCH /articles | ✅ (при создании) |
@@ -669,13 +670,13 @@ MOONSHOT_API_KEY=… MOONSHOT_EMBED_MODEL=… npm run embed -w @newinvest/db
 
 | Механика | Тест |
 |---|---|
-| CORS: чужой origin 403 | ✅ |
+| CORS: allowlist origin'ов, чужой 403; в проде CORS_ORIGINS только punycode (Origin браузера всегда xn--) | ✅ |
 | Security headers (X-Frame-Options и др.) | ✅ |
 | Anon 401 на защищённых роутах (users, relations, admin/*, features) | ✅ |
 | Non-super 403 на смене ролей и kimi-settings | ✅ |
-| Rate limiting: login 10/15мин, search 20/мин, генерация 30-60/час | ⚠️ in-memory, не тестируется автоматически (перезапуск API сбрасывает) |
+| Rate limiting: login 10/15мин, search 20/мин, генерация 30-60/час; trust proxy scoped (loopback/linklocal/uniquelocal — за Caddy реальный IP) | ⚠️ in-memory, не тестируется автоматически |
 | XSS-саинтизация контента (sanitize-html на фронте) | ⚠️ фронт, не покрыто curl-тестами |
-| JWT: alg pinning HS256, 7-д срок | ⚠️ код-ревью (аудит раундов 1–2) |
+| JWT: alg pinning HS256, TTL 12ч (admin) / 7д (юзер) | ✅ (e2e: admin TTL = 43200с) |
 
 Легенда: ✅ — автотест в scripts/e2e.sh; ⚠️ — проверено код-ревью/вручную, автотест не писать (in-memory состояние, фронт-рендер или уже покрыто аудитом).
 
@@ -857,3 +858,4 @@ MOONSHOT_API_KEY=… MOONSHOT_EMBED_MODEL=… npm run embed -w @newinvest/db
 | 2026-11-08 | **Документация деплоя: docs/DEPLOY.md** — полный цикл: требования к VPS, env, docker compose up (миграции автоматом при старте api), супер-админ, перенос контента (migrate-wp / pg_dump), векторный контур в БД (pgvector: ключ в /kimi → embed.ts бэкфилл → проверка mode=hybrid, --force для смены модели), бэкапы (pg_dump cron 04:17 + том uploads), обновление релиза, эксплуатация, таблица частых проблем | — |
 | 2026-11-08 | **Аудит безопасности двумя агентами (пентест + white-box) и remediation**: исправлено — пейволл в скринере (accessCondition, anon не видит auth/tariff-идеи), пейволл в /feed и дайджестах (в т.ч. АКТУАЛЬНЫЙ тариф из БД, не JWT), POST /kimi-settings только super_admin + baseUrl allowlist (api.moonshot.ai/cn, api.kimi.com — защита от угона ключа), http(s)-only валидация всех URL-полей (sourceUrl/videoUrl/website — блок data:/javascript:), trust proxy scoped (loopback/linklocal/uniquelocal — rate limit за Caddy не склеивает клиентов и не спуфится), admin-JWT TTL 12h (юзеры 7д), bcrypt cost 12, seed/test заблокированы в production (дефолтный admin123 запрещён), TG-дайджест экранирует title. Отложено в бэклог: tokenVersion/отзыв JWT, смена пароля, per-account login-лимит, SSO через одноразовый код, шифрование kimi_api_key at-rest, аудит-лог, article_views retention, propose-квота. Проверено и в порядке обоими: alg pinning, SQL-параметризация, sanitize-html, magic bytes, TG deep-link, SSRF в market/chart, error handler | E2E 123/123 (+4 security-проверки) |
 | 2026-11-08 | **Финальный аудит лидом кибербеза (третий раунд)**: верифицировано 8/9 исправлений, найден провал — baseUrl-allowlist через startsWith обходился (api.moonshot.ai.evil.com) → исправлено на точное сравнение hostname (400 на обход, 200 на легитимный). MUST BEFORE LAUNCH закрыто: CORS_ORIGINS в compose/.env.example переведён на punycode (браузер шлёт Origin как xn--..., иначе админка в проде получила бы 403). Также: PreviewModal экранирует title/excerpt/thesis/coverUrl + sandbox без allow-same-origin, X-Powered-By отключён, поиск q ≤300 символов, healthcheck api в compose. Вердикт лида: 7/10 → после фиксов запуск с открытой регистрацией возможен; FIRST MONTH: SSO-код вместо ?auth=, смена пароля, аудит-лог, CSP на фронтах, per-account login-лимит, верификация email, квота propose | E2E 123/123 |
+| 2026-11-08 | **Документация приведена в соответствие после 3 раундов аудита безопасности**: реестр 6.6 — пейволл отмечен на всех контурах (статьи/скринер/лента/дайджесты/поиск/events), trust proxy scoped в строке rate limiting, CORS с пометкой про punycode, JWT — 12ч/7д с e2e-проверкой; бэклог переписан: закрыто trust proxy, актуализировано под вердикт лида (запуск не блокируют); счётчики E2E 119→123 в 4 местах | — |
