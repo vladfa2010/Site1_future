@@ -24,6 +24,24 @@
 
 FK на `users.id`: 10 таблиц newinvest (article_views, bookmarks, subscriptions, favorites, articles.author_id, notification_settings, tg_bindings, tg_link_codes, article_likes, article_share_events), ~20 у pulse.
 
+## Сквозная система тарифов (решение 2026-11-08: гибкий вариант)
+
+Продуктовое решение о кросс-доступе отложено — дизайн не закрывает ни один из сценариев.
+
+**Один каталог** `subscription_plans` для обоих продуктов, управляется из одной админки. `features JSONB` — по-продуктовый:
+
+```json
+{
+  "pulse":  { "tag_limit": 25, "telegram": true, "ai_summary": true },
+  "invest": { "paywall": true, "analytics": true, "screener": true }
+}
+```
+
+- Витрина newinvest рендерит планы с непустым `features.invest`; витрина pulse — с `features.pulse`. «Что и где показывать» = флаги в фичах плана + `is_active` / `coming_soon_label` / `display_order`.
+- Сценарий «единая подписка на всё»: у плана оба блока заполнены. Сценарий «раздельный»: заполнен один. Переключается правкой плана, без миграций.
+- **Пейволл на рангах плана** (чинит текущую хрупкость exact-match): шкала `display_order`/отдельная колонка ранга free < base < premium < club. У контента newinvest `access_min_plan VARCHAR(20)` вместо `access_tariff_id INT` — материал виден, если ранг плана юзера ≥ ранга требуемого.
+- Админ: один интерфейс каталога (база — pulse: plans/payments/promo уже есть), обе витрины — read-only к той же таблице.
+
 ## План по фазам
 
 ### Фаза 0 — расширение users до pulse-структуры (обратимо, без риска)
@@ -45,12 +63,13 @@ FK на `users.id`: 10 таблиц newinvest (article_views, bookmarks, subscri
 5. Drizzle: `id: uuid('id').primaryKey().defaultRandom()`; JWT sub уже String — формат меняется с числа на UUID, перелогин всех юзеров (токены инвалидируются — принять, анонсировать).
 6. JWT payload перейдёт на uuid sub автоматически.
 
-### Фаза 2 — тарифная система pulse
+### Фаза 2 — сквозная тарифная система (дизайн — раздел «Сквозная система тарифов» выше)
 
 1. Создать `subscription_plans` (DDL из `subscription_plans_v2.sql`, id VARCHAR: free/base/premium/club/pro) + сидирование.
 2. `users`: add `subscription_plan VARCHAR(20) DEFAULT 'free'`, `subscription_active BOOLEAN`, `subscription_expires_at`, `subscription_auto_renew`, … (полный набор pulse); backfill маппингом `tariff_plans.slug` → `subscription_plans.id`.
-3. `accessCondition` и middleware newinvest переключить с `tariff_id` на `subscription_plan`/`subscription_active`; `tariff_plans` оставить как VIEW на переходный период, потом удалить.
-4. JWT payload: единый superset `{role, is_admin, subscriptionPlan, subscriptionExpiresAt, tariffId(legacy)}`.
+3. `articles`: `access_tariff_id` INT → `access_min_plan VARCHAR(20)` (ранговая проверка ≥, вместо exact-match); `accessCondition` и middleware newinvest переключить на subscription-поля + ранг; `tariff_plans` оставить как VIEW на переходный период, потом удалить.
+4. Витрина newinvest читает планы по флагу `features.invest`; admin-каталог единый.
+5. JWT payload: единый superset `{role, is_admin, subscriptionPlan, subscriptionExpiresAt, planRank}`.
 
 ### Фаза 3 — SSO
 
