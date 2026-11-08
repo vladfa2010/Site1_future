@@ -8,6 +8,7 @@ import { runViewsBump } from './services/viewsBump.js';
 import { startTelegramPolling } from './services/telegram.js';
 import { authRouter } from './routes/auth.js';
 import { articlesRouter } from './routes/articles.js';
+import { authorsRouter } from './routes/authors.js';
 import { entitiesRouter } from './routes/entities.js';
 import { storiesRouter } from './routes/stories.js';
 import { bindingsRouter } from './routes/bindings.js';
@@ -59,6 +60,7 @@ app.use('/api/auth', authRouter);
 app.use('/api', bindingsRouter); // ПЕРЕД articlesRouter: пути /articles/:id/...
 app.use('/api', engagementRouter); // ТЗ-04: /articles/:id/like|share — ПЕРЕД articlesRouter (тот же конфликт :id vs :type)
 app.use('/api/articles', articlesRouter);
+app.use('/api/authors', authorsRouter); // ТЗ-05: публичный профиль автора (ПЕРЕД cabinet: у него router-wide auth)
 app.use('/api/search', searchRouter);
 app.use('/api', kimiSettingsRouter); // /admin/kimi-settings — ПЕРЕД cabinet (у него router-wide auth)
 app.use('/api', metricsRouter);      // /admin/metrics/* — ПЕРЕД cabinet

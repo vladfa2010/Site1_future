@@ -9,8 +9,9 @@ import { TelegramConnect } from '../components/TelegramConnect';
 import { Avatar, AVATAR_PRESET } from '../components/Avatar';
 import type { ArticleListItem } from '../api';
 
-type Tab = 'favorites' | 'feed' | 'subscriptions' | 'tariff' | 'notifications' | 'danger';
+type Tab = 'profile' | 'favorites' | 'feed' | 'subscriptions' | 'tariff' | 'notifications' | 'danger';
 const TABS: { id: Tab; label: string }[] = [
+  { id: 'profile', label: 'Профиль' }, // ТЗ-05: первый и открытый по умолчанию
   { id: 'favorites', label: 'Избранное' },
   { id: 'feed', label: 'Моя лента' },
   { id: 'subscriptions', label: 'Подписки' },
@@ -31,7 +32,7 @@ interface FavoriteRow {
 export default function CabinetPage() {
   const { user, logout } = useAuth();
   const { open } = useAuthModal();
-  const [tab, setTab] = useState<Tab>('favorites');
+  const [tab, setTab] = useState<Tab>('profile');
   const [avatarEdit, setAvatarEdit] = useState(false);
   const isAdmin = user?.role === 'admin' || user?.role === 'super_admin';
   const ADMIN_URL = import.meta.env.VITE_ADMIN_URL ?? 'http://localhost:5174';
@@ -107,6 +108,7 @@ export default function CabinetPage() {
       </div>
 
       <div className="mt-6">
+        {tab === 'profile' && <ProfileTab />}
         {tab === 'favorites' && <FavoritesTab />}
         {tab === 'feed' && <FeedTab />}
         {tab === 'subscriptions' && <SubscriptionsTab />}
@@ -230,6 +232,93 @@ function DeleteAccountBlock() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/* ---------- Профиль: «о себе» (bio) + превью публичной страницы (ТЗ-05) ---------- */
+function ProfileTab() {
+  const { user, refresh } = useAuth();
+  const [bio, setBio] = useState(user?.bio ?? '');
+  const [notice, setNotice] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  // считаем по trim()'нутому значению — серверная zod-валидация тоже trim (ревью v2.1 №7)
+  const trimmed = bio.trim();
+  const over = trimmed.length > 500;
+  const unchanged = trimmed === (user?.bio ?? '').trim();
+
+  const save = async () => {
+    setBusy(true);
+    setNotice(null);
+    try {
+      const r = await fetch('/api/auth/me', {
+        method: 'PATCH',
+        headers: authed(),
+        body: JSON.stringify({ bio: trimmed }),
+      });
+      if (!r.ok) throw new Error('Не сохранилось — проверьте текст');
+      await refresh(); // bio подтягивается в контекст (паттерн AvatarPickerModal)
+      setNotice('Сохранено ✓');
+      setTimeout(() => setNotice(null), 2000);
+    } catch (err) {
+      setNotice(err instanceof Error ? err.message : 'Ошибка сохранения');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const name = user?.displayName ?? 'Автор';
+  const previewBio = trimmed.length > 160 ? `${trimmed.slice(0, 160)}…` : trimmed;
+
+  return (
+    <div className="max-w-lg space-y-6">
+      <div>
+        <label htmlFor="cabinet-bio" className="mb-2 block text-sm font-semibold">
+          О себе
+        </label>
+        <textarea
+          id="cabinet-bio"
+          value={bio}
+          onChange={(e) => setBio(e.target.value)}
+          maxLength={500}
+          rows={5}
+          placeholder="Пара слов о себе — это увидят читатели под вашими материалами"
+          className="w-full rounded-lg border border-[#2a2a2a] bg-[#191919] p-3 text-sm text-zinc-200 outline-none focus:border-[#beff00]/60"
+        />
+        <div className="mt-1 flex items-center justify-between text-xs">
+          <span className="text-zinc-600">До 500 символов, пустое = не показываем</span>
+          {/* переполнение — красным (ревью v2.1 №7) */}
+          <span className={over ? 'font-semibold text-red-400' : 'text-zinc-600'}>
+            {trimmed.length}/500
+          </span>
+        </div>
+        {notice && <p className="mt-2 text-sm text-[#c9ff2a]">{notice}</p>}
+        <button
+          onClick={() => void save()}
+          disabled={busy || over || unchanged}
+          className="mt-3 rounded-full bg-[#beff00] px-6 py-2 text-sm font-bold text-black hover:opacity-85 disabled:opacity-40"
+        >
+          {busy ? 'Сохраняем…' : 'Сохранить'}
+        </button>
+      </div>
+
+      {/* Превью: как автор выглядит публично (ревью v2.1 №1 — страница появится только после первой публикации) */}
+      <div className="rounded-xl border border-[#2a2a2a] bg-[#191919] p-5">
+        <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+          Как это будет выглядеть
+        </p>
+        <p className="mt-1 text-xs text-zinc-600">
+          Ваша публичная страница появится после первой публикации материала.
+        </p>
+        <div className="mt-4 flex items-start gap-4">
+          <Avatar avatar={user?.avatar} name={name} size={48} />
+          <div className="min-w-0">
+            <p className="font-semibold">{name}</p>
+            {previewBio && <p className="mt-1 text-sm text-zinc-400">{previewBio}</p>}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

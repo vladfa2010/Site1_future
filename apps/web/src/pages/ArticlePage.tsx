@@ -1,4 +1,4 @@
-import { useParams } from 'react-router';
+import { useParams, Link } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../api';
 import { EntityChips } from '../components/EntityChips';
@@ -16,6 +16,7 @@ import { Carousel, CAROUSEL_ITEM } from '../components/Carousel';
 import { FavoriteButton } from '../components/FavoriteButton';
 import { LikeButton } from '../components/LikeButton';
 import { ShareButtons } from '../components/ShareButtons';
+import { AuthorBox, authorName } from '../components/AuthorBox';
 import { SubscribeButton } from '../components/SubscribeButton';
 import { Share2 } from 'lucide-react';
 import { formatCount } from '../lib/format';
@@ -124,8 +125,20 @@ export default function ArticlePage() {
       </div>
 
       {/* meta-строка «тип · N мин чтения · 👁 просмотры» сразу после заголовка (ТЗ-09, ТЗ-03) */}
-      <div className="mt-2 flex items-center gap-2 text-sm text-zinc-600">
+      <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-zinc-600">
         <span className="uppercase tracking-wide">{TYPE_LABELS[article.type] ?? article.type}</span>
+        {/* ТЗ-05: имя автора со ссылкой на страницу; без автора строка не рендерится */}
+        {data.author && (
+          <>
+            <span aria-hidden="true">·</span>
+            <span>
+              Автор:{' '}
+              <Link to={`/avtor/${data.author.id}`} className="text-[#c9ff2a] hover:underline">
+                {authorName(data.author)}
+              </Link>
+            </span>
+          </>
+        )}
         {article.readingTime != null && (
           <>
             <span aria-hidden="true">·</span>
@@ -194,6 +207,10 @@ export default function ArticlePage() {
 
       {/* ТЗ-02: блок шеринга в «футере» статьи — после «Источника», перед каруселями */}
       <ShareButtons articleId={article.id} title={article.title} type={article.type} variant="inline-bottom" />
+
+      {/* ТЗ-05: author box — после контента и «Источника», перед каруселями/связями;
+          author == null (author_id IS NULL) → компонент сам ничего не рендерит */}
+      <AuthorBox author={data.author} />
 
       {/* Нижний блок каруселей — только на странице идеи (как у донора) */}
       {article.type === 'ideya' && (

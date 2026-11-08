@@ -47,7 +47,18 @@ export interface ArticleListItem {
   liked?: boolean; // ТЗ-04: лайкнул ли текущий юзер (анониму — false)
 }
 
-export interface ArticleDetail extends ArticleListItem {
+// ТЗ-05: автор материала / публичный профиль автора (белый список полей, без email)
+export interface ArticleAuthor {
+  id: number;
+  displayName: string | null; // null → отображаем «Автор» (ревью v2.1 №5)
+  avatar: string | null;
+  bio: string | null;
+  createdAt: string;
+}
+
+export interface AuthorProfile extends ArticleAuthor {
+  articleCount: number; // «сколько материалов доступно именно запрашивающему»
+}export interface ArticleDetail extends ArticleListItem {
   contentHtml: string;
   thesis: string | null;
   sourceUrl: string | null;
@@ -103,7 +114,9 @@ export const api = {
   articles: (type?: string) =>
     get<{ articles: ArticleListItem[] }>(`/articles${type ? `?type=${type}` : ''}`),
   article: (type: string, slug: string) =>
-    get<{ article: ArticleDetail; viewsCount: number; coverUrl: string | null; likesCount: number; sharesCount: number; liked: boolean; relations: ArticleRelations; stages: string[] }>(`/articles/${type}/${slug}`),
+    get<{ article: ArticleDetail; author: ArticleAuthor | null; viewsCount: number; coverUrl: string | null; likesCount: number; sharesCount: number; liked: boolean; relations: ArticleRelations; stages: string[] }>(`/articles/${type}/${slug}`),
+  author: (id: string | number) =>
+    get<{ author: AuthorProfile; articles: ArticleListItem[] }>(`/authors/${id}`), // ТЗ-05
   company: (slug: string) => get<CompanyDetail>(`/companies/${slug}`),
   trend: (slug: string) => get<TrendDetail>(`/trends/${slug}`),
   story: (slug: string) => get<StoryDetail>(`/stories/${slug}`),

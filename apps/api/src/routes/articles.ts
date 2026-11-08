@@ -57,7 +57,7 @@ const patchSchema = createSchema.partial().extend({
     .refine((v) => v == null || v.max >= v.min, { message: 'viewsAutoBump: max должен быть ≥ min' }),
 });
 
-const isAdmin = (role?: string) => role !== undefined && ADMIN_ROLES.includes(role);
+export const isAdmin = (role?: string) => role !== undefined && ADMIN_ROLES.includes(role);
 
 // ---------- Пейволл: условие доступа к материалам ----------
 // public — всем; auth — залогиненным; tariff — юзерам с нужным НЕпросроченным тарифом.
@@ -204,8 +204,19 @@ articlesRouter.get('/:type/:slug', optionalAuth, async (req, res) => {
       .limit(1);
     liked = likeRow !== undefined;
   }
+  // ТЗ-05: автор статьи — белый список полей (без email/passwordHash), author_id IS NULL → null
+  let author: { id: number; displayName: string | null; avatar: string | null; bio: string | null; createdAt: Date } | null = null;
+  if (article.authorId != null) {
+    const [a] = await db
+      .select({ id: users.id, displayName: users.displayName, avatar: users.avatar, bio: users.bio, createdAt: users.createdAt })
+      .from(users)
+      .where(eq(users.id, article.authorId))
+      .limit(1);
+    author = a ?? null;
+  }
   res.json({
     article,
+    author, // ТЗ-05: один источник для строки «Автор:» и author box'а
     viewsCount: row.viewsCount, // ТЗ-03 R1.2: виртуальный счётчик отдельным полем в корне
     coverUrl: row.coverUrl,
     likesCount: article.likesCount, // ТЗ-04: счётчики + liked отдельными полями в корне

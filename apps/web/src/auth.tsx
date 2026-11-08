@@ -6,6 +6,7 @@ export interface AuthUser {
   role: string;
   displayName: string | null;
   avatar?: string | null;
+  bio?: string | null; // ТЗ-05: «о себе», редактируется в кабинете
   tariffId?: number | null;
   tariffName?: string | null;
   tariffExpiresAt?: string | null;

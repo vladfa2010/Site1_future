@@ -70,12 +70,42 @@ authRouter.post('/register', async (req, res) => {
 authRouter.get('/me', authRequired, async (req, res) => {
   const [user] = await db.select({
     id: users.id, email: users.email, displayName: users.displayName, role: users.role, avatar: users.avatar,
+    bio: users.bio, // ТЗ-05: «о себе» — редактируется через PATCH /me
     tariffId: users.tariffId, tariffExpiresAt: users.tariffExpiresAt, tariffName: tariffPlans.name,
   }).from(users).leftJoin(tariffPlans, eq(users.tariffId, tariffPlans.id)).where(eq(users.id, req.user!.id)).limit(1);
   if (!user) {
     res.status(401).json({ error: 'unauthorized' });
     return;
   }
+  res.json({ user });
+});
+
+// PATCH /api/auth/me — частичное обновление своего профиля (ТЗ-05: bio «о себе»).
+// Свой профиль, любая роль; лимит 500 — только zod (в БД ограничения нет, решение ТЗ).
+const patchMeSchema = z.object({ bio: z.string().trim().max(500, 'Максимум 500 символов') }).partial();
+authRouter.patch('/me', authRequired, async (req, res) => {
+  const parsed = patchMeSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'validation', details: parsed.error.flatten() });
+    return;
+  }
+  if (parsed.data.bio === undefined) {
+    // пустой PATCH — текущий профиль без изменений (пустой .set() крашил процесс, как в articles.ts)
+    const [user] = await db.select({
+      id: users.id, email: users.email, displayName: users.displayName, role: users.role, avatar: users.avatar,
+      bio: users.bio, tariffId: users.tariffId,
+    }).from(users).where(eq(users.id, req.user!.id)).limit(1);
+    res.json({ user });
+    return;
+  }
+  const [user] = await db
+    .update(users)
+    .set({ bio: parsed.data.bio })
+    .where(eq(users.id, req.user!.id)) // чужой профиль изменить нельзя — только свой id
+    .returning({
+      id: users.id, email: users.email, displayName: users.displayName, role: users.role, avatar: users.avatar,
+      bio: users.bio, tariffId: users.tariffId,
+    });
   res.json({ user });
 });
 

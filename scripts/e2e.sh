@@ -395,6 +395,43 @@ UTX=$(curl -s -X POST $B/api/auth/login -H "$J" -d '{"email":"e2e@test.ru","pass
 curl -s -o /dev/null -w "%{http_code}" "$B/api/articles/analitika/e2e-insider" -H "Authorization: Bearer $UTX" | grep -q 403 && ok || bad "paywall: просроченный тариф 403"
 psql -d newinvest -q -c "UPDATE users SET tariff_expires_at=NULL WHERE id=$USRID" 2>/dev/null
 
+echo "════════════════════════════════════════"
+echo "  E2E: ТЗ-05 — АВТОРЫ / BIO"
+echo "════════════════════════════════════════"
+# PATCH /me: anon 401; со токеном — сохраняется и читается через GET /me
+curl -s -o /dev/null -w "%{http_code}" -X PATCH "$B/api/auth/me" -H "$J" -d '{"bio":"x"}' | grep -q 401 && ok || bad "bio: anon PATCH 401"
+curl -s -X PATCH "$B/api/auth/me" -H "$UA" -H "$J" -d '{"bio":"E2E био автора"}' | grep -q '"bio":"E2E био автора"' && ok || bad "bio: PATCH сохраняет"
+curl -s "$B/api/auth/me" -H "$UA" | grep -q '"bio":"E2E био автора"' && ok || bad "bio: GET /me отдаёт bio"
+# лимит 500 — zod: 501 → 400, ровно 500 → 200, пустая строка → 200 (хранится как "")
+curl -s -o /dev/null -w "%{http_code}" -X PATCH "$B/api/auth/me" -H "$UA" -H "$J" -d "{\"bio\":\"$(python3 -c 'print("a"*501)')\"}" | grep -q 400 && ok || bad "bio: 501 символ 400"
+curl -s -o /dev/null -w "%{http_code}" -X PATCH "$B/api/auth/me" -H "$UA" -H "$J" -d "{\"bio\":\"$(python3 -c 'print("a"*500)')\"}" | grep -q 200 && ok || bad "bio: ровно 500 200"
+curl -s -X PATCH "$B/api/auth/me" -H "$UA" -H "$J" -d '{"bio":""}' | grep -q '"bio":""' && ok || bad "bio: пустая строка 200 и сохраняется"
+# деталь статьи отдаёт author белым списком (без email/passwordHash)
+curl -s "$B/api/articles/novost/e2e-novost" -H "$A" | python3 -c "
+import json,sys
+a=json.load(sys.stdin)['author']
+assert a is not None and set(a.keys())=={'id','displayName','avatar','bio','createdAt'}, a
+print('ok')" > /dev/null 2>&1 && ok || bad "authors: detail author — белый список без email"
+# публичный профиль автора (test@test.ru — автор e2e-novost/e2e-video)
+ADMID=$(curl -s "$B/api/auth/me" -H "$A" | jqget "d['user']['id']")
+curl -s "$B/api/authors/$ADMID" | grep -q '"articleCount"' && ok || bad "authors: профиль автора 200"
+curl -s "$B/api/authors/$ADMID" | grep -q '"email"' && bad "authors: email утекает в профиле (ПРОБЛЕМА)" || ok
+curl -s "$B/api/authors/$ADMID" | python3 -c "import json,sys; d=json.load(sys.stdin); assert d['author']['articleCount']==len(d['articles'])>0; print('ok')" > /dev/null 2>&1 && ok || bad "authors: articleCount == len(articles) > 0"
+# пейволл: тарифная статья автора не видна анониму, видна владельцу тарифа
+curl -s -X POST "$B/api/articles" -H "$A" -H "$J" -d '{"type":"analitika","slug":"e2e-author-tariff","title":"E2E автор тариф","contentHtml":"<p>x</p>","status":"published","accessLevel":"tariff","accessTariffId":1}' > /dev/null
+curl -s "$B/api/authors/$ADMID" | python3 -c "import json,sys; d=json.load(sys.stdin); assert all(a['slug']!='e2e-author-tariff' for a in d['articles']); print('ok')" > /dev/null 2>&1 && ok || bad "authors: anon не видит tariff-материал автора"
+curl -s "$B/api/authors/$ADMID" -H "$UA" | python3 -c "import json,sys; d=json.load(sys.stdin); assert any(a['slug']=='e2e-author-tariff' for a in d['articles']); print('ok')" > /dev/null 2>&1 && ok || bad "authors: юзер с тарифом видит tariff-материал автора"
+# 404: несуществующий id и юзер без опубликованных материалов
+curl -s -o /dev/null -w "%{http_code}" "$B/api/authors/999999999" | grep -q 404 && ok || bad "authors: несуществующий id 404"
+curl -s -X POST $B/api/auth/register -H "$J" -d '{"username":"E2ENoPub","email":"e2e-nopub@test.ru","password":"E2ePass123"}' > /dev/null
+NPID=$(curl -s -X POST $B/api/auth/login -H "$J" -d '{"email":"e2e-nopub@test.ru","password":"E2ePass123"}' | jqget "d['user']['id']")
+[ -n "$NPID" ] && curl -s -o /dev/null -w "%{http_code}" "$B/api/authors/$NPID" | grep -q 404 && ok || bad "authors: юзер без публикаций 404"
+# статья с author_id IS NULL → author:null
+NULLSLUG=$(psql -d newinvest -tAc "SELECT type||'/'||slug FROM articles WHERE author_id IS NULL AND status='published' LIMIT 1" 2>/dev/null)
+[ -n "$NULLSLUG" ] && curl -s "$B/api/articles/$NULLSLUG" | grep -q '"author":null' && ok || bad "authors: author_id NULL → author:null"
+# фронт: /avtor/:id рендерит SPA-страницу (fallback dev-сервера)
+curl -s -o /dev/null -w "%{http_code}" "$W/avtor/$ADMID" | grep -q 200 && ok || bad "authors: /avtor/:id SPA 200"
+
 echo ""
 echo "════════════════════════════════════════"
 echo "  ИТОГ: PASS=$PASS FAIL=$FAIL"
@@ -403,7 +440,7 @@ echo "════════════════════════�
 
 # очистка e2e-данных
 psql -d newinvest -q -c "
-DELETE FROM articles WHERE slug IN ('e2e-novost','e2e-insider','e2e-video') OR title LIKE 'E2E идея%' OR title LIKE 'E2E просмотры%';
+DELETE FROM articles WHERE slug IN ('e2e-novost','e2e-insider','e2e-video','e2e-author-tariff') OR title LIKE 'E2E идея%' OR title LIKE 'E2E просмотры%';
 DELETE FROM stories WHERE slug='e2e-story';
 DELETE FROM companies WHERE slug='e2e-corp';
 DELETE FROM trends WHERE slug='e2e-trend';
@@ -415,7 +452,7 @@ DELETE FROM favorites WHERE user_id IN (SELECT id FROM users WHERE email IN ('e2
 DELETE FROM subscriptions WHERE user_id IN (SELECT id FROM users WHERE email IN ('e2e@test.ru','e2e-gone@test.ru'));
 DELETE FROM notification_settings WHERE user_id IN (SELECT id FROM users WHERE email IN ('e2e@test.ru','e2e-gone@test.ru'));
 DELETE FROM tg_bindings WHERE user_id IN (SELECT id FROM users WHERE email IN ('e2e@test.ru','e2e-gone@test.ru'));
-DELETE FROM users WHERE email IN ('e2e@test.ru','e2e-gone@test.ru');
+DELETE FROM users WHERE email IN ('e2e@test.ru','e2e-gone@test.ru','e2e-nopub@test.ru');
 UPDATE tariff_plans SET yearly_discount=20 WHERE slug='insider';
 UPDATE meta_fields SET value='' WHERE owner_type='app' AND owner_id=0 AND key='kimi_api_key';
 " 2>/dev/null

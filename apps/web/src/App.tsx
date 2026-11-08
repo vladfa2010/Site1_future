@@ -13,6 +13,7 @@ import ProposePage from './pages/ProposePage';
 import PrivacyPage from './pages/PrivacyPage';
 import TermsPage from './pages/TermsPage';
 import CabinetPage from './pages/CabinetPage';
+import AuthorPage from './pages/AuthorPage';
 import PricingPage from './pages/PricingPage';
 import SearchPage from './pages/SearchPage';
 import FeedPage from './pages/FeedPage';
@@ -27,6 +28,8 @@ export default function App() {
         <Route path="/" element={<HomePage />} />
         {/* статьи: /novost/slug, /ideya/slug, /analitika/slug, /interesnoe/slug, /sobytie/slug */}
         <Route path="/:type/:slug" element={<ArticlePage />} />
+        {/* ТЗ-05: публичная страница автора (статический сегмент ранжируется выше /:type/:slug) */}
+        <Route path="/avtor/:id" element={<AuthorPage />} />
         {/* узлы графа */}
         <Route path="/kompaniya/:slug" element={<CompanyPage />} />
         <Route path="/trend/:slug" element={<TrendPage />} />
