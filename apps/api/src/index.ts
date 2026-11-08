@@ -25,6 +25,7 @@ if (process.env.NODE_ENV === 'production' && config.jwtSecret === 'dev-secret-ch
 }
 
 const app = express();
+app.disable('x-powered-by'); // фингерпринт (аудит 2026-11-08)
 
 // Доверяем X-Forwarded-For ТОЛЬКО от внутренних сетей (Caddy/vite-proxy в Docker и dev).
 // Без этого за прокси rate limit склеивает всех клиентов в один IP (DoS, аудит 2026-11-08);

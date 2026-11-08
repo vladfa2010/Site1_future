@@ -27,15 +27,21 @@ services:
     environment:
       DATABASE_URL: postgres://${POSTGRES_USER:-newinvest}:${POSTGRES_PASSWORD}@db:5432/newinvest
       JWT_SECRET: ${JWT_SECRET:? задайте в .env}
-      CORS_ORIGINS: ${CORS_ORIGINS:-https://инвестиционно.рф,https://admin.инвестиционно.рф}
+      CORS_ORIGINS: ${CORS_ORIGINS:-https://xn--b1aghca0aeahc1am7c.xn--p1ai,https://admin.xn--b1aghca0aeahc1am7c.xn--p1ai}  # punycode! Origin из браузера всегда xn--
       UPLOAD_DIR: /app/uploads
       # ключи/модели Kimi удобнее задавать в админке (/kimi) — env как fallback:
       MOONSHOT_API_KEY: ${MOONSHOT_API_KEY:-}
       RESEND_API_KEY: ${RESEND_API_KEY:-}
       TG_BOT_TOKEN: ${TG_BOT_TOKEN:-}
-      PUBLIC_SITE_URL: ${PUBLIC_SITE_URL:-https://инвестиционно.рф}
+      PUBLIC_SITE_URL: ${PUBLIC_SITE_URL:-https://xn--b1aghca0aeahc1am7c.xn--p1ai}
     volumes:
       - uploads:/app/uploads
+    healthcheck:
+      test: ['CMD-SHELL', 'node -e "fetch('"'"'http://localhost:4000/api/health'"'"').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"']
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
 
   web:
     build:

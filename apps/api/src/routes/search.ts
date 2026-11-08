@@ -24,7 +24,7 @@ interface Hit {
 }
 
 searchRouter.get('/', optionalAuth, async (req, res) => {
-  const q = (req.query.q as string ?? '').trim();
+  const q = (req.query.q as string ?? '').trim().slice(0, 300); // анти-DoS: огромные запросы в tsquery/embed (аудит)
   if (q.length < 2) {
     res.status(400).json({ error: 'query too short (min 2 chars)' });
     return;

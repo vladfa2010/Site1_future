@@ -23,6 +23,9 @@ const TYPE_LABELS: Record<string, string> = {
   novost: 'Новость', ideya: 'Идея', sobytie: 'Событие', analitika: 'Аналитика', interesnoe: 'Интересное',
 };
 
+/** Экранирование текста, интерполируемого в srcDoc (защита от инъекции через title/excerpt — аудит 2026-11-08) */
+const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
 const sanitize = (html: string) =>
   sanitizeHtml(html, {
     allowedTags: ['p', 'h2', 'h3', 'h4', 'ul', 'ol', 'li', 'strong', 'em', 'b', 'i', 'a', 'img', 'blockquote', 'br', 'figure', 'figcaption', 'hr'],
@@ -62,12 +65,12 @@ export default function PreviewModal({ title, type, thesis, excerpt, contentHtml
   .content blockquote { border-left: 3px solid #3f3f46; padding-left: 14px; color: #a1a1aa; margin: 16px 0; }
   .content img { max-width: 100%; border-radius: 8px; }
 </style></head><body><div class="wrap">
-<nav class="crumbs">Лента › <b>${TYPE_LABELS[type] ?? type}</b> › ${title.slice(0, 40)}</nav>
+<nav class="crumbs">Лента › <b>${TYPE_LABELS[type] ?? type}</b> › ${esc(title.slice(0, 40))}</nav>
 <div class="type">${TYPE_LABELS[type] ?? type}</div>
-<h1>${title || '(без заголовка)'}</h1>
-${excerpt ? `<p class="excerpt">${excerpt}</p>` : ''}
-${thesis ? `<div class="thesis">${thesis}</div>` : ''}
-${coverUrl ? `<div class="cover"><img src="${coverUrl}" alt=""></div>` : ''}
+<h1>${esc(title) || '(без заголовка)'}</h1>
+${excerpt ? `<p class="excerpt">${esc(excerpt)}</p>` : ''}
+${thesis ? `<div class="thesis">${esc(thesis)}</div>` : ''}
+${coverUrl && /^https?:\/\//i.test(coverUrl) ? `<div class="cover"><img src="${esc(coverUrl)}" alt=""></div>` : ''}
 <div class="content">${content}</div>
 </div></body></html>`;
   }, [title, type, thesis, excerpt, contentHtml, coverUrl]);
@@ -116,7 +119,7 @@ ${coverUrl ? `<div class="cover"><img src="${coverUrl}" alt=""></div>` : ''}
           <iframe
             title="preview"
             srcDoc={doc}
-            sandbox="allow-same-origin"
+            sandbox=""
             style={{ width: cfg.width, height: '70vh', border: 0, display: 'block' }}
           />
         </div>

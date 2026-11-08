@@ -13,14 +13,17 @@ import { getKimiSettings, saveKimiSettings, maskKey, listModels } from '../servi
 export const kimiSettingsRouter = Router();
 
 /** Домены, которым разрешено получать ключ (защита от SSRF/угона ключа) */
-const BASE_URL_ALLOWLIST = [
-  'https://api.moonshot.ai',
-  'https://api.moonshot.cn',
-  'https://api.kimi.com',
-];
+const BASE_URL_HOSTS = ['api.moonshot.ai', 'api.moonshot.cn', 'api.kimi.com'];
 const baseUrlSchema = z.string().url().max(200).refine(
-  (u) => BASE_URL_ALLOWLIST.some((allowed) => u.startsWith(allowed)),
-  { message: `baseUrl должен начинаться с одного из: ${BASE_URL_ALLOWLIST.join(', ')}` },
+  (u) => {
+    try {
+      // точное сравнение hostname — startsWith обходится (api.moonshot.ai.evil.com), аудит 2026-11-08
+      return BASE_URL_HOSTS.includes(new URL(u).hostname);
+    } catch {
+      return false;
+    }
+  },
+  { message: `baseUrl: только хосты ${BASE_URL_HOSTS.join(', ')}` },
 );
 
 kimiSettingsRouter.get('/admin/kimi-settings', authRequired, requireRole('admin', 'super_admin'), async (_req, res) => {
