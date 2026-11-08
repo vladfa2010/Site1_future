@@ -28,17 +28,13 @@ FK на `users.id`: 10 таблиц newinvest (article_views, bookmarks, subscri
 
 Продуктовое решение о кросс-доступе отложено — дизайн не закрывает ни один из сценариев.
 
-**Один каталог** `subscription_plans` для обоих продуктов, управляется из одной админки. `features JSONB` — по-продуктовый:
+**Один каталог** `subscription_plans` для обоих продуктов, управляется из одной админки.
 
-```json
-{
-  "pulse":  { "tag_limit": 25, "telegram": true, "ai_summary": true },
-  "invest": { "paywall": true, "analytics": true, "screener": true }
-}
-```
+Доступность плана — **СВОЙСТВО плана, а не фича** (решение 2026-11-09, заменяет идею флагов в features): колонка `products TEXT[]` ('invest' | 'pulse', расширяемо; пустой массив = нигде). Реализовано в newinvest миграцией 0017 + UI-блоком «Доступность» в карточке тарифа.
 
-- Витрина newinvest рендерит планы с непустым `features.invest`; витрина pulse — с `features.pulse`. «Что и где показывать» = флаги в фичах плана + `is_active` / `coming_soon_label` / `display_order`.
-- Сценарий «единая подписка на всё»: у плана оба блока заполнены. Сценарий «раздельный»: заполнен один. Переключается правкой плана, без миграций.
+- Витрина newinvest рендерит планы с `'invest'` в `products`; витрина pulse — с `'pulse'`. «Что и где показывать» = свойство плана + `is_active` / `coming_soon_label` / `display_order`.
+- Сценарий «единая подписка на всё»: `products = {invest, pulse}`. Сценарий «раздельный»: один элемент. Переключается правкой плана, без миграций.
+- `features JSONB` — только функциональные энтитлменты (telegram, ai_summary, multi_portfolio и т.п.), как в pulse.
 - **Пейволл на рангах плана** (чинит текущую хрупкость exact-match): шкала `display_order`/отдельная колонка ранга free < base < premium < club. У контента newinvest `access_min_plan VARCHAR(20)` вместо `access_tariff_id INT` — материал виден, если ранг плана юзера ≥ ранга требуемого.
 - Админ: один интерфейс каталога (база — pulse: plans/payments/promo уже есть), обе витрины — read-only к той же таблице.
 
@@ -68,7 +64,7 @@ FK на `users.id`: 10 таблиц newinvest (article_views, bookmarks, subscri
 1. Создать `subscription_plans` (DDL из `subscription_plans_v2.sql`, id VARCHAR: free/base/premium/club/pro) + сидирование.
 2. `users`: add `subscription_plan VARCHAR(20) DEFAULT 'free'`, `subscription_active BOOLEAN`, `subscription_expires_at`, `subscription_auto_renew`, … (полный набор pulse); backfill маппингом `tariff_plans.slug` → `subscription_plans.id`.
 3. `articles`: `access_tariff_id` INT → `access_min_plan VARCHAR(20)` (ранговая проверка ≥, вместо exact-match); `accessCondition` и middleware newinvest переключить на subscription-поля + ранг; `tariff_plans` оставить как VIEW на переходный период, потом удалить.
-4. Витрина newinvest читает планы по флагу `features.invest`; admin-каталог единый.
+4. Витрина newinvest читает планы по `'invest'` в `products`; admin-каталог единый.
 5. JWT payload: единый superset `{role, is_admin, subscriptionPlan, subscriptionExpiresAt, planRank}`.
 
 ### Фаза 3 — SSO
