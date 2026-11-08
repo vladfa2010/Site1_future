@@ -5,7 +5,9 @@
  */
 import { Router } from 'express';
 import { and, eq, sql, type SQL } from 'drizzle-orm';
-import { db, articles, dealPhases, dealStages, industries, media } from '@newinvest/db';
+import { db, articles, dealPhases, dealStages, media } from '@newinvest/db';
+import { optionalAuth, ADMIN_ROLES } from '../middleware/auth.js';
+import { accessCondition } from './articles.js';
 
 export const screenerRouter = Router();
 
@@ -17,13 +19,18 @@ screenerRouter.get('/deal-stages', async (_req, res) => {
   res.json({ stages: await db.select().from(dealStages).orderBy(dealStages.sortOrder) });
 });
 
-screenerRouter.get('/screener', async (req, res) => {
+screenerRouter.get('/screener', optionalAuth, async (req, res) => {
   const { phase, stage, industry, trend } = req.query as Record<string, string | undefined>;
 
   // квалифицированная ссылка на articles.id (иначе в подзапросе "id" биндится к внутренней таблице)
   const aid = sql`${sql.identifier('articles')}.${sql.identifier('id')}`;
 
-  const conditions: SQL[] = [eq(articles.type, 'ideya'), eq(articles.status, 'published')];
+  const admin = req.user?.role !== undefined && ADMIN_ROLES.includes(req.user.role);
+  const conditions: SQL[] = [
+    eq(articles.type, 'ideya'),
+    eq(articles.status, 'published'),
+    accessCondition(req.user, admin) ?? sql`true`, // пейволл: аноним видит только public (аудит 2026-11-08)
+  ];
   const existsFilter = (junction: string, dict: string, fk: string, slug?: string) => sql`exists(
     select 1 from ${sql.identifier(junction)} j
     join ${sql.identifier(dict)} d on d.id = j.${sql.identifier(fk)}

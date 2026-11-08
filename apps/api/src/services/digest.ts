@@ -15,10 +15,13 @@ const anyChannel = () => emailEnabled() || tgEnabled();
 
 const SITE = () => process.env.PUBLIC_SITE_URL ?? 'http://localhost:5173';
 
+/** Экранирование для Telegram HTML parse_mode (симметрично email-контуру) */
+const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
 /** TG-дайджест дня: компактный текст со ссылками */
 function tgDigestText(items: { type: string; slug: string; title: string }[]): string {
   if (items.length === 0) return 'Сегодня по вашим подпискам новых материалов не вышло.';
-  const lines = items.slice(0, 10).map((a) => `• <a href="${SITE()}/${a.type}/${a.slug}">${a.title}</a>`);
+  const lines = items.slice(0, 10).map((a) => `• <a href="${SITE()}/${a.type}/${a.slug}">${esc(a.title)}</a>`);
   if (items.length > 10) lines.push(`…и ещё ${items.length - 10}`);
   return `<b>Подборка дня — Инвестиционно.рф</b>\n\n${lines.join('\n')}`;
 }
@@ -27,17 +30,26 @@ function tgWeeklyText(count: number, top: { type: string; slug: string; title: s
   const lines = [`<b>Итоги недели — Инвестиционно.рф</b>`, ``, `За неделю вышло ${count} материалов.`];
   if (top.length) {
     lines.push('', '<b>Топ недели:</b>');
-    top.forEach((a, i) => lines.push(`${i + 1}. <a href="${SITE()}/${a.type}/${a.slug}">${a.title}</a>`));
+    top.forEach((a, i) => lines.push(`${i + 1}. <a href="${SITE()}/${a.type}/${a.slug}">${esc(a.title)}</a>`));
   }
   if (subscribed.length) {
     lines.push('', '<b>По вашим подпискам:</b>');
-    subscribed.slice(0, 5).forEach((a) => lines.push(`• <a href="${SITE()}/${a.type}/${a.slug}">${a.title}</a>`));
+    subscribed.slice(0, 5).forEach((a) => lines.push(`• <a href="${SITE()}/${a.type}/${a.slug}">${esc(a.title)}</a>`));
   }
   return lines.join('\n');
 }
 
 const existsIn = (junction: string, fk: string, ids: number[]) =>
   sql`exists(select 1 from ${sql.identifier(junction)} j where j.${sql.identifier('article_id')} = ${sql.identifier('articles')}.${sql.identifier('id')} and j.${sql.identifier(fk)} in (${sql.join(ids.map((id) => sql`${id}`), sql`, `)}))`;
+
+/** Пейволл-условие для конкретного получателя: читаем АКТУАЛЬНЫЙ тариф из БД, не из JWT */
+async function accessFor(userId: number): Promise<SQL> {
+  const [u] = await db.select({ tariffId: users.tariffId, tariffExpiresAt: users.tariffExpiresAt })
+    .from(users).where(eq(users.id, userId)).limit(1);
+  const tariffValid = u?.tariffId && (!u.tariffExpiresAt || new Date(u.tariffExpiresAt) > new Date());
+  const tariffOk = tariffValid ? sql`${articles.accessTariffId} = ${u!.tariffId}` : sql`false`;
+  return sql`(${articles.accessLevel} = 'public' or ${articles.accessLevel} = 'auth' or (${articles.accessLevel} = 'tariff' and ${tariffOk}))`;
+}
 
 async function subscribedArticles(userId: number, since: Date): Promise<{ type: string; slug: string; title: string; excerpt: string | null }[]> {
   const subs = await db.select().from(subscriptions).where(eq(subscriptions.userId, userId));
@@ -50,10 +62,11 @@ async function subscribedArticles(userId: number, since: Date): Promise<{ type: 
   ].filter((x): x is SQL => x !== null);
   if (!ors.length) return [];
 
+  const access = await accessFor(userId);
   return db
     .select({ type: articles.type, slug: articles.slug, title: articles.title, excerpt: articles.excerpt })
     .from(articles)
-    .where(and(eq(articles.status, 'published'), gte(articles.publishedAt, since), sql`(${sql.join(ors, sql` or `)})`))
+    .where(and(eq(articles.status, 'published'), access, gte(articles.publishedAt, since), sql`(${sql.join(ors, sql` or `)})`))
     .orderBy(sql`${articles.publishedAt} desc nulls last`)
     .limit(30);
 }
@@ -111,13 +124,14 @@ export async function runWeeklyReport(): Promise<{ sent: number; skipped: string
 
   for (const user of await recipients('emailWeekly')) {
     try {
+      const access = await accessFor(user.id);
       const [countRow] = await db.select({ n: sql<number>`count(*)` }).from(articles)
-        .where(and(eq(articles.status, 'published'), gte(articles.publishedAt, weekAgo)));
+        .where(and(eq(articles.status, 'published'), access, gte(articles.publishedAt, weekAgo)));
       const top = await db
         .select({ type: articles.type, slug: articles.slug, title: articles.title, excerpt: articles.excerpt, views: sql<number>`count(*)` })
         .from(articleViews)
         .innerJoin(articles, eq(articleViews.articleId, articles.id))
-        .where(gte(articleViews.viewedAt, weekAgo))
+        .where(and(gte(articleViews.viewedAt, weekAgo), access))
         .groupBy(articles.id, articles.type, articles.slug, articles.title, articles.excerpt)
         .orderBy(desc(sql`count(*)`))
         .limit(5);

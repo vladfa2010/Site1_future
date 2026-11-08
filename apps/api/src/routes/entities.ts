@@ -84,7 +84,7 @@ const companySchema = z.object({
   oneLiner: z.string().optional(),
   description: z.string().optional(),
   logoMediaId: z.number().int().optional(),
-  website: z.string().url().optional(),
+  website: z.string().url().refine((u) => /^https?:\/\//i.test(u), { message: 'website: только http(s)' }).optional(),
   country: z.string().optional(),
   foundedYear: z.number().int().optional(),
   isPublic: z.boolean().optional(),
@@ -137,7 +137,7 @@ const roundSchema = z.object({
   currency: z.string().optional(),
   postMoneyValuation: z.string().optional(),
   investors: z.array(z.string()).optional(),
-  sourceUrl: z.string().url(),
+  sourceUrl: z.string().url().refine((u) => /^https?:\/\//i.test(u), { message: 'sourceUrl: только http(s)' }),
   status: z.string().optional(),
 });
 

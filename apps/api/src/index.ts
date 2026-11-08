@@ -26,6 +26,11 @@ if (process.env.NODE_ENV === 'production' && config.jwtSecret === 'dev-secret-ch
 
 const app = express();
 
+// Доверяем X-Forwarded-For ТОЛЬКО от внутренних сетей (Caddy/vite-proxy в Docker и dev).
+// Без этого за прокси rate limit склеивает всех клиентов в один IP (DoS, аудит 2026-11-08);
+// с trust proxy=1 аноним напрямую мог бы подделать X-Forwarded-For — поэтому scoped.
+app.set('trust proxy', ['loopback', 'linklocal', 'uniquelocal']);
+
 // безопасность: заголовки + CORS-allowlist + лимиты
 app.use(securityHeaders);
 app.use(corsAllowlist(config.corsOrigins));

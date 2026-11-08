@@ -159,6 +159,12 @@ curl -s -X POST "$B/api/articles" -H "$A" -H "$J" -d '{"type":"video","slug":"e2
 curl -s "$B/api/articles/video/e2e-video" | grep -q '"videoUrl":"https://www.youtube.com' && ok || bad "video: embed-поле в детали"
 curl -s "$B/api/articles?type=video&limit=5" | grep -q e2e-video && ok || bad "video: фильтр по типу в списке"
 curl -s "$B/api/search?q=E2E%20%D0%92%D0%B8%D0%B4%D0%B5%D0%BE&limit=3" -H "$A" | grep -q '"type":"video"' && ok || bad "video: находится поиском"
+# security-фиксы 2026-11-08 (аудит двух агентов): пейволл в скринере, URL-схемы, baseUrl-allowlist, admin-TTL
+curl -s "$B/api/screener?limit=100" | grep -q e2e-insider && bad "security: скринер показывает tariff-материал anon (ПРОБЛЕМА)" || ok
+curl -s -o /dev/null -w "%{http_code}" -X POST "$B/api/admin/kimi-settings" -H "$A" -H "$J" -d '{"baseUrl":"https://evil.example.com"}' | grep -q 400 && ok || bad "security: baseUrl вне allowlist 400"
+curl -s -o /dev/null -w "%{http_code}" -X POST "$B/api/articles" -H "$A" -H "$J" -d '{"type":"novost","slug":"e2e-xss","title":"x","contentHtml":"<p>x</p>","sourceUrl":"data:text/html,x"}' | grep -q 400 && ok || bad "security: data: URL 400"
+EXPTTL=$(curl -s -X POST "$B/api/auth/login" -H "$J" -d '{"email":"test@test.ru","password":"test"}' | python3 -c "import json,sys,base64; t=json.load(sys.stdin)['token']; p=t.split('.')[1]; p+='='*(-len(p)%4); d=json.loads(base64.urlsafe_b64decode(p)); print(d['exp']-d['iat'])")
+[ "$EXPTTL" = "43200" ] && ok || bad "security: admin JWT TTL 12h (got $EXPTTL)"
 
 echo "════════════════════════════════════════"
 echo "  E2E: КАБИНЕТ — ПОДПИСКИ/ИЗБРАННОЕ/НАСТРОЙКИ"

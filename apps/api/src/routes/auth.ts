@@ -57,7 +57,7 @@ authRouter.post('/register', async (req, res) => {
     return;
   }
 
-  const passwordHash = await bcrypt.hash(password, 10);
+  const passwordHash = await bcrypt.hash(password, 12);
   const [user] = await db
     .insert(users)
     .values({ email, passwordHash, displayName: username, role: 'reader' })

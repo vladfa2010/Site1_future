@@ -16,6 +16,12 @@ import { optionalAuth, authRequired, requireRole, ADMIN_ROLES } from '../middlew
 
 export const articlesRouter = Router();
 
+/** Только http/https — защита от javascript:/data: в href (аудит 2026-11-08) */
+const httpUrl = (label: string) => z.string().url().refine(
+  (u) => /^https?:\/\//i.test(u),
+  { message: `${label}: только http(s) URL` },
+);
+
 const createSchema = z.object({
   type: z.enum(ARTICLE_TYPES),
   slug: z.string().regex(/^[a-z0-9-]+$/, 'slug: латиница, цифры, дефис'),
@@ -27,8 +33,8 @@ const createSchema = z.object({
   metaDescription: z.string().max(300).optional(), // SEO (meta_fields)
   accessLevel: z.enum(['public', 'auth', 'tariff']).optional(), // пейволл
   accessTariffId: z.number().int().optional(),
-  sourceUrl: z.string().url().optional(),
-  videoUrl: z.string().url().optional(), // type=video: внешнее видео (YouTube/RuTube/VK)
+  sourceUrl: httpUrl('sourceUrl').optional(),
+  videoUrl: httpUrl('videoUrl').optional(), // type=video: внешнее видео (YouTube/RuTube/VK)
   status: z.enum(['draft', 'published']).default('draft'),
 });
 
@@ -250,7 +256,7 @@ articlesRouter.post('/propose', authRequired, async (req, res) => {
     type: z.enum(['novost', 'ideya']),
     title: z.string().min(5).max(200),
     text: z.string().min(20),
-    sourceUrl: z.string().url().optional(),
+    sourceUrl: z.string().url().refine((u) => /^https?:\/\//i.test(u), { message: 'sourceUrl: только http(s)' }).optional(),
   }).safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: 'validation', details: parsed.error.flatten() });

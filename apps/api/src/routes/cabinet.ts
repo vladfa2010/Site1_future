@@ -227,7 +227,14 @@ cabinetRouter.get('/feed', async (req, res) => {
       ? sql`exists(select 1 from ${sql.identifier(junction)} j where j.${sql.identifier('article_id')} = ${sql.identifier('articles')}.${sql.identifier('id')} and j.${sql.identifier(fk)} in (${sql.join(ids.map((id) => sql`${id}`), sql`, `)}))`
       : null;
 
-  const conditions: SQL[] = [eq(articles.status, 'published')];
+  // пейволл: тариф из JWT (проверка expiry на случай отзыва между логинами)
+  const me = req.user!;
+  const tariffValid =
+    me.tariffId && (!me.tariffExpiresAt || new Date(me.tariffExpiresAt) > new Date());
+  const tariffOk = tariffValid ? sql`${articles.accessTariffId} = ${me.tariffId}` : sql`false`;
+  const access = sql`(${articles.accessLevel} = 'public' or (${articles.accessLevel} = 'auth' and true) or (${articles.accessLevel} = 'tariff' and ${tariffOk}))`;
+
+  const conditions: SQL[] = [eq(articles.status, 'published'), access];
   const ors = [
     existsIn('article_companies', 'company_id', companyIds),
     existsIn('article_trends', 'trend_id', trendIds),

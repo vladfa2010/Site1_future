@@ -68,10 +68,12 @@ export function requireRole(...roles: string[]) {
 }
 
 export function signToken(user: { id: number; role: string; tariffId?: number | null; tariffExpiresAt?: Date | string | null }): string {
+  // Админам — короткий TTL: утечка admin-токена необратима 7 дней (аудит 2026-11-08)
+  const isAdmin = ADMIN_ROLES.includes(user.role);
   return jwt.sign(
     { role: user.role, tariffId: user.tariffId ?? null, tariffExpiresAt: user.tariffExpiresAt ? new Date(user.tariffExpiresAt).toISOString() : null },
     config.jwtSecret,
-    { subject: String(user.id), expiresIn: '7d' },
+    { subject: String(user.id), expiresIn: isAdmin ? '12h' : '7d' },
   );
 }
 
