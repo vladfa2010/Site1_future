@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router';
 import { api } from '../api';
+import { RichTextEditor } from '../components/RichTextEditor';
 
 interface Industry { id: number; name: string }
 
@@ -87,8 +88,8 @@ export default function CompanyEditPage() {
       </div>
 
       <div className="card">
-        <label className="label">Описание (HTML от миграции — можно редактировать)</label>
-        <textarea className="input font-mono" rows={8} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+        <label className="label">Описание (визуальный редактор; HTML от миграции откроется как есть)</label>
+        <RichTextEditor value={form.description} onChange={(html) => setForm({ ...form, description: html })} />
       </div>
 
       <div className="card">

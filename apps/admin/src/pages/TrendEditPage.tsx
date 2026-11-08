@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router';
 import { api } from '../api';
+import { RichTextEditor } from '../components/RichTextEditor';
 
 export default function TrendEditPage() {
   const { id } = useParams();
@@ -53,8 +54,8 @@ export default function TrendEditPage() {
       </div>
 
       <div className="card">
-        <label className="label">Лонгрид лендинга (HTML из миграции тоже сюда)</label>
-        <textarea className="input font-mono" rows={12} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+        <label className="label">Лонгрид лендинга (визуальный редактор; HTML из миграции тоже сюда)</label>
+        <RichTextEditor value={form.description} onChange={(html) => setForm({ ...form, description: html })} />
       </div>
 
       <button className="btn" onClick={() => void save()}>Сохранить</button>

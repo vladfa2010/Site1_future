@@ -6,6 +6,7 @@ import { Breadcrumbs, type Crumb } from '../components/Breadcrumbs';
 import { JsonLdBreadcrumbs } from '../components/JsonLdBreadcrumbs';
 import { FavoriteButton } from '../components/FavoriteButton';
 import StoryPlaylist from '../components/StoryPlaylist';
+import { sanitizeArticleHtml } from '../lib/sanitize';
 
 export default function StoryPage() {
   const { slug = '' } = useParams();
@@ -37,7 +38,12 @@ export default function StoryPage() {
           <h1 className="mt-1 text-3xl font-bold">{story.name}</h1>
           <FavoriteButton entityType="story" entityId={story.id} className="static" />
         </div>
-        {story.description && <p className="mt-4 text-zinc-300">{story.description}</p>}
+        {story.description && (
+          <div
+            className="mt-4 max-w-3xl space-y-4 leading-relaxed text-zinc-300 [&_h2]:mt-6 [&_h2]:text-lg [&_h2]:font-bold [&_h3]:mt-4 [&_h3]:font-bold [&_a]:text-[#c9ff2a] [&_ul]:list-disc [&_ul]:pl-6 [&_ol]:list-decimal [&_ol]:pl-6 [&_blockquote]:border-l-2 [&_blockquote]:border-zinc-700 [&_blockquote]:pl-3 [&_blockquote]:italic [&_img]:max-w-full [&_img]:rounded-lg"
+            dangerouslySetInnerHTML={{ __html: sanitizeArticleHtml(story.description) }}
+          />
+        )}
         {/* ТЗ-08 риски: в плейлист-режиме — якорь на полную хронологию ниже (по умолчанию скрыта) */}
         {isPlaylist && (
           <button

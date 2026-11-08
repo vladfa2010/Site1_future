@@ -7,6 +7,7 @@ import { Breadcrumbs, type Crumb } from '../components/Breadcrumbs';
 import { JsonLdBreadcrumbs } from '../components/JsonLdBreadcrumbs';
 import { FavoriteButton } from '../components/FavoriteButton';
 import { SubscribeButton } from '../components/SubscribeButton';
+import { sanitizeArticleHtml } from '../lib/sanitize';
 
 export default function CompanyPage() {
   const { slug = '' } = useParams();
@@ -67,7 +68,10 @@ export default function CompanyPage() {
       {fundingRounds.length > 0 && <RoundsTable rounds={fundingRounds} />}
 
       {company.description && (
-        <p className="leading-relaxed text-zinc-300">{company.description}</p>
+        <div
+          className="max-w-3xl space-y-4 leading-relaxed text-zinc-300 [&_h2]:mt-6 [&_h2]:text-lg [&_h2]:font-bold [&_h3]:mt-4 [&_h3]:font-bold [&_a]:text-[#c9ff2a] [&_ul]:list-disc [&_ul]:pl-6 [&_ol]:list-decimal [&_ol]:pl-6 [&_blockquote]:border-l-2 [&_blockquote]:border-zinc-700 [&_blockquote]:pl-3 [&_blockquote]:italic [&_img]:max-w-full [&_img]:rounded-lg"
+          dangerouslySetInnerHTML={{ __html: sanitizeArticleHtml(company.description) }}
+        />
       )}
 
       {articles.length > 0 && (

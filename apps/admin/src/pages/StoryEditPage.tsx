@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router';
 import { api } from '../api';
+import { RichTextEditor } from '../components/RichTextEditor';
 
 interface StoryArticle { articleId: number; title: string; publishedAt: string | null; isPrimary: boolean; sortOrder: number }
 interface Story { id: number; slug: string; name: string; description: string | null; status: string; primaryArticleId: number | null }
@@ -105,8 +106,8 @@ export default function StoryEditPage() {
       </div>
 
       <div className="card">
-        <label className="label">Описание</label>
-        <textarea className="input" rows={3} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+        <label className="label">Описание (визуальный редактор)</label>
+        <RichTextEditor value={form.description} onChange={(html) => setForm({ ...form, description: html })} />
         <button className="btn mt-3" onClick={() => void saveMeta()}>Сохранить</button>
       </div>
 

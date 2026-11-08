@@ -10,6 +10,7 @@ import { JsonLdBreadcrumbs } from '../components/JsonLdBreadcrumbs';
 import { Carousel, CAROUSEL_ITEM } from '../components/Carousel';
 import { FavoriteButton } from '../components/FavoriteButton';
 import { SubscribeButton } from '../components/SubscribeButton';
+import { sanitizeArticleHtml } from '../lib/sanitize';
 
 /**
  * Страница тренда — воронка погружения по концепту:
@@ -66,11 +67,10 @@ export default function TrendPage() {
         <section>
           <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-zinc-500">Про тренд</h2>
           <div
-            className={`max-w-3xl leading-relaxed text-zinc-300 ${expanded ? '' : 'line-clamp-6'}`}
+            className={`max-w-3xl space-y-4 leading-relaxed text-zinc-300 [&_h2]:mt-6 [&_h2]:text-lg [&_h2]:font-bold [&_h3]:mt-4 [&_h3]:font-bold [&_a]:text-[#c9ff2a] [&_ul]:list-disc [&_ul]:pl-6 [&_ol]:list-decimal [&_ol]:pl-6 [&_blockquote]:border-l-2 [&_blockquote]:border-zinc-700 [&_blockquote]:pl-3 [&_blockquote]:italic ${expanded ? '' : 'line-clamp-6'}`}
             style={expanded ? undefined : { display: '-webkit-box', WebkitLineClamp: 6, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
-          >
-            {isLong && !expanded ? `${intro.slice(0, INTRO_LIMIT)}…` : intro}
-          </div>
+            dangerouslySetInnerHTML={{ __html: sanitizeArticleHtml(trend.description ?? '') }}
+          />
           {isLong && (
             <button onClick={() => setExpanded(!expanded)} className="mt-2 text-sm font-semibold">
               {expanded ? 'Свернуть ↑' : 'Читать далее →'}
