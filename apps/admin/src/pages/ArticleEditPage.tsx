@@ -153,6 +153,8 @@ export default function ArticleEditPage() {
       let id = articleId;
       const payload: Record<string, unknown> = {
         ...form,
+        // пустая строка videoUrl не шлём — сервер валидирует её как URL и отдаёт 400
+        videoUrl: form.videoUrl || undefined,
         coverMediaId: coverMediaId ?? undefined,
         accessTariffId: form.accessLevel === 'tariff' && form.accessTariffId ? Number(form.accessTariffId) : undefined,
       };
