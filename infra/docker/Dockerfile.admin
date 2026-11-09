@@ -5,6 +5,7 @@ COPY package.json package-lock.json ./
 COPY packages/db/package.json packages/db/
 COPY apps/admin/package.json apps/admin/
 RUN npm ci --workspace @newinvest/admin --include-workspace-root=false
+COPY packages/db/src packages/db/src
 COPY apps/admin apps/admin
 RUN npm run build -w @newinvest/admin
 

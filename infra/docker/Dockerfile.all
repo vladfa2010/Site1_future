@@ -1,0 +1,65 @@
+# ═══ Моноконтейнер: PostgreSQL+pgvector + API + Caddy (статика web/admin) ═══
+# Сборка:  docker-compose -f infra/docker-compose.all.yml build
+# Запуск:  docker-compose -f infra/docker-compose.all.yml up -d
+
+# ── Этап 1: сборка фронтов (web, admin) и установка зависимостей всех воркспейсов ──
+FROM node:20-slim AS build
+WORKDIR /app
+# bcrypt собирается из исходников при недоступности prebuilt-бинарников
+RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ \
+  && rm -rf /var/lib/apt/lists/*
+COPY package.json package-lock.json ./
+COPY packages/db/package.json packages/db/
+COPY apps/web/package.json apps/web/
+COPY apps/admin/package.json apps/admin/
+COPY apps/api/package.json apps/api/
+RUN npm ci --workspace @newinvest/web --workspace @newinvest/admin --workspace @newinvest/api \
+      --include-workspace-root=false
+COPY packages/db packages/db
+COPY apps apps
+RUN npm run build -w @newinvest/web && npm run build -w @newinvest/admin
+
+# ── Этап 2: финальный образ на базе PostgreSQL 17 + pgvector (debian) ──
+FROM pgvector/pgvector:pg17
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      supervisor curl ca-certificates xz-utils \
+  && rm -rf /var/lib/apt/lists/*
+
+# Node.js 20 (нужен API в рантайме)
+RUN curl -fsSL https://nodejs.org/dist/v20.20.2/node-v20.20.2-linux-x64.tar.xz \
+      | tar -xJ -C /usr/local --strip-components=1 \
+  && node --version && npm --version
+
+# Caddy (статичный бинарник)
+RUN curl -fsSL "https://caddyserver.com/api/download?os=linux&arch=amd64" -o /usr/local/bin/caddy \
+  && chmod +x /usr/local/bin/caddy && caddy version
+
+# Приложение (исходники + node_modules + собранные фронты из этапа 1)
+WORKDIR /app
+COPY --from=build /app /app
+RUN ln -s /app/apps/web/dist /srv/web && ln -s /app/apps/admin/dist /srv/admin
+
+# Скрипты и конфиги
+COPY infra/docker/pg.sh /usr/local/bin/pg.sh
+COPY infra/docker/api.sh /usr/local/bin/api.sh
+RUN chmod +x /usr/local/bin/pg.sh /usr/local/bin/api.sh
+COPY infra/supervisord.conf /etc/supervisor/conf.d/all.conf
+COPY infra/Caddyfile.all /etc/caddy/Caddyfile
+
+# Окружение (локальные дефолты; переопределяется через environment в compose)
+ENV PGDATA=/var/lib/postgresql/data \
+    POSTGRES_DB=newinvest \
+    POSTGRES_USER=newinvest \
+    POSTGRES_PASSWORD=newinvest-local \
+    DATABASE_URL=postgres://newinvest:newinvest-local@127.0.0.1:5432/newinvest \
+    NODE_ENV=production \
+    JWT_SECRET=local-dev-secret-change-me \
+    ADMIN_EMAIL=admin@local \
+    ADMIN_PASSWORD=admin123 \
+    UPLOAD_DIR=/app/uploads
+
+VOLUME ["/var/lib/postgresql/data", "/app/uploads"]
+EXPOSE 80
+
+CMD ["supervisord", "-n", "-c", "/etc/supervisor/conf.d/all.conf"]

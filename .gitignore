@@ -11,8 +11,8 @@ build/
 .env.*
 !.env.example
 
-# Локальные данные (SQLite, загрузки, логи)
-data/
+# Локальные данные (SQLite, загрузки, логи) — только в корне, НЕ apps/*/src/data
+/data/
 uploads/
 *.log
 

@@ -1,16 +1,22 @@
 # API: prod (запуск через tsx — компиляция не требуется)
 FROM node:20-slim
 WORKDIR /app
-ENV NODE_ENV=production
+
+# bcrypt собирается из исходников при недоступности prebuilt-бинарников (нужны toolchain)
+RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ \
+  && rm -rf /var/lib/apt/lists/*
 
 COPY package.json package-lock.json ./
 COPY packages/db/package.json packages/db/
 COPY apps/api/package.json apps/api/
 RUN npm ci --workspace @newinvest/api --include-workspace-root=false
 
+ENV NODE_ENV=production
+
 COPY packages/db packages/db
 COPY apps/api apps/api
 
 EXPOSE 4000
+# расширение vector нужно миграции 0000 (в самой миграции CREATE EXTENSION только с 0012)
 # миграции идемпотентны; затем сервер
-CMD ["sh", "-c", "npm run migrate -w @newinvest/db && npx tsx apps/api/src/index.ts"]
+CMD ["sh", "-c", "node -e \"const{Client}=require('pg');const c=new Client({connectionString:process.env.DATABASE_URL});c.connect().then(()=>c.query('CREATE EXTENSION IF NOT EXISTS vector')).then(()=>c.end()).catch(e=>{console.error(e);c.end();process.exit(1)})\" && npm run migrate -w @newinvest/db && npx tsx apps/api/src/index.ts"]

@@ -18,10 +18,10 @@
 http://xn--b1aghca0aeahc1am7c.xn--p1ai {
   import security
 
-  handle_path /sitemap.xml {
+  handle /sitemap.xml {
       reverse_proxy api:4000
   }
-  handle_path /robots.txt {
+  handle /robots.txt {
       reverse_proxy api:4000
   }
 
@@ -38,10 +38,10 @@ http://xn--b1aghca0aeahc1am7c.xn--p1ai {
       }
   }
 
-  handle_path /api/* {
+  handle /api/* {
       reverse_proxy api:4000
   }
-  handle_path /uploads/* {
+  handle /uploads/* {
       reverse_proxy api:4000
   }
   handle {
@@ -53,17 +53,19 @@ http://xn--b1aghca0aeahc1am7c.xn--p1ai {
 http://admin.xn--b1aghca0aeahc1am7c.xn--p1ai {
   import security
 
-  respond /robots.txt 200 {
-      body "User-agent: *
+  # ТЗ-10: админка не должна попасть в индекс — статичный noindex-robots
+  handle /robots.txt {
+      respond 200 {
+          body "User-agent: *
 Disallow: /
 "
-      content_type text/plain
+      }
   }
 
-  handle_path /api/* {
+  handle /api/* {
       reverse_proxy api:4000
   }
-  handle_path /uploads/* {
+  handle /uploads/* {
       reverse_proxy api:4000
   }
   handle {

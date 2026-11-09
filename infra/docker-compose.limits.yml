@@ -1,0 +1,21 @@
+# Лимиты ресурсов: суммарно 1 CPU и 3 ГБ ОЗУ на весь стек.
+# Подключается третьим файлом:
+#   docker compose -f infra/docker-compose.yml -f infra/docker-compose.local.yml -f infra/docker-compose.limits.yml up -d
+services:
+  db:
+    cpus: "0.25"
+    mem_limit: 768m
+    mem_reservation: 256m
+  api:
+    cpus: "0.40"
+    mem_limit: 1g
+    mem_reservation: 256m
+  web:
+    cpus: "0.15"
+    mem_limit: 512m
+  admin:
+    cpus: "0.10"
+    mem_limit: 512m
+  caddy:
+    cpus: "0.10"
+    mem_limit: 128m

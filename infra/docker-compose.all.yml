@@ -1,0 +1,36 @@
+# Моноконтейнер «всё в одном»: PostgreSQL+pgvector, API, Caddy (статика сайта и админки).
+# Старт с нуля: docker-compose -f infra/docker-compose.all.yml up -d --build
+# Логи:      docker-compose -f infra/docker-compose.all.yml logs -f
+# Стоп:      docker-compose -f infra/docker-compose.all.yml down
+services:
+  all:
+    build:
+      context: ..
+      dockerfile: infra/docker/Dockerfile.all
+    image: investicionno-all:latest
+    container_name: investicionno-all
+    restart: unless-stopped
+    ports:
+      - '80:80'
+    volumes:
+      # Переиспользуем данные из прежнего многоконтейнерного стека
+      - pgdata:/var/lib/postgresql/data
+      - uploads:/app/uploads
+    # Лимиты на весь контейнер: 1 CPU, 3 ГБ ОЗУ
+    cpus: '1.0'
+    mem_limit: 3g
+    mem_reservation: 512m
+    environment:
+      POSTGRES_USER: newinvest
+      POSTGRES_PASSWORD: newinvest-local
+      ADMIN_EMAIL: admin@local
+      ADMIN_PASSWORD: admin123
+      JWT_SECRET: local-dev-secret-change-me
+      CORS_ORIGINS: http://xn--b1aghca0aeahc1am7c.xn--p1ai,http://admin.xn--b1aghca0aeahc1am7c.xn--p1ai
+      PUBLIC_SITE_URL: http://xn--b1aghca0aeahc1am7c.xn--p1ai
+
+volumes:
+  pgdata:
+    name: infra_pgdata
+  uploads:
+    name: infra_uploads
