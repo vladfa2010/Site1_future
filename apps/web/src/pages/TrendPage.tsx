@@ -11,6 +11,7 @@ import { Carousel, CAROUSEL_ITEM } from '../components/Carousel';
 import { FavoriteButton } from '../components/FavoriteButton';
 import { SubscribeButton } from '../components/SubscribeButton';
 import { sanitizeArticleHtml } from '../lib/sanitize';
+import { AdminEditLink } from '../components/AdminEditLink';
 
 /**
  * Страница тренда — воронка погружения по концепту:
@@ -39,6 +40,7 @@ export default function TrendPage() {
   if (error || !data) return <p className="text-red-400">Тренд не найден</p>;
 
   const { trend, articles } = data;
+  const editLink = <AdminEditLink to={`/trends/${trend.id}/edit`} />;
   const intro = trend.description ? stripHtml(trend.description) : '';
   const INTRO_LIMIT = 1200;
   const isLong = intro.length > INTRO_LIMIT;
@@ -50,6 +52,7 @@ export default function TrendPage() {
 
   return (
     <div className="space-y-10">
+      {editLink}
       <Breadcrumbs items={crumbs} />
       <JsonLdBreadcrumbs items={crumbs} />
 

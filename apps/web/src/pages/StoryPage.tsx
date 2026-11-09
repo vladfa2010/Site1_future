@@ -7,6 +7,7 @@ import { JsonLdBreadcrumbs } from '../components/JsonLdBreadcrumbs';
 import { FavoriteButton } from '../components/FavoriteButton';
 import StoryPlaylist from '../components/StoryPlaylist';
 import { sanitizeArticleHtml } from '../lib/sanitize';
+import { AdminEditLink } from '../components/AdminEditLink';
 
 export default function StoryPage() {
   const { slug = '' } = useParams();
@@ -21,6 +22,7 @@ export default function StoryPage() {
   if (error || !data) return <p className="text-red-400">Сюжет не найден</p>;
 
   const { story, articles } = data;
+  const editLink = <AdminEditLink to={`/stories/${story.id}/edit`} />;
 
   // ТЗ-08 R1: плейлист-режим — строгое правило, все опубликованные материалы type=video
   const isPlaylist = articles.length > 0 && articles.every((a) => a.type === 'video');
@@ -30,6 +32,7 @@ export default function StoryPage() {
 
   return (
     <div className="space-y-10">
+      {editLink}
       <Breadcrumbs items={crumbs} />
       <JsonLdBreadcrumbs items={crumbs} />
       <header>

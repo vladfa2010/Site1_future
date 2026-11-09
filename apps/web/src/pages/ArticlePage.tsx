@@ -8,6 +8,7 @@ import { setArticleTitle, resetPageTitle } from '../lib/pageTitle';
 import { Breadcrumbs, type Crumb } from '../components/Breadcrumbs';
 import { JsonLdBreadcrumbs } from '../components/JsonLdBreadcrumbs';
 import { sanitizeArticleHtml } from '../lib/sanitize';
+import { AdminEditLink } from '../components/AdminEditLink';
 import { toEmbedUrl } from '../lib/video';
 import { IdeaChart } from '../components/IdeaChart';
 import { Paywall } from '../components/Paywall';
@@ -99,6 +100,9 @@ export default function ArticlePage() {
 
   const { article, relations, stages } = data;
 
+  // admin: кнопка «Редактировать» → админка на эту статью
+  const editLink = <AdminEditLink to={`/articles/${article.type}/${article.slug}/edit`} />;
+
   // ТЗ-01: один массив крошек на страницу — визуал + JSON-LD (последний без item, полный заголовок в JSON-LD)
   const crumbs: Crumb[] = [
     { label: TYPE_LABELS[article.type] ?? article.type, to: `/${article.type}` },
@@ -111,6 +115,7 @@ export default function ArticlePage() {
 
   return (
     <article className="mx-auto max-w-3xl">
+      {editLink}
       <Breadcrumbs items={crumbs} />
       <JsonLdBreadcrumbs items={crumbs} />
       <div className="flex items-start justify-between gap-4">

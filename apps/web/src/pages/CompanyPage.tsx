@@ -8,6 +8,7 @@ import { JsonLdBreadcrumbs } from '../components/JsonLdBreadcrumbs';
 import { FavoriteButton } from '../components/FavoriteButton';
 import { SubscribeButton } from '../components/SubscribeButton';
 import { sanitizeArticleHtml } from '../lib/sanitize';
+import { AdminEditLink } from '../components/AdminEditLink';
 
 export default function CompanyPage() {
   const { slug = '' } = useParams();
@@ -20,12 +21,14 @@ export default function CompanyPage() {
   if (error || !data) return <p className="text-red-400">Компания не найдена</p>;
 
   const { company, tickers, industries, articles, fundingRounds } = data;
+  const editLink = <AdminEditLink to={`/companies/${company.slug}/edit`} />;
 
   // ТЗ-01: один массив крошек — визуал + JSON-LD (элемент 2 → /portfolio, §4.5)
   const crumbs: Crumb[] = [{ label: 'Скринер проектов', to: '/portfolio' }, { label: company.name }];
 
   return (
     <div className="space-y-10">
+      {editLink}
       <Breadcrumbs items={crumbs} />
       <JsonLdBreadcrumbs items={crumbs} />
       {/* Шапка профиля */}

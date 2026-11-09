@@ -1,6 +1,9 @@
 # Сайт: vite build → nginx
 FROM node:20-slim AS build
 WORKDIR /app
+# URL админки для кнопки «Редактировать» (AdminEditLink) — по умолчанию админ-поддомен
+ARG VITE_ADMIN_URL=https://admin.xn--b1aghca0aeahc1am7c.xn--p1ai
+ENV VITE_ADMIN_URL=$VITE_ADMIN_URL
 COPY package.json package-lock.json ./
 COPY packages/db/package.json packages/db/
 COPY apps/web/package.json apps/web/
