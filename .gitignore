@@ -28,3 +28,7 @@ Thumbs.db
 .vscode/*
 !.vscode/extensions.json
 reference/
+
+# Дампы для деплоя (локальные артефакты, не коммитить)
+newinvest-dump-*.sql
+uploads-*.tar.gz
