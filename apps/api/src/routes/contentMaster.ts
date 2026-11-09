@@ -65,7 +65,8 @@ async function ddgSearch(query: string): Promise<SearchHit[]> {
   return hits;
 }
 
-const SEARCH_TOOL = {
+// DeepSeek: обычный function-инструмент с зарезервированным именем web_search
+const SEARCH_TOOL_DEEPSEEK = {
   type: 'function' as const,
   function: {
     name: 'web_search',
@@ -77,10 +78,16 @@ const SEARCH_TOOL = {
     },
   },
 };
+// Kimi/Moonshot: встроенный инструмент поиска — объявляется как builtin_function
+const SEARCH_TOOL_KIMI = {
+  type: 'builtin_function' as const,
+  function: { name: '$web_search' },
+};
 
 /** Агентный цикл: модель просит web_search → мы исполняем через DDG → модель отвечает с источниками. */
 async function chatWithSearch(
   base: string, key: string, model: string, system: string, user: string, label: string,
+  searchTool: typeof SEARCH_TOOL_DEEPSEEK | typeof SEARCH_TOOL_KIMI,
 ): Promise<{ content: string; sources: SearchHit[] }> {
   const messages: Record<string, unknown>[] = [
     { role: 'system', content: system },
@@ -93,7 +100,7 @@ async function chatWithSearch(
       headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         model, messages,
-        tools: [SEARCH_TOOL],
+        tools: [searchTool],
         max_tokens: 4096,
         temperature: 0.3,
       }),
@@ -309,10 +316,6 @@ contentMasterRouter.post(
         return;
       }
       const isDeepseek = s.provider === 'deepseek';
-      if (parsed.data.search && !isDeepseek) {
-        res.status(400).json({ error: 'Поиск в интернете работает с провайдером DeepSeek — переключите его в настройках LLM' });
-        return;
-      }
 
       const userPrompt = `Инструкция автора:\n${parsed.data.instruction}\n\n=== ИСХОДНЫЙ ТЕКСТ ===\n${text.slice(0, 15_000)}`;
       const model = isDeepseek ? s.deepseekModel : s.textModel;
@@ -322,7 +325,8 @@ contentMasterRouter.post(
       if (parsed.data.search) {
         // агентный цикл: модель сама решает, что искать; мы исполняем через DuckDuckGo
         const system = parsed.data.mode === 'factcheck' ? FACTCHECK_SYSTEM : `${REWRITER_SYSTEM}\nЕсли в материале есть факты, которые стоит проверить или уточнить — используй web_search. В html и excerpt указывай ссылки на источники (<a href="…">).`;
-        const { content, sources } = await chatWithSearch(base, key, model, system, userPrompt, label);
+        const searchTool = isDeepseek ? SEARCH_TOOL_DEEPSEEK : SEARCH_TOOL_KIMI;
+        const { content, sources } = await chatWithSearch(base, key, model, system, userPrompt, label, searchTool);
         if (parsed.data.mode === 'factcheck') {
           res.json({ ...parseFactcheck(content), sources, mock: false, sourceUrl });
         } else {

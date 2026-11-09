@@ -374,7 +374,7 @@ export default function ContentMasterPage() {
           <button className="btn" onClick={() => void send()} disabled={busy || !source.trim() || !instruction.trim()}>
             {busy ? 'Пишем…' : mode === 'factcheck' ? 'Проверить' : 'Отправить'}
           </button>
-          <label className="flex items-center gap-2 text-sm text-zinc-400" title="Работает с провайдером DeepSeek: модель сама формирует поисковые запросы, поиск исполняет платформа">
+          <label className="flex items-center gap-2 text-sm text-zinc-400" title="Работает с обоими провайдерами: модель сама формирует поисковые запросы, исполнение — на платформе">
             <input type="checkbox" checked={search} onChange={(e) => setSearch(e.target.checked)} />
             искать в интернете
           </label>
