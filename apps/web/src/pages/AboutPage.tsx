@@ -10,6 +10,13 @@ export default function AboutPage({ slug }: { slug: string }) {
     <article className="mx-auto max-w-3xl">
       <Breadcrumbs items={[{ label: page.title }]} />
       <h1 className="text-3xl font-bold">{page.title}</h1>
+      {page.image && (
+        <img
+          src={page.image}
+          alt={page.title}
+          className="mt-6 w-full rounded-lg border border-[#2a2a2a] object-cover"
+        />
+      )}
       <div className="mt-6 space-y-4 leading-relaxed">
         {page.paragraphs.map((p, i) => (
           <p key={i} className="text-zinc-300">{p}</p>
