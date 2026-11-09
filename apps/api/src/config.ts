@@ -23,5 +23,5 @@ export const config = {
   deepseekApiKey: process.env.DEEPSEEK_API_KEY ?? '',
   uploadDir: process.env.UPLOAD_DIR ?? 'uploads',
   // CORS: доверенные origin'ы (через запятую)
-  corsOrigins: (process.env.CORS_ORIGINS ?? 'http://localhost:5173,http://localhost:5174').split(','),
+  corsOrigins: (process.env.CORS_ORIGINS ?? 'http://localhost:1001,http://localhost:1002,http://localhost:5173,http://localhost:5174').split(','),
 };
