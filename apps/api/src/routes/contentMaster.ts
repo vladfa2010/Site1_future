@@ -31,6 +31,23 @@ const rewriteSchema = z.object({
 // ---------- Поиск: DuckDuckGo (без ключа) — исполняет вызовы web_search модели ----------
 interface SearchHit { title: string; url: string; snippet: string }
 
+/** Нативный Search API DeepSeek (api-docs.deepseek.com/api/search) — ранкированные результаты со скором и авторитетностью. */
+async function deepseekSearch(query: string, apiKey: string): Promise<SearchHit[]> {
+  const res = await fetch('https://api.deepseek.com/v1/tools/search', {
+    method: 'POST',
+    signal: AbortSignal.timeout(20_000),
+    headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query: query.slice(0, 128), count: 5 }),
+  });
+  const data = (await res.json().catch(() => ({}))) as { results?: { title?: string; url?: string; snippet?: string }[]; error?: { message?: string } };
+  if (!res.ok) throw new Error(`DeepSeek Search HTTP ${res.status}: ${data.error?.message ?? ''}`);
+  const hits = (data.results ?? [])
+    .filter((r) => r.url && /^https?:\/\//.test(r.url))
+    .map((r) => ({ title: String(r.title ?? ''), url: String(r.url), snippet: String(r.snippet ?? '') }));
+  if (hits.length === 0) throw new Error('DeepSeek Search: пустая выдача');
+  return hits;
+}
+
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 async function ddgSearch(query: string): Promise<SearchHit[]> {
@@ -88,6 +105,7 @@ const SEARCH_TOOL_KIMI = {
 async function chatWithSearch(
   base: string, key: string, model: string, system: string, user: string, label: string,
   searchTool: typeof SEARCH_TOOL_DEEPSEEK | typeof SEARCH_TOOL_KIMI,
+  executeSearch: (query: string) => Promise<SearchHit[]>,
 ): Promise<{ content: string; sources: SearchHit[] }> {
   const messages: Record<string, unknown>[] = [
     { role: 'system', content: system },
@@ -123,7 +141,7 @@ async function chatWithSearch(
         continue;
       }
       try {
-        const hits = await ddgSearch(query);
+        const hits = await executeSearch(query);
         hits.forEach((h) => { if (!sources.some((s) => s.url === h.url)) sources.push(h); });
         messages.push({ role: 'tool', tool_call_id: c.id, content: JSON.stringify({ results: hits }) });
       } catch (e) {
@@ -326,7 +344,9 @@ contentMasterRouter.post(
         // агентный цикл: модель сама решает, что искать; мы исполняем через DuckDuckGo
         const system = parsed.data.mode === 'factcheck' ? FACTCHECK_SYSTEM : `${REWRITER_SYSTEM}\nЕсли в материале есть факты, которые стоит проверить или уточнить — используй web_search. В html и excerpt указывай ссылки на источники (<a href="…">).`;
         const searchTool = isDeepseek ? SEARCH_TOOL_DEEPSEEK : SEARCH_TOOL_KIMI;
-        const { content, sources } = await chatWithSearch(base, key, model, system, userPrompt, label, searchTool);
+        // DeepSeek ищет нативным Search API (тот же ключ), Kimi — DuckDuckGo (fallback)
+        const executeSearch = isDeepseek ? (q: string) => deepseekSearch(q, key) : ddgSearch;
+        const { content, sources } = await chatWithSearch(base, key, model, system, userPrompt, label, searchTool, executeSearch);
         if (parsed.data.mode === 'factcheck') {
           res.json({ ...parseFactcheck(content), sources, mock: false, sourceUrl });
         } else {
