@@ -46,6 +46,12 @@ xn--b1aghca0aeahc1am7c.xn--p1ai {
   handle /uploads/* {
       reverse_proxy 127.0.0.1:4000
   }
+  # Медиа миграции WP: file_path вида https://домен/wp-content/uploads/...
+  # — скачаны с прода в /app/uploads, раздаём статикой по тому же пути
+  handle /wp-content/* {
+      root * /app/uploads
+      file_server
+  }
   handle {
       root * /srv/web
       try_files {path} /index.html
