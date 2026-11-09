@@ -41,7 +41,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
-      throw new Error(body.error === 'invalid credentials' ? 'Неправильный логин или пароль' : 'Ошибка входа');
+      throw new Error(
+        body.error === 'invalid credentials' ? 'Неправильный логин или пароль'
+        : res.status === 429 ? 'Слишком много попыток — подождите 15 минут и попробуйте снова'
+        : 'Ошибка входа',
+      );
     }
     const data = await res.json();
     localStorage.setItem('token', data.token);
