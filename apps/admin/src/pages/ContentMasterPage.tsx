@@ -73,27 +73,34 @@ function TagInput({ label, value, onChange, fetchOptions, placeholder }: {
   const [open, setOpen] = useState(false);
   const [focused, setFocused] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastQ = useRef<string | null>(null);
 
-  // автодополнение запрашиваем ТОЛЬКО в фокусе — иначе дроплисты висят открытыми сразу
+  // автодополнение: ТОЛЬКО в фокусе и ТОЛЬКО при реальном изменении текста —
+  // иначе дроплист висит сразу и пересобирается после выбора (не даёт вводить)
   useEffect(() => {
-    if (!focused) return;
+    if (!focused) { lastQ.current = null; return; }
+    if (lastQ.current === q) return;
+    lastQ.current = q;
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(() => {
       fetchOptions(q.trim())
         .then((list) => {
-          setOpts(list.filter((o) => !value.some((v) => v.id === o.id)).slice(0, 8));
-          setOpen(true);
+          setOpts(list.slice(0, 8));
+          setOpen(list.length > 0);
         })
-        .catch(() => setOpts([]));
+        .catch(() => { setOpts([]); setOpen(false); });
     }, 200);
     return () => { if (timer.current) clearTimeout(timer.current); };
-  }, [q, value, focused]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [q, focused]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const add = (o: Opt) => {
     onChange([...value, o]);
     setQ('');
+    lastQ.current = ''; // сброс текста ≠ изменение запроса — список не пересобираем
     setOpen(false);
   };
+
+  const visibleOpts = opts.filter((o) => !value.some((v) => v.id === o.id));
 
   return (
     <div className="relative">
@@ -120,9 +127,9 @@ function TagInput({ label, value, onChange, fetchOptions, placeholder }: {
           placeholder={placeholder}
         />
       </div>
-      {open && opts.length > 0 && (
+      {open && visibleOpts.length > 0 && (
         <ul className="absolute z-10 mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-900 py-1 shadow-lg">
-          {opts.map((o) => (
+          {visibleOpts.map((o) => (
             <li key={o.id}>
               <button type="button" onMouseDown={(e) => { e.preventDefault(); add(o); }} className="w-full px-3 py-1.5 text-left text-sm hover:bg-zinc-800">
                 {o.label}
