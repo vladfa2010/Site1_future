@@ -71,9 +71,12 @@ function TagInput({ label, value, onChange, fetchOptions, placeholder }: {
   const [q, setQ] = useState('');
   const [opts, setOpts] = useState<Opt[]>([]);
   const [open, setOpen] = useState(false);
+  const [focused, setFocused] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // автодополнение запрашиваем ТОЛЬКО в фокусе — иначе дроплисты висят открытыми сразу
   useEffect(() => {
+    if (!focused) return;
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(() => {
       fetchOptions(q.trim())
@@ -84,7 +87,7 @@ function TagInput({ label, value, onChange, fetchOptions, placeholder }: {
         .catch(() => setOpts([]));
     }, 200);
     return () => { if (timer.current) clearTimeout(timer.current); };
-  }, [q, value]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [q, value, focused]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const add = (o: Opt) => {
     onChange([...value, o]);
@@ -106,8 +109,8 @@ function TagInput({ label, value, onChange, fetchOptions, placeholder }: {
           className="min-w-32 flex-1 bg-transparent px-1 py-1 text-sm outline-none"
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          onFocus={() => setOpen(true)}
-          onBlur={() => setTimeout(() => setOpen(false), 150)}
+          onFocus={() => { setFocused(true); }}
+          onBlur={() => { setTimeout(() => { setOpen(false); setFocused(false); }, 150); }}
           onKeyDown={(e) => {
             if (e.key === 'Enter') {
               e.preventDefault();
