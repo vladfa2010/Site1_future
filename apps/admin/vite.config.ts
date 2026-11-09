@@ -5,9 +5,9 @@ export default defineConfig({
   plugins: [react()],
   server: {
     host: true, // оба стека — как у web
-    // 5274 — чтобы не конфликтовать с PULSE (5174 может быть занят соседним dev)
-    port: 5274,
+    // фиксированный порт 1002 (strictPort — не перескакивает)
+    port: 1002,
     strictPort: true,
-    proxy: { '/api': 'http://localhost:4100', '/uploads': 'http://localhost:4100' },
+    proxy: { '/api': 'http://localhost:4000', '/uploads': 'http://localhost:4000' },
   },
 });
