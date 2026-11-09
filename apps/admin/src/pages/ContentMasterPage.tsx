@@ -8,12 +8,17 @@ import { api } from '../api';
  * выбрать тип → раскрываются параметры → «Создать черновик» → редактор.
  */
 
+interface FactItem { claim: string; status: string; comment: string }
+interface Source { title: string; url: string; snippet: string }
 interface RewriteResult {
   title: string;
-  html: string;
+  html?: string;
   excerpt: string;
   mock: boolean;
   sourceUrl: string | null;
+  summary?: string;
+  report?: FactItem[];
+  sources?: Source[];
 }
 
 interface ChatMsg {
@@ -149,6 +154,8 @@ export default function ContentMasterPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [active, setActive] = useState<RewriteResult | null>(null);
+  const [mode, setMode] = useState<'rewrite' | 'factcheck'>('rewrite');
+  const [search, setSearch] = useState(false);
 
   // параметры черновика
   const [type, setType] = useState<string>('');
@@ -183,7 +190,7 @@ export default function ContentMasterPage() {
     try {
       const res = await api<RewriteResult>('/admin/content-master/rewrite', {
         method: 'POST',
-        body: JSON.stringify({ source: source.trim(), instruction: instruction.trim() }),
+        body: JSON.stringify({ source: source.trim(), instruction: instruction.trim(), mode, search }),
       });
       setMessages((m) => [...m, { role: 'assistant', instruction: instruction.trim(), result: res }]);
       setActive(res);
@@ -211,7 +218,7 @@ export default function ContentMasterPage() {
           type,
           slug: effectiveSlug,
           title: title.trim(),
-          contentHtml: active.html,
+          contentHtml: active.html ?? `<p>${active.summary ?? ''}</p>`,
           excerpt: excerpt.trim() || undefined,
           thesis: thesis.trim() || undefined,
           sourceUrl: sourceUrl.trim() || undefined,
@@ -282,7 +289,7 @@ export default function ContentMasterPage() {
                   <div className="flex shrink-0 gap-2">
                     {m.result.mock && <span className="rounded bg-amber-500/10 px-2 py-0.5 text-xs text-amber-400">mock — нет ключа LLM</span>}
                     <button
-                      onClick={() => { setActive(m.result!); setTitle(m.result!.title); setExcerpt(m.result!.excerpt); setSourceUrl(m.result!.sourceUrl ?? ''); setCreated(null); }}
+                      onClick={() => { setActive(m.result!); setTitle(m.result!.title); setExcerpt(m.result!.excerpt); setSourceUrl(m.result!.sourceUrl ?? ''); setCreated(null); setMode(m.result!.report ? 'factcheck' : 'rewrite'); }}
                       className={`rounded px-2 py-0.5 text-xs ${active === m.result ? 'bg-[#beff00] text-black' : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'}`}
                     >
                       {active === m.result ? '✓ выбран' : 'взять за основу'}
@@ -290,10 +297,41 @@ export default function ContentMasterPage() {
                   </div>
                 </div>
                 {m.result.excerpt && <p className="text-sm text-zinc-400">{m.result.excerpt}</p>}
-                <div
-                  className="prose-sm max-h-56 space-y-2 overflow-y-auto rounded border border-zinc-800 bg-zinc-950 p-3 text-sm leading-relaxed text-zinc-300 [&_h2]:mt-3 [&_h2]:font-bold [&_h3]:mt-2 [&_h3]:font-bold [&_ul]:list-disc [&_ul]:pl-5 [&_blockquote]:border-l-2 [&_blockquote]:border-zinc-700 [&_blockquote]:pl-3 [&_a]:text-[#c9ff2a]"
-                  dangerouslySetInnerHTML={{ __html: previewHtml(m.result.html) }}
-                />
+                {m.result.summary && <p className="rounded bg-zinc-800/60 px-3 py-2 text-sm text-zinc-200">{m.result.summary}</p>}
+                {m.result.report && m.result.report.length > 0 && (
+                  <ul className="space-y-1.5">
+                    {m.result.report.map((r, ri) => (
+                      <li key={ri} className="flex items-start gap-2 text-sm">
+                        <span className={`mt-0.5 shrink-0 rounded px-1.5 py-0.5 text-xs ${r.status === 'confirmed' ? 'bg-green-500/10 text-green-400' : r.status === 'disputed' ? 'bg-red-500/10 text-red-400' : 'bg-amber-500/10 text-amber-400'}`}>
+                          {r.status === 'confirmed' ? '✓ подтверждено' : r.status === 'disputed' ? '✗ спорно' : '? не проверено'}
+                        </span>
+                        <span className="text-zinc-300">{r.claim}</span>
+                        {r.comment && <span className="text-xs text-zinc-500">— {r.comment}</span>}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {m.result.sources && m.result.sources.length > 0 && (
+                  <div>
+                    <span className="label">Источники ({m.result.sources.length})</span>
+                    <ul className="space-y-1">
+                      {m.result.sources.slice(0, 8).map((src, si) => (
+                        <li key={si}>
+                          <a href={src.url} target="_blank" rel="noopener noreferrer" className="text-sm text-[#c9ff2a] hover:underline">
+                            {src.title || src.url}
+                          </a>
+                          {src.snippet && <span className="ml-2 text-xs text-zinc-500">{src.snippet.slice(0, 120)}</span>}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {m.result.html && (
+                  <div
+                    className="prose-sm max-h-56 space-y-2 overflow-y-auto rounded border border-zinc-800 bg-zinc-950 p-3 text-sm leading-relaxed text-zinc-300 [&_h2]:mt-3 [&_h2]:font-bold [&_h3]:mt-2 [&_h3]:font-bold [&_ul]:list-disc [&_ul]:pl-5 [&_blockquote]:border-l-2 [&_blockquote]:border-zinc-700 [&_blockquote]:pl-3 [&_a]:text-[#c9ff2a]"
+                    dangerouslySetInnerHTML={{ __html: previewHtml(m.result.html) }}
+                  />
+                )}
               </div>
             )
           ),
@@ -312,6 +350,17 @@ export default function ContentMasterPage() {
             placeholder="Вставьте текст статьи или http(s)-ссылку — страница выкачается автоматически"
           />
         </div>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" className="rounded-full border border-zinc-700 px-3 py-1 text-xs text-zinc-300 hover:border-[#beff00]/50" onClick={() => { setMode('factcheck'); setSearch(true); setInstruction('Проверь факты в тексте: выдели проверяемые утверждения, оцени каждое и укажи источники'); }}>
+            🔍 Проверить факты
+          </button>
+          <button type="button" className="rounded-full border border-zinc-700 px-3 py-1 text-xs text-zinc-300 hover:border-[#beff00]/50" onClick={() => { setMode('rewrite'); setSearch(true); setInstruction('Найди первоисточник этого материала, уточни факты по актуальным источникам и перепиши с ссылками'); }}>
+            🌐 Найти первоисточник
+          </button>
+          <button type="button" className="rounded-full border border-zinc-700 px-3 py-1 text-xs text-zinc-300 hover:border-[#beff00]/50" onClick={() => { setMode('rewrite'); setSearch(false); setInstruction('Перепиши как новость для инвесторов: сохрани факты, добавь контекст, почему это важно для рынка'); }}>
+            ✏️ Новость для инвесторов
+          </button>
+        </div>
         <div>
           <label className="label">Что сделать</label>
           <textarea
@@ -321,9 +370,16 @@ export default function ContentMasterPage() {
             placeholder="Например: перепиши как новость для инвесторов, сохрани факты, добавь контекст почему это важно"
           />
         </div>
-        <button className="btn" onClick={() => void send()} disabled={busy || !source.trim() || !instruction.trim()}>
-          {busy ? 'Пишем…' : 'Отправить'}
-        </button>
+        <div className="flex items-center gap-4">
+          <button className="btn" onClick={() => void send()} disabled={busy || !source.trim() || !instruction.trim()}>
+            {busy ? 'Пишем…' : mode === 'factcheck' ? 'Проверить' : 'Отправить'}
+          </button>
+          <label className="flex items-center gap-2 text-sm text-zinc-400" title="Работает с провайдером DeepSeek: модель сама формирует поисковые запросы, поиск исполняет платформа">
+            <input type="checkbox" checked={search} onChange={(e) => setSearch(e.target.checked)} />
+            искать в интернете
+          </label>
+          {mode === 'factcheck' && <span className="rounded bg-sky-500/10 px-2 py-0.5 text-xs text-sky-400">режим: фактчек</span>}
+        </div>
       </div>
 
       {/* Параметры черновика */}
