@@ -26,6 +26,7 @@ services:
     environment:
       POSTGRES_USER: newinvest
       POSTGRES_PASSWORD: newinvest-local
+      PORT: 4000
       ADMIN_EMAIL: admin@local
       ADMIN_PASSWORD: admin123
       JWT_SECRET: local-dev-secret-change-me

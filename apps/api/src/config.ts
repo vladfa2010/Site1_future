@@ -1,7 +1,7 @@
 import 'dotenv/config';
 
 export const config = {
-  port: Number(process.env.PORT ?? 4000),
+  port: Number(process.env.PORT ?? 4100), // 4100 dev: не конфликтовать с PULSE (3001); в Docker задан PORT=4000
   jwtSecret: process.env.JWT_SECRET ?? 'dev-secret-change-me',
   // DATABASE_URL читает напрямую packages/db (drizzle), здесь не дублируем
   adminEmail: process.env.ADMIN_EMAIL ?? 'admin@local',

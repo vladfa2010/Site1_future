@@ -17,6 +17,8 @@ RUN npm ci --workspace @newinvest/web --workspace @newinvest/admin --workspace @
       --include-workspace-root=false
 COPY packages/db packages/db
 COPY apps apps
+# URL админки для кнопок «Админка»/«Редактировать» на сайте (дефолт в коде — localhost:5174)
+ENV VITE_ADMIN_URL=https://admin.xn--b1aghca0aeahc1am7c.xn--p1ai
 RUN npm run build -w @newinvest/web && npm run build -w @newinvest/admin
 
 # ── Этап 2: финальный образ на базе PostgreSQL 17 + pgvector (debian) ──
@@ -54,6 +56,7 @@ ENV PGDATA=/var/lib/postgresql/data \
     POSTGRES_PASSWORD=newinvest-local \
     DATABASE_URL=postgres://newinvest:newinvest-local@127.0.0.1:5432/newinvest \
     NODE_ENV=production \
+    PORT=4000 \
     JWT_SECRET=local-dev-secret-change-me \
     ADMIN_EMAIL=admin@local \
     ADMIN_PASSWORD=admin123 \

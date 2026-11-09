@@ -2,7 +2,7 @@ import { NavLink, Link } from 'react-router';
 import { useAuth } from '../auth';
 
 // Сайт — отдельное приложение (в dev :5173; в проде — тот же origin)
-const SITE_URL = import.meta.env.VITE_SITE_URL ?? 'http://localhost:5173';
+const SITE_URL = import.meta.env.VITE_SITE_URL ?? 'http://localhost:5273';
 
 const NAV = [
   { to: '/content-master', label: 'ContentMaster' },

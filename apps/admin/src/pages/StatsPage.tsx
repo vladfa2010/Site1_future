@@ -91,7 +91,7 @@ export default function StatsPage() {
                   <tr key={r.articleId} className="border-b border-zinc-800 last:border-0">
                     <td className="td text-zinc-500">{i + 1}</td>
                     <td className="td max-w-md truncate font-medium">
-                      <a href={`http://localhost:5173/${r.type}/${r.slug}`} target="_blank" rel="noreferrer" className="hover:underline">{r.title}</a>
+                      <a href={`http://localhost:5273/${r.type}/${r.slug}`} target="_blank" rel="noreferrer" className="hover:underline">{r.title}</a>
                     </td>
                     <td className="td text-zinc-500">{r.type}</td>
                     <td className="td font-semibold">{r.realViews}</td>
