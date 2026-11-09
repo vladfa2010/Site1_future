@@ -9,7 +9,7 @@ import { useAuth } from '../auth';
 export function AdminEditLink({ to }: { to: string }) {
   const { user } = useAuth();
   if (!user || (user.role !== 'admin' && user.role !== 'super_admin')) return null;
-  const adminUrl = (import.meta.env.VITE_ADMIN_URL as string | undefined) ?? 'http://localhost:5274';
+  const adminUrl = (import.meta.env.VITE_ADMIN_URL as string | undefined) ?? 'http://localhost:1002';
   return (
     <a
       href={`${adminUrl}${to}`}

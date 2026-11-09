@@ -35,7 +35,7 @@ export default function CabinetPage() {
   const [tab, setTab] = useState<Tab>('profile');
   const [avatarEdit, setAvatarEdit] = useState(false);
   const isAdmin = user?.role === 'admin' || user?.role === 'super_admin';
-  const ADMIN_URL = import.meta.env.VITE_ADMIN_URL ?? 'http://localhost:5274';
+  const ADMIN_URL = import.meta.env.VITE_ADMIN_URL ?? 'http://localhost:1002';
 
   if (!user) {
     return (
