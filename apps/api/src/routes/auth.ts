@@ -22,14 +22,20 @@ const passwordSchema = z.string()
     return classes >= 2 && !/^(.)\1+$/.test(p);
   }, 'Пароль должен содержать буквы и цифры (или спецсимволы)');
 
+// email: допускаем и локальные домены без точки (admin@local из DEPLOY.md) —
+// встроенный .email() zod их отвергает
+const emailSchema = z.string()
+  .regex(/^[^\s@]+@[^\s@]+$/, 'Некорректный email')
+  .max(254);
+
 const registerSchema = z.object({
   username: z.string().trim().min(2, 'Минимум 2 символа').max(40),
-  email: z.string().email(),
+  email: emailSchema,
   password: passwordSchema,
 });
 
 const loginSchema = z.object({
-  email: z.string().email(),
+  email: emailSchema,
   password: z.string(),
 });
 

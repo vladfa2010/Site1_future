@@ -12,10 +12,13 @@ services:
     restart: unless-stopped
     ports:
       - '80:80'
+      - '443:443'
     volumes:
       # Переиспользуем данные из прежнего многоконтейнерного стека
       - pgdata:/var/lib/postgresql/data
       - uploads:/app/uploads
+      # PKI Caddy (корневой CA) — иначе при пересборке меняется корень и ломается доверие
+      - caddy_data:/root/.local/share/caddy
     # Лимиты на весь контейнер: 1 CPU, 3 ГБ ОЗУ
     cpus: '1.0'
     mem_limit: 3g
@@ -26,11 +29,13 @@ services:
       ADMIN_EMAIL: admin@local
       ADMIN_PASSWORD: admin123
       JWT_SECRET: local-dev-secret-change-me
-      CORS_ORIGINS: http://xn--b1aghca0aeahc1am7c.xn--p1ai,http://admin.xn--b1aghca0aeahc1am7c.xn--p1ai
-      PUBLIC_SITE_URL: http://xn--b1aghca0aeahc1am7c.xn--p1ai
+      CORS_ORIGINS: https://xn--b1aghca0aeahc1am7c.xn--p1ai,https://admin.xn--b1aghca0aeahc1am7c.xn--p1ai
+      PUBLIC_SITE_URL: https://xn--b1aghca0aeahc1am7c.xn--p1ai
 
 volumes:
   pgdata:
     name: infra_pgdata
   uploads:
     name: infra_uploads
+  caddy_data:
+    name: infra_caddy_data

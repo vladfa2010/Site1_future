@@ -1,7 +1,8 @@
 # Caddy внутри моноконтейнера: статика web/admin из /srv, динамика — на 127.0.0.1:4000.
+# HTTPS — внутренний CA Caddy (tls internal); корень CA добавлен в доверенные Windows.
 # Punycode: xn--b1aghca0aeahc1am7c.xn--p1ai = инвестиционно.рф
 {
-  auto_https off
+  # только локальные имена — публичный ACME (Let's Encrypt) не используем
 }
 
 (security) {
@@ -15,7 +16,8 @@
 }
 
 # Основной сайт (API и uploads — тот же origin)
-http://xn--b1aghca0aeahc1am7c.xn--p1ai {
+xn--b1aghca0aeahc1am7c.xn--p1ai {
+  tls internal
   import security
 
   handle /sitemap.xml {
@@ -52,7 +54,8 @@ http://xn--b1aghca0aeahc1am7c.xn--p1ai {
 }
 
 # Админка — отдельный поддомен
-http://admin.xn--b1aghca0aeahc1am7c.xn--p1ai {
+admin.xn--b1aghca0aeahc1am7c.xn--p1ai {
+  tls internal
   import security
 
   # Админка не должна попасть в индекс — статичный noindex-robots
