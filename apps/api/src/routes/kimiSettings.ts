@@ -2,8 +2,10 @@
  * Настройки LLM-провайдеров (Kimi/Moonshot и DeepSeek).
  * GET  /api/admin/kimi-settings — чтение (admin/super_admin), ключи маскированы,
  *      списки моделей обоих провайдеров (modelsKimi / modelsDeepseek)
- * POST /api/admin/kimi-settings — ИЗМЕНЕНИЕ (только super_admin — иначе admin может
- *      увести ключ через подмену baseUrl, см. аудит безопасности 2026-11-08)
+ * POST /api/admin/kimi-settings — ИЗМЕНЕНИЕ (admin/super_admin).
+ *      Вектор угона ключа через подмену baseUrl закрыт allowlist'ом хостов (baseUrlSchema
+ *      ниже + фиксированный хост DeepSeek), аудит 2026-11-08; guard ослаблен с
+ *      super_admin до admin 2026-11-09 — операции с провайдером/моделями нужны админу
  *      {provider?, apiKey?, baseUrl?, textModel?, imageModel?, embedModel?,
  *       deepseekApiKey?, deepseekModel?} (apiKey/deepseekApiKey='' — стереть)
  * DeepSeek — OpenAI-совместимый API (https://api.deepseek.com), ключ жёстко
@@ -73,7 +75,7 @@ const patchSchema = z.object({
   deepseekModel: z.string().max(100).optional(),
 });
 
-kimiSettingsRouter.post('/admin/kimi-settings', authRequired, requireRole('super_admin'), async (req, res) => {
+kimiSettingsRouter.post('/admin/kimi-settings', authRequired, requireRole('admin', 'super_admin'), async (req, res) => {
   const parsed = patchSchema.safeParse(req.body);
   if (!parsed.success) {
     const first = Object.values(parsed.error.flatten().fieldErrors)[0]?.[0];
