@@ -308,6 +308,13 @@ curl -s -X POST "$B/api/admin/kimi-settings" -H "$A" -H "$J" -d '{"provider":"ki
 curl -s -o /dev/null -w "%{http_code}" -X POST "$B/api/admin/kimi-settings" -H "$A" -H "$J" -d '{"provider":"openai"}' | grep -q 400 && ok || bad "kimi-settings: невалидный provider 400"
 curl -s -X POST "$B/api/admin/kimi-settings" -H "$A" -H "$J" -d '{"deepseekApiKey":""}' > /dev/null
 curl -s "$B/api/admin/kimi-settings" -H "$UA" -o /dev/null -w "%{http_code}" | grep -q 403 && ok || bad "kimi-settings: reader 403"
+# contentMaster: AI-рерайт → черновик
+curl -s -o /dev/null -w "%{http_code}" -X POST "$B/api/admin/content-master/rewrite" -H "$J" -d '{"source":"длинный исходный текст для проверки","instruction":"перепиши"}' | grep -q 401 && ok || bad "cm: anon 401"
+curl -s -o /dev/null -w "%{http_code}" -X POST "$B/api/admin/content-master/rewrite" -H "$UA" -H "$J" -d '{"source":"длинный исходный текст для проверки","instruction":"перепиши"}' | grep -q 403 && ok || bad "cm: reader 403"
+CM=$(curl -s -m 120 -X POST "$B/api/admin/content-master/rewrite" -H "$A" -H "$J" -d '{"source":"SpaceX вывела на орбиту тысячу спутников. Компания лидирует на рынке спутникового интернета, конкуренты отстают по числу аппаратов.","instruction":"перепиши как короткую новость для инвесторов"}')
+echo "$CM" | python3 -c "import json,sys; d=json.load(sys.stdin); assert d.get('title') and '<p>' in (d.get('html') or ''), d; print('ok')" > /dev/null 2>&1 && ok || bad "cm: рерайт отдаёт title+html"
+curl -s -o /dev/null -w "%{http_code}" -X POST "$B/api/admin/content-master/rewrite" -H "$A" -H "$J" -d '{"source":"http://localhost:4000/api/health","instruction":"перепиши"}' | grep -q 400 && ok || bad "cm: SSRF localhost 400"
+curl -s -o /dev/null -w "%{http_code}" -X POST "$B/api/admin/content-master/rewrite" -H "$A" -H "$J" -d '{"source":"коротко","instruction":"перепиши"}' | grep -q 400 && ok || bad "cm: короткий source 400"
 # события по идее: публично, только sobytie+published, не-идея → 404
 IDEAID=$(curl -s "$B/api/articles/ideya/proekt-prometej-sledujushhij-shag-razvitija-ii" | jqget "d['article']['id']")
 curl -s -o /dev/null -w "%{http_code}" "$B/api/articles/$IDEAID/events" | grep -q 200 && ok || bad "idea-events: 200"

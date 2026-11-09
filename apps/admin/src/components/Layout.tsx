@@ -5,6 +5,7 @@ import { useAuth } from '../auth';
 const SITE_URL = import.meta.env.VITE_SITE_URL ?? 'http://localhost:5173';
 
 const NAV = [
+  { to: '/content-master', label: 'ContentMaster' },
   { to: '/articles', label: 'Статьи' },
   { to: '/stories', label: 'Сюжеты' },
   { to: '/companies', label: 'Компании' },

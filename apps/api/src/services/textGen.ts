@@ -23,7 +23,7 @@ const PERSONA_PROMPTS: Record<TextPersona, string> = {
 };
 
 /** OpenAI-совместимый chat/completions — общий для Kimi и DeepSeek. */
-async function chatCompletion(
+export async function chatCompletion(
   baseUrl: string,
   apiKey: string,
   model: string,

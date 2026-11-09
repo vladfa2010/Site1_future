@@ -5,6 +5,7 @@ import { Layout } from './components/Layout';
 import LoginPage from './pages/LoginPage';
 import ArticlesPage from './pages/ArticlesPage';
 import ArticleEditPage from './pages/ArticleEditPage';
+import ContentMasterPage from './pages/ContentMasterPage';
 import CompaniesPage from './pages/CompaniesPage';
 import CompanyEditPage from './pages/CompanyEditPage';
 import TrendsPage from './pages/TrendsPage';
@@ -46,6 +47,7 @@ export default function App() {
               <Layout>
                 <Routes>
                   <Route path="/" element={<Navigate to="/articles" replace />} />
+                  <Route path="/content-master" element={<ContentMasterPage />} />
                   <Route path="/articles" element={<ArticlesPage />} />
                   <Route path="/articles/new" element={<ArticleEditPage />} />
                   <Route path="/articles/:type/:slug/edit" element={<ArticleEditPage />} />
