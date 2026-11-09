@@ -25,6 +25,7 @@ const passwordSchema = z.string()
 // email: допускаем и локальные домены без точки (admin@local из DEPLOY.md) —
 // встроенный .email() zod их отвергает
 const emailSchema = z.string()
+  .trim() // пробелы по краям (копипаст из писем) не должны ломать вход
   .regex(/^[^\s@]+@[^\s@]+$/, 'Некорректный email')
   .max(254);
 
@@ -139,7 +140,8 @@ authRouter.post('/login', async (req, res) => {  const parsed = loginSchema.safe
     res.status(400).json({ error: 'validation', details: parsed.error.flatten() });
     return;
   }
-  const [user] = await db.select().from(users).where(eq(users.email, parsed.data.email)).limit(1);
+  // case-insensitive, как в PULSE: регистр почты не должен блокировать вход
+  const [user] = await db.select().from(users).where(sql`lower(${users.email}) = lower(${parsed.data.email})`).limit(1);
   if (!user || !(await bcrypt.compare(parsed.data.password, user.passwordHash))) {
     res.status(401).json({ error: 'invalid credentials' });
     return;
