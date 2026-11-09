@@ -4,6 +4,8 @@
  */
 import type { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
+import { eq } from 'drizzle-orm';
+import { db, users } from '@newinvest/db';
 import { config } from '../config.js';
 
 export interface AuthUser {
@@ -56,11 +58,18 @@ export function authRequired(req: Request, res: Response, next: NextFunction) {
   next();
 }
 
-/** Проверка роли: requireRole('admin', 'super_admin') */
+/** Проверка роли: requireRole('admin', 'super_admin').
+ *  Порт ТЗ-120 PULSE: is_blocked проверяется и здесь, а не только при логине —
+ *  иначе заблокированный админ продолжал бы работать с уже выданным JWT. */
 export function requireRole(...roles: string[]) {
-  return (req: Request, res: Response, next: NextFunction) => {
+  return async (req: Request, res: Response, next: NextFunction) => {
     if (!req.user || !roles.includes(req.user.role)) {
       res.status(403).json({ error: 'forbidden', need: roles, got: req.user?.role ?? null });
+      return;
+    }
+    const [u] = await db.select({ isBlocked: users.isBlocked }).from(users).where(eq(users.id, req.user.id)).limit(1);
+    if (u?.isBlocked) {
+      res.status(403).json({ error: 'Аккаунт заблокирован' });
       return;
     }
     next();

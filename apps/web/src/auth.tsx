@@ -16,11 +16,13 @@ interface AuthState {
   user: AuthUser | null;
   login: (email: string, password: string) => Promise<void>;
   register: (username: string, email: string, password: string) => Promise<void>;
+  /** сессия из других флоу (например, восстановление пароля вернуло {token, user}) */
+  applySession: (token: string, user: AuthUser) => void;
   logout: () => void;
   refresh: () => Promise<void>;
 }
 
-const AuthContext = createContext<AuthState>({ user: null, login: async () => {}, register: async () => {}, logout: () => {}, refresh: async () => {} });
+const AuthContext = createContext<AuthState>({ user: null, login: async () => {}, register: async () => {}, applySession: () => {}, logout: () => {}, refresh: async () => {} });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(() => {
@@ -64,6 +66,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(data.user);
   };
 
+  const applySession = (token: string, u: AuthUser) => {
+    localStorage.setItem('token', token);
+    localStorage.setItem('user', JSON.stringify(u));
+    setUser(u);
+  };
+
   const logout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
@@ -85,7 +93,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  return <AuthContext.Provider value={{ user, login, register, logout, refresh }}>{children}</AuthContext.Provider>;
+  return <AuthContext.Provider value={{ user, login, register, applySession, logout, refresh }}>{children}</AuthContext.Provider>;
 }
 
 export const useAuth = () => useContext(AuthContext);

@@ -19,11 +19,15 @@ const inputCls =
 
 export default function AuthModal() {
   const { isOpen, mode: defaultMode, returnUrl, close } = useAuthModal();
-  const { login, register } = useAuth();
+  const { login, register, applySession } = useAuth();
   const navigate = useNavigate();
 
-  const [mode, setMode] = useState<'login' | 'register'>(defaultMode);
+  const [mode, setMode] = useState<'login' | 'register' | 'forgot'>(defaultMode);
   const [step, setStep] = useState<'form' | 'success'>('form');
+  // восстановление пароля: email → код → новый пароль
+  const [forgotStep, setForgotStep] = useState<1 | 2>(1);
+  const [code, setCode] = useState('');
+  const [newPassword, setNewPassword] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [username, setUsername] = useState('');
@@ -71,6 +75,9 @@ export default function AuthModal() {
   const reset = () => {
     setEmail('');
     setPassword('');
+    setCode('');
+    setNewPassword('');
+    setForgotStep(1);
     setUsername('');
     setAgreed(false);
     setRememberMe(false);
@@ -86,10 +93,13 @@ export default function AuthModal() {
     close();
   };
 
-  const switchMode = (m: 'login' | 'register') => {
+  const switchMode = (m: 'login' | 'register' | 'forgot') => {
     setMode(m);
     setEmail('');
     setPassword('');
+    setCode('');
+    setNewPassword('');
+    setForgotStep(1);
     setUsername('');
     setAgreed(false);
     setShowPassword(false);
@@ -178,6 +188,57 @@ export default function AuthModal() {
     }
   };
 
+  const handleForgotSend = async () => {
+    setError('');
+    setLoading(true);
+    try {
+      const res = await fetch('/api/auth/forgot-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim() }),
+      });
+      if (!res.ok) throw new Error('Ошибка отправки — попробуйте позже');
+      setForgotStep(2);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Ошибка отправки');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleForgotReset = async () => {
+    setError('');
+    setLoading(true);
+    try {
+      const v = await fetch('/api/auth/verify-code', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim(), code: code.trim() }),
+      });
+      if (!v.ok) {
+        const b = await v.json().catch(() => ({}));
+        throw new Error(b.error ?? 'Неверный или просроченный код');
+      }
+      const { resetToken } = (await v.json()) as { resetToken: string };
+      const r = await fetch('/api/auth/reset-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ resetToken, password: newPassword }),
+      });
+      if (!r.ok) {
+        const b = await r.json().catch(() => ({}));
+        throw new Error(b.error ?? 'Не удалось сменить пароль');
+      }
+      const data = (await r.json()) as { token: string; user: Parameters<typeof applySession>[1] };
+      applySession(data.token, data.user);
+      setStep('success');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Ошибка');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const pwdCounter =
     password.length === 0
       ? 'Минимум 8 символов. Последний шаг — честно.'
@@ -221,7 +282,8 @@ export default function AuthModal() {
               </span>
             </div>
 
-            {/* Табы */}
+            {/* Табы (в режиме восстановления не показываем) */}
+            {mode !== 'forgot' && (
             <div className="mb-6 flex rounded-full border border-[#222222] bg-[#161616] p-1">
               {(['login', 'register'] as const).map((m) => (
                 <button
@@ -235,11 +297,108 @@ export default function AuthModal() {
                 </button>
               ))}
             </div>
+            )}
 
             <AnimatePresence mode="wait">
               {step === 'form' ? (
                 <motion.div key="form" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-                  {mode === 'login' ? (
+                  {mode === 'forgot' ? (
+                    /* ── ВОССТАНОВЛЕНИЕ ПАРОЛЯ (порт PULSE) ── */
+                    <form
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        if (forgotStep === 1) void handleForgotSend();
+                        else void handleForgotReset();
+                      }}
+                      className="space-y-4"
+                    >
+                      <h3 className="text-center text-lg font-bold text-white">
+                        {forgotStep === 1 ? 'Восстановление пароля' : 'Введите код'}
+                      </h3>
+                      {forgotStep === 1 ? (
+                        <>
+                          <p className="text-center text-sm text-[#9CA3AF]">
+                            Укажите почту — отправим 6-значный код. Он действует 15 минут.
+                          </p>
+                          <div>
+                            <label className="mb-1.5 block text-sm text-[#9CA3AF]">Email</label>
+                            <div className="relative">
+                              <Mail size={16} className="absolute top-1/2 left-4 -translate-y-1/2 text-[#6B7280]" />
+                              <input
+                                type="email"
+                                required
+                                autoFocus
+                                value={email}
+                                onChange={(e) => setEmail(e.target.value)}
+                                placeholder="your@email.com"
+                                className={`${inputCls} pl-11`}
+                              />
+                            </div>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <p className="text-center text-sm text-[#9CA3AF]">Код отправлен на {email.trim()}</p>
+                          <div>
+                            <label className="mb-1.5 block text-sm text-[#9CA3AF]">Код из письма</label>
+                            <input
+                              required
+                              autoFocus
+                              inputMode="numeric"
+                              pattern="\d{6}"
+                              maxLength={6}
+                              value={code}
+                              onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
+                              placeholder="123456"
+                              className={`${inputCls} text-center text-lg tracking-[0.4em]`}
+                            />
+                          </div>
+                          <div>
+                            <label className="mb-1.5 block text-sm text-[#9CA3AF]">Новый пароль</label>
+                            <div className="relative">
+                              <Lock size={16} className="absolute top-1/2 left-4 -translate-y-1/2 text-[#6B7280]" />
+                              <input
+                                type={showPassword ? 'text' : 'password'}
+                                required
+                                minLength={8}
+                                value={newPassword}
+                                onChange={(e) => setNewPassword(e.target.value)}
+                                placeholder="Минимум 8 символов"
+                                autoComplete="new-password"
+                                className={`${inputCls} px-11`}
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setShowPassword((s) => !s)}
+                                className="absolute top-1/2 right-4 -translate-y-1/2 text-[#6B7280] hover:text-white"
+                                aria-label="Показать пароль"
+                              >
+                                {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                              </button>
+                            </div>
+                          </div>
+                        </>
+                      )}
+                      {error && <p className="text-center text-sm text-[#EF4444]">{error}</p>}
+                      <button
+                        type="submit"
+                        disabled={loading}
+                        className="h-11 w-full rounded-full bg-gradient-to-br from-[#00D4FF] to-[#0099CC] text-sm font-semibold text-[#0E0E0E] transition-opacity hover:opacity-90 disabled:opacity-50"
+                      >
+                        {loading ? 'Подождите…' : forgotStep === 1 ? 'Отправить код' : 'Сменить пароль'}
+                      </button>
+                      <div className="flex justify-between text-sm">
+                        <button type="button" onClick={() => switchMode('login')} className="text-[#6B7280] hover:text-white">
+                          ← Назад ко входу
+                        </button>
+                        {forgotStep === 2 && (
+                          <button type="button" onClick={() => { setForgotStep(1); setError(''); }} className="text-[#00D4FF] hover:underline">
+                            Отправить код ещё раз
+                          </button>
+                        )}
+                      </div>
+                    </form>
+                  ) : mode === 'login' ? (
                     /* ── ВХОД ── */
                     <form
                       onSubmit={(e) => {
@@ -286,15 +445,20 @@ export default function AuthModal() {
                           </button>
                         </div>
                       </div>
-                      <label className="flex cursor-pointer items-center gap-2 text-sm text-[#9CA3AF]">
-                        <input
-                          type="checkbox"
-                          checked={rememberMe}
-                          onChange={(e) => setRememberMe(e.target.checked)}
-                          className="h-4 w-4 rounded border-[#222222] bg-[#161616] accent-[#00D4FF]"
-                        />
-                        Запомнить меня
-                      </label>
+                      <div className="flex items-center justify-between text-sm">
+                        <label className="flex cursor-pointer items-center gap-2 text-[#9CA3AF]">
+                          <input
+                            type="checkbox"
+                            checked={rememberMe}
+                            onChange={(e) => setRememberMe(e.target.checked)}
+                            className="h-4 w-4 rounded border-[#222222] bg-[#161616] accent-[#00D4FF]"
+                          />
+                          Запомнить меня
+                        </label>
+                        <button type="button" onClick={() => switchMode('forgot')} className="text-[#00D4FF] hover:underline">
+                          Забыли пароль?
+                        </button>
+                      </div>
                       {error && <p className="text-center text-sm text-[#EF4444]">{error}</p>}
                       <button
                         type="submit"
@@ -505,7 +669,7 @@ export default function AuthModal() {
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.2 }}
                   >
-                    Аккаунт создан!
+                    {mode === 'forgot' ? 'Пароль обновлён!' : 'Аккаунт создан!'}
                   </motion.h3>
                   <motion.p
                     className="mt-2 text-sm leading-relaxed text-[#9CA3AF]"

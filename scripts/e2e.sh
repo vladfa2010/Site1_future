@@ -33,6 +33,35 @@ curl -s -X POST $B/api/auth/register -H "$J" -d '{"username":"e2euser","email":"
 curl -s -o /dev/null -w "%{http_code}" -X POST $B/api/auth/register -H "$J" -d '{"username":"Short","email":"s@test.ru","password":"123"}' | grep -q 400 && ok || bad "register: короткий пароль 400"
 
 echo "════════════════════════════════════════"
+echo "  E2E: ВОССТАНОВЛЕНИЕ ПАРОЛЯ (порт PULSE) + БЛОКИРОВКА"
+echo "════════════════════════════════════════"
+# полный цикл: forgot → code из БД (почта mock) → verify → reset → старый пароль мёртв, новый работает
+curl -s -X POST $B/api/auth/register -H "$J" -d '{"username":"ResetE2E","email":"reset-e2e@test.ru","password":"OldPass123"}' > /dev/null
+curl -s -X POST $B/api/auth/forgot-password -H "$J" -d '{"email":"reset-e2e@test.ru"}' | grep -q '"success":true' && ok || bad "reset: forgot success"
+curl -s -X POST $B/api/auth/forgot-password -H "$J" -d '{"email":"no-such@test.ru"}' | grep -q '"success":true' && ok || bad "reset: нераскрытие email (unknown → success)"
+CODE=$(psql -d newinvest -tAc "SELECT code FROM password_reset_codes WHERE user_id=(SELECT id FROM users WHERE email='reset-e2e@test.ru') ORDER BY created_at DESC LIMIT 1" 2>/dev/null)
+RT=$(curl -s -X POST $B/api/auth/verify-code -H "$J" -d "{\"email\":\"reset-e2e@test.ru\",\"code\":\"$CODE\"}" | jqget "d['resetToken']")
+[ -n "$RT" ] && ok || bad "reset: verify-code → resetToken"
+curl -s -o /dev/null -w "%{http_code}" -X POST $B/api/auth/verify-code -H "$J" -d '{"email":"reset-e2e@test.ru","code":"000000"}' | grep -q 400 && ok || bad "reset: неверный код 400"
+# код одноразовый: повтор verify с тем же кодом → 400
+curl -s -o /dev/null -w "%{http_code}" -X POST $B/api/auth/verify-code -H "$J" -d "{\"email\":\"reset-e2e@test.ru\",\"code\":\"$CODE\"}" | grep -q 400 && ok || bad "reset: код одноразовый"
+curl -s -X POST $B/api/auth/reset-password -H "$J" -d "{\"resetToken\":\"$RT\",\"password\":\"NewPass456\"}" | grep -q '"token"' && ok || bad "reset: новая сессия"
+curl -s -o /dev/null -w "%{http_code}" -X POST $B/api/auth/login -H "$J" -d '{"email":"reset-e2e@test.ru","password":"OldPass123"}' | grep -q 401 && ok || bad "reset: старый пароль 401"
+curl -s -o /dev/null -w "%{http_code}" -X POST $B/api/auth/login -H "$J" -d '{"email":"reset-e2e@test.ru","password":"NewPass456"}' | grep -q 200 && ok || bad "reset: новый пароль 200"
+# чужой/просроченный resetToken → 401 (подписан другим секретом)
+curl -s -o /dev/null -w "%{http_code}" -X POST $B/api/auth/reset-password -H "$J" -d '{"resetToken":"eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIiwicHVycG9zZSI6InBhc3N3b3JkX3Jlc2V0In0.forged","password":"Forged123"}' | grep -q 401 && ok || bad "reset: подделанный токен 401"
+# блокировка в requireRole: свежий юзер → логин (токен) → psql: admin + blocked → admin-эндпоинт 403
+curl -s -X POST $B/api/auth/register -H "$J" -d '{"username":"BlockE2E","email":"block-e2e@test.ru","password":"E2ePass123"}' > /dev/null
+BTK=$(curl -s -X POST $B/api/auth/login -H "$J" -d '{"email":"block-e2e@test.ru","password":"E2ePass123"}' | jqget "d['token']")
+psql -d newinvest -q -c "UPDATE users SET role='admin', is_blocked=TRUE WHERE email='block-e2e@test.ru'" 2>/dev/null
+if [ -n "$BTK" ]; then
+  curl -s -o /dev/null -w "%{http_code}" "$B/api/admin/metrics/overview" -H "Authorization: Bearer $BTK" | grep -q 403 && ok || bad "blocked: requireRole 403 (ТЗ-120)"
+else
+  bad "blocked: нет токена для проверки requireRole"
+fi
+psql -d newinvest -q -c "DELETE FROM users WHERE email='block-e2e@test.ru'" 2>/dev/null
+
+echo "════════════════════════════════════════"
 echo "  E2E: АДМИНКА — СТАТЬИ"
 echo "════════════════════════════════════════"
 ART=$(curl -s -X POST "$B/api/articles" -H "$A" -H "$J" -d '{"type":"novost","slug":"e2e-novost","title":"E2E новость","contentHtml":"<p>Текст</p>","status":"draft"}' | jqget "d['article']['id']")

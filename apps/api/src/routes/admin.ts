@@ -66,6 +66,7 @@ const userPatchSchema = z.object({
   displayName: z.string().trim().min(2).max(40).nullable().optional(), // null — сбросить (колонка nullable)
   tariffId: z.number().int().nullable().optional(),        // пейволл: тариф из БД (null — снять)
   tariffExpiresAt: z.string().nullable().optional(),      // ISO-дата; null = бессрочно
+  isBlocked: z.boolean().optional(),                      // блокировка: логин и requireRole откажут
 });
 
 adminRouter.patch('/users/:id', authRequired, requireRole('super_admin'), async (req, res) => {
@@ -75,7 +76,7 @@ adminRouter.patch('/users/:id', authRequired, requireRole('super_admin'), async 
     res.status(400).json({ error: 'validation', details: parsed.error.flatten() });
     return;
   }
-  const { role, email, displayName, tariffId, tariffExpiresAt } = parsed.data;
+  const { role, email, displayName, tariffId, tariffExpiresAt, isBlocked } = parsed.data;
 
   // уникальность email/displayName при смене (case-insensitive), исключая самого юзера
   if (email) {
@@ -97,6 +98,7 @@ adminRouter.patch('/users/:id', authRequired, requireRole('super_admin'), async 
 
   const updates: Record<string, unknown> = {};
   if (role) updates.role = role;
+  if (isBlocked !== undefined) updates.isBlocked = isBlocked;
   if (email) updates.email = email;
   if (displayName !== undefined) updates.displayName = displayName; // null — сбросить имя
   if (tariffId !== undefined) updates.tariffId = tariffId;

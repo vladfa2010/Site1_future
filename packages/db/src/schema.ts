@@ -35,6 +35,7 @@ export const users = pgTable('users', {
   tariffExpiresAt: timestamp('tariff_expires_at', { withTimezone: true }), // null = бессрочно (выдача админом)
   oldWpId: integer('old_wp_id'),                                    // миграция из Ultimate Member
   bio: text('bio'),                                                 // ТЗ-05: биография автора
+  isBlocked: boolean('is_blocked').notNull().default(false),        // порт PULSE: блокировка (логин + requireRole)
   createdAt: createdAt(),
 });
 
@@ -547,3 +548,15 @@ export const articleEmbeddings = pgTable(
   },
   (t) => [index('article_embeddings_hnsw_idx').using('hnsw', t.embedding.op('vector_cosine_ops'))],
 );
+
+// ---------- Восстановление пароля (порт PULSE, миграция 0018) ----------
+// 6-значный код, TTL 15 минут, одноразовый; старые коды юзера удаляются при новом запросе.
+export const passwordResetCodes = pgTable('password_reset_codes', {
+  id: serial('id').primaryKey(),
+  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  code: varchar('code', { length: 6 }).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  usedAt: timestamp('used_at', { withTimezone: true }),
+  used: boolean('used').notNull().default(false),
+});
