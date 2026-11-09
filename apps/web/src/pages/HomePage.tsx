@@ -116,11 +116,22 @@ export default function HomePage() {
         {trends?.trends.slice(0, 12).map((t) => (
           <Link key={t.slug} to={`/trend/${t.slug}`} className={`group ${CAROUSEL_ITEM}`}>
             <div className="relative flex aspect-[3/4] w-full flex-col justify-end overflow-hidden rounded-lg border border-[#2a2a2a] bg-gradient-to-br from-zinc-800 to-zinc-900 p-4 transition-colors group-hover:border-[#beff00]/50">
-              <span className="text-xs uppercase tracking-wide text-[#c9ff2a]">Тренд</span>
-              <h3 className="mt-1 text-xl font-bold">{t.name}</h3>
-              {t.description && (
-                <p className="mt-2 line-clamp-3 text-sm text-zinc-400">{t.description.replace(/<[^>]*>/g, ' ')}</p>
+              {t.coverUrl && (
+                <img
+                  src={t.coverUrl}
+                  alt={t.name}
+                  loading="lazy"
+                  className="absolute inset-0 h-full w-full object-cover"
+                />
               )}
+              <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/40 to-transparent" />
+              <div className="relative">
+                <span className="text-xs uppercase tracking-wide text-[#c9ff2a]">Тренд</span>
+                <h3 className="mt-1 text-xl font-bold">{t.name}</h3>
+                {t.description && (
+                  <p className="mt-2 line-clamp-3 text-sm text-zinc-400">{t.description.replace(/<[^>]*>/g, ' ')}</p>
+                )}
+              </div>
             </div>
           </Link>
         ))}

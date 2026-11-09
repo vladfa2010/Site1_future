@@ -284,8 +284,13 @@ entitiesRouter.post('/industries', authRequired, requireRole('admin', 'super_adm
 // ---------- Тренды ----------
 
 entitiesRouter.get('/trends', async (_req, res) => {
-  const rows = await db.select().from(trends).orderBy(trends.name).limit(100);
-  res.json({ trends: rows });
+  const rows = await db
+    .select({ trend: trends, coverUrl: media.filePath })
+    .from(trends)
+    .leftJoin(media, eq(trends.coverMediaId, media.id))
+    .orderBy(trends.name)
+    .limit(100);
+  res.json({ trends: rows.map(({ trend, coverUrl }) => ({ ...trend, coverUrl })) });
 });
 
 // GET /api/trends/kosmos — лендинг-тренд: лонгрид + статьи

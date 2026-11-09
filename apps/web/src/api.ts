@@ -131,7 +131,7 @@ export const api = {
   story: (slug: string) => get<StoryDetail>(`/stories/${slug}`),
   ideaEvents: (articleId: number, type = 'sobytie') =>
     get<{ events: ArticleListItem[] }>(`/articles/${articleId}/events?type=${type}`),
-  trends: () => get<{ trends: { slug: string; name: string; description: string | null }[] }>('/trends'),
+  trends: () => get<{ trends: { slug: string; name: string; description: string | null; coverUrl: string | null }[] }>('/trends'),
   screener: (params: Record<string, string> = {}) => {
     const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v)).toString();
     return get<{ ideas: Idea[]; total: number }>(`/screener${qs ? `?${qs}` : ''}`);
