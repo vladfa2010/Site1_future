@@ -1,0 +1,72 @@
+# Caddy: ЛОКАЛЬНЫЙ режим — HTTP без TLS, тот же домен (через /etc/hosts → 127.0.0.1).
+# Punycode: xn--b1aghca0aeahc1am7c.xn--p1ai = инвестиционно.рф
+{
+  auto_https off
+}
+
+(security) {
+  encode zstd gzip
+  header {
+    X-Content-Type-Options nosniff
+    X-Frame-Options DENY
+    Referrer-Policy strict-origin-when-cross-origin
+    -Server
+  }
+}
+
+# Основной сайт (API и uploads — тот же origin)
+http://xn--b1aghca0aeahc1am7c.xn--p1ai {
+  import security
+
+  handle_path /sitemap.xml {
+      reverse_proxy api:4000
+  }
+  handle_path /robots.txt {
+      reverse_proxy api:4000
+  }
+
+  # ТЗ-10: бот-детект (SSR-рендер для поисковиков/соцсетей). Локально — для паритета с продом.
+  @bots {
+      not path /uploads/* /api/*
+      header_regexp User-Agent (?i)(googlebot|google-inspectiontool|bingbot|yandex(bot|accessibility|images|metrika|video)|duckduckbot|slurp|baiduspider|applebot|telegrambot|vkshare|facebookexternalhit|twitterbot|linkedinbot|whatsapp|discordbot|pinterestbot|redditbot|bytespider|seznambot|Mail\.RU_Bot|exabot)
+  }
+  handle @bots {
+      rewrite * /render?path={uri}
+      reverse_proxy api:4000 {
+          header_up X-Bot-Render 1
+          header_up User-Agent {http.request.header.User-Agent}
+      }
+  }
+
+  handle_path /api/* {
+      reverse_proxy api:4000
+  }
+  handle_path /uploads/* {
+      reverse_proxy api:4000
+  }
+  handle {
+      reverse_proxy web:80
+  }
+}
+
+# Админка — отдельный поддомен
+http://admin.xn--b1aghca0aeahc1am7c.xn--p1ai {
+  import security
+
+  respond /robots.txt 200 {
+      body "User-agent: *
+Disallow: /
+"
+      content_type text/plain
+  }
+
+  handle_path /api/* {
+      reverse_proxy api:4000
+  }
+  handle_path /uploads/* {
+      reverse_proxy api:4000
+  }
+  handle {
+      reverse_proxy admin:80
+  }
+}

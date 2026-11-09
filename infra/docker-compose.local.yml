@@ -1,0 +1,26 @@
+# Локальный запуск полного стека с привязкой адреса инвестиционно.рф.
+# Использование (из корня репо):
+#   docker compose -f infra/docker-compose.yml -f infra/docker-compose.local.yml up -d --build
+# Затем прописать в /etc/hosts:
+#   127.0.0.1 xn--b1aghca0aeahc1am7c.xn--p1ai admin.xn--b1aghca0aeahc1am7c.xn--p1ai
+# Сайт: http://инвестиционно.рф  Админка: http://admin.инвестиционно.рф (admin@local / admin123)
+services:
+  db:
+    environment:
+      POSTGRES_PASSWORD: newinvest-local # локальный-only пароль, не для сервера
+
+  api:
+    environment:
+      JWT_SECRET: local-dev-secret-change-me
+      CORS_ORIGINS: http://xn--b1aghca0aeahc1am7c.xn--p1ai,http://admin.xn--b1aghca0aeahc1am7c.xn--p1ai
+      PUBLIC_SITE_URL: http://xn--b1aghca0aeahc1am7c.xn--p1ai
+      ADMIN_EMAIL: admin@local
+      ADMIN_PASSWORD: admin123
+      MOONSHOT_API_KEY: ${MOONSHOT_API_KEY:-}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+
+  caddy:
+    ports:
+      - '80:80'
+    volumes:
+      - ./Caddyfile.local:/etc/caddy/Caddyfile:ro

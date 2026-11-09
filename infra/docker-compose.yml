@@ -7,7 +7,8 @@ services:
     environment:
       POSTGRES_DB: newinvest
       POSTGRES_USER: ${POSTGRES_USER:-newinvest}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:? задайте в .env}
+      # ⚠️ локальный дефолт для запуска без .env; на СЕРВЕРЕ обязательно задать свой в infra/.env
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-newinvest-local}
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -25,8 +26,8 @@ services:
       db:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgres://${POSTGRES_USER:-newinvest}:${POSTGRES_PASSWORD}@db:5432/newinvest
-      JWT_SECRET: ${JWT_SECRET:? задайте в .env}
+      DATABASE_URL: postgres://${POSTGRES_USER:-newinvest}:${POSTGRES_PASSWORD:-newinvest-local}@db:5432/newinvest
+      JWT_SECRET: ${JWT_SECRET:-local-dev-secret-change-me}
       CORS_ORIGINS: ${CORS_ORIGINS:-https://xn--b1aghca0aeahc1am7c.xn--p1ai,https://admin.xn--b1aghca0aeahc1am7c.xn--p1ai}  # punycode! Origin из браузера всегда xn--
       UPLOAD_DIR: /app/uploads
       # ключи/модели Kimi удобнее задавать в админке (/kimi) — env как fallback:
