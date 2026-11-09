@@ -153,9 +153,10 @@ export default function KimiSettingsPage() {
             <input className="input w-full font-mono" value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} />
             <p className="mt-1 text-xs text-zinc-600">OpenAI-совместимый, оканчивается на /v1. По умолчанию https://api.moonshot.ai/v1</p>
           </div>
-          <ModelSelect label="Модель для текстов (лиды, SEO, черновики)" value={textModel} onChange={setTextModel} options={kimiTextOptions} />
-          <ModelSelect label="Модель для генерации обложек" value={imageModel} onChange={setImageModel} options={imageOptions} />
+          <ModelSelect id="kimi-text-model" label="Модель для текстов (лиды, SEO, черновики)" value={textModel} onChange={setTextModel} options={kimiTextOptions} />
+          <ModelSelect id="kimi-image-model" label="Модель для генерации обложек" value={imageModel} onChange={setImageModel} options={imageOptions} />
           <ModelSelect
+            id="kimi-embed-model"
             label="Модель эмбеддингов (векторный поиск)"
             value={embedModel}
             onChange={setEmbedModel}
@@ -184,6 +185,7 @@ export default function KimiSettingsPage() {
             <p className="mt-1 text-xs text-zinc-600">Фиксирован — OpenAI-совместимый API DeepSeek, подмена хоста запрещена (защита ключа)</p>
           </div>
           <ModelSelect
+            id="deepseek-model"
             label="Модель DeepSeek"
             value={deepseekModel}
             onChange={setDeepseekModel}
@@ -248,20 +250,18 @@ function StatusLine({ label, models, error }: { label: string; models: string[];
   );
 }
 
-function ModelSelect({ label, value, onChange, options, hint }: { label: string; value: string; onChange: (v: string) => void; options: string[]; hint?: string }) {
+function ModelSelect({ id, label, value, onChange, options, hint }: { id: string; label: string; value: string; onChange: (v: string) => void; options: string[]; hint?: string }) {
+  // текущее значение, которого нет в списке (например, модель вывели из каталога), —
+  // показываем отдельным пунктом, чтобы не потерять
+  const valueMissing = value && !options.includes(value);
   return (
     <div>
       <label className="label">{label}</label>
-      <input
-        className="input w-full font-mono"
-        list={`dl-${label}`}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder="выберите из списка или введите вручную"
-      />
-      <datalist id={`dl-${label}`}>
-        {options.map((m) => <option key={m} value={m} />)}
-      </datalist>
+      <select id={id} className="input w-full font-mono" value={value} onChange={(e) => onChange(e.target.value)}>
+        {valueMissing && <option value={value}>{value} (текущая, нет в каталоге)</option>}
+        {!value && <option value="">— выберите модель —</option>}
+        {options.map((m) => <option key={m} value={m}>{m}</option>)}
+      </select>
       {hint && <p className="mt-1 text-xs text-zinc-600">{hint}</p>}
     </div>
   );
