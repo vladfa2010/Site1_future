@@ -251,14 +251,10 @@ function StatusLine({ label, models, error }: { label: string; models: string[];
 }
 
 function ModelSelect({ id, label, value, onChange, options, hint }: { id: string; label: string; value: string; onChange: (v: string) => void; options: string[]; hint?: string }) {
-  // текущее значение, которого нет в списке (например, модель вывели из каталога), —
-  // показываем отдельным пунктом, чтобы не потерять
-  const valueMissing = value && !options.includes(value);
   return (
     <div>
       <label className="label">{label}</label>
       <select id={id} className="input w-full font-mono" value={value} onChange={(e) => onChange(e.target.value)}>
-        {valueMissing && <option value={value}>{value} (текущая, нет в каталоге)</option>}
         {!value && <option value="">— выберите модель —</option>}
         {options.map((m) => <option key={m} value={m}>{m}</option>)}
       </select>
