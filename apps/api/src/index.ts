@@ -42,6 +42,15 @@ app.disable('x-powered-by'); // фингерпринт (аудит 2026-11-08)
 app.set('trust proxy', ['loopback', 'linklocal', 'uniquelocal']);
 
 // безопасность: заголовки + CORS-allowlist + лимиты
+// не даём непойманной async-ошибке в роуте уронить процесс (Express 4 не ловит rejections —
+// так погиб прогон e2e: дубль slug → unhandledRejection → весь API лёг)
+process.on('unhandledRejection', (reason) => {
+  console.error('[unhandledRejection]', reason instanceof Error ? reason.message : reason);
+});
+process.on('uncaughtException', (reason) => {
+  console.error('[uncaughtException]', reason instanceof Error ? reason.message : reason);
+});
+
 app.use(securityHeaders);
 app.use(corsAllowlist(config.corsOrigins));
 app.use('/api/', apiLimiter);

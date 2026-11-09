@@ -80,7 +80,7 @@ docker compose -f infra/docker-compose.yml -f infra/docker-compose.local.yml dow
 | Сервис | Образ/сборка | Роль |
 |---|---|---|
 | db | pgvector/pgvector:pg17 | PostgreSQL + векторный поиск (модуль embeddings) |
-| api | infra/docker/Dockerfile.api | Express API :4000, миграции при старте, сид админа |
+| api | infra/docker/Dockerfile.api | Express API :1003, миграции при старте, сид админа |
 | web | infra/docker/Dockerfile.web | Сайт: vite build → nginx |
 | admin | infra/docker/Dockerfile.admin | Админка: vite build → nginx (поддомен admin.) |
 | caddy | caddy:2 | TLS (прод) / HTTP (локально), /api и /uploads → api, бот-детект → SSR-рендер |

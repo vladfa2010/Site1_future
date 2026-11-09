@@ -9,7 +9,7 @@ export default defineConfig({
     port: 1001,
     strictPort: true,
     proxy: {
-      '/api': 'http://localhost:4000',
+      '/api': 'http://localhost:1003',
     },
   },
 });

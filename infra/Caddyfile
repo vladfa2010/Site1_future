@@ -20,10 +20,10 @@ xn--b1aghca0aeahc1am7c.xn--p1ai {
   # ТЗ-10: sitemap.xml + robots.txt — динамическая генерация на API.
   # Порядок важен: ДО @bots, чтобы краулер получил XML, а не HTML-рендер.
   handle /sitemap.xml {
-      reverse_proxy api:4000
+      reverse_proxy api:1003
   }
   handle /robots.txt {
-      reverse_proxy api:4000
+      reverse_proxy api:1003
   }
 
   # ТЗ-10: бот-детект — поисковые/соцботы получают серверный HTML-рендер.
@@ -41,7 +41,7 @@ xn--b1aghca0aeahc1am7c.xn--p1ai {
       # Исходный путь уходит как ?path=; API вернёт 301 (redirects),
       # 404 (неподдерживаемый) или HTML-рендер
       rewrite * /render?path={uri}
-      reverse_proxy api:4000 {
+      reverse_proxy api:1003 {
           header_up X-Bot-Render 1
           # без этого Caddy при rewrite передаёт своё дефолтное UA;
           # API логирует и классифицирует именно исходный
@@ -50,10 +50,10 @@ xn--b1aghca0aeahc1am7c.xn--p1ai {
   }
 
   handle /api/* {
-      reverse_proxy api:4000
+      reverse_proxy api:1003
   }
   handle /uploads/* {
-      reverse_proxy api:4000
+      reverse_proxy api:1003
   }
   handle {
       reverse_proxy web:80
@@ -74,10 +74,10 @@ Disallow: /
   }
 
   handle /api/* {
-      reverse_proxy api:4000
+      reverse_proxy api:1003
   }
   handle /uploads/* {
-      reverse_proxy api:4000
+      reverse_proxy api:1003
   }
   handle {
       reverse_proxy admin:80

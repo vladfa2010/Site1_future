@@ -1,6 +1,6 @@
 #!/bin/bash
 # E2E-тесты платформы: админка + юзер-сценарии
-B="${API_URL:-http://localhost:4000}"
+B="${API_URL:-http://localhost:1003}"
 J='Content-Type: application/json'
 PASS=0; FAIL=0; FAILED=()
 
@@ -264,7 +264,7 @@ echo "  UI-сценарии — ручной проход (ревью v2.1 №2)
 echo "════════════════════════════════════════"
 # POST share 201/whitelist/429 — см. блок ТЗ-04 выше (не дублируем)
 # страница статьи отдаёт 200 через SPA-fallback (vite dev на WEB_URL)
-W="${WEB_URL:-http://localhost:5173}"
+W="${WEB_URL:-http://localhost:1001}"
 curl -s -o /dev/null -w "%{http_code}" "$W/novost/e2e-novost" | grep -q 200 && ok || bad "share: страница статьи 200 (SPA-fallback)"
 # GET detail отдаёт sharesCount — запрос с админ-токеном: e2e-novost в этот момент auth-материал (paywall-тест выше), anon получил бы 403
 curl -s "$B/api/articles/novost/e2e-novost" -H "$A" | grep -q '"sharesCount"' && ok || bad "share: detail отдаёт sharesCount"
@@ -313,7 +313,7 @@ curl -s -o /dev/null -w "%{http_code}" -X POST "$B/api/admin/content-master/rewr
 curl -s -o /dev/null -w "%{http_code}" -X POST "$B/api/admin/content-master/rewrite" -H "$UA" -H "$J" -d '{"source":"длинный исходный текст для проверки","instruction":"перепиши"}' | grep -q 403 && ok || bad "cm: reader 403"
 CM=$(curl -s -m 120 -X POST "$B/api/admin/content-master/rewrite" -H "$A" -H "$J" -d '{"source":"SpaceX вывела на орбиту тысячу спутников. Компания лидирует на рынке спутникового интернета, конкуренты отстают по числу аппаратов.","instruction":"перепиши как короткую новость для инвесторов"}')
 echo "$CM" | python3 -c "import json,sys; d=json.load(sys.stdin); assert d.get('title') and '<p>' in (d.get('html') or ''), d; print('ok')" > /dev/null 2>&1 && ok || bad "cm: рерайт отдаёт title+html"
-curl -s -o /dev/null -w "%{http_code}" -X POST "$B/api/admin/content-master/rewrite" -H "$A" -H "$J" -d '{"source":"http://localhost:4000/api/health","instruction":"перепиши"}' | grep -q 400 && ok || bad "cm: SSRF localhost 400"
+curl -s -o /dev/null -w "%{http_code}" -X POST "$B/api/admin/content-master/rewrite" -H "$A" -H "$J" -d '{"source":"http://localhost:1003/api/health","instruction":"перепиши"}' | grep -q 400 && ok || bad "cm: SSRF localhost 400"
 curl -s -o /dev/null -w "%{http_code}" -X POST "$B/api/admin/content-master/rewrite" -H "$A" -H "$J" -d '{"source":"коротко","instruction":"перепиши"}' | grep -q 400 && ok || bad "cm: короткий source 400"
 # события по идее: публично, только sobytie+published, не-идея → 404
 IDEAID=$(curl -s "$B/api/articles/ideya/proekt-prometej-sledujushhij-shag-razvitija-ii" | jqget "d['article']['id']")

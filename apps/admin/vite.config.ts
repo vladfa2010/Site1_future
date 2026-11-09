@@ -8,6 +8,6 @@ export default defineConfig({
     // фиксированный порт 1002 (strictPort — не перескакивает)
     port: 1002,
     strictPort: true,
-    proxy: { '/api': 'http://localhost:4000', '/uploads': 'http://localhost:4000' },
+    proxy: { '/api': 'http://localhost:1003', '/uploads': 'http://localhost:1003' },
   },
 });
