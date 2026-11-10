@@ -1,5 +1,59 @@
 # Деплой
 
+## Локально на Windows — моноконтейнер (текущий рабочий стек)
+
+Весь стек живёт в **одном контейнере** `investicionno-all` (PostgreSQL+pgvector, API,
+Caddy со статикой сайта и админки, supervisord внутри). Лимиты контейнера:
+**1 CPU, 3 ГБ ОЗУ**. Ничего на внешний сервер не публикуется — это локальная копия.
+
+**Запуск/пересборка:**
+```bash
+docker-compose -f infra/docker-compose.all.yml up -d --build   # старт/пересоздание
+docker-compose -f infra/docker-compose.all.yml down            # стоп
+docker exec investicionno-all supervisorctl status             # postgres / api / caddy
+docker exec investicionno-all supervisorctl restart api        # перезапуск сервиса внутри
+docker-compose -f infra/docker-compose.all.yml logs -f         # логи
+```
+
+**Адреса:** сайт `https://инвестиционно.рф`, админка `https://admin.инвестиционно.рф`
+(punycode `xn--b1aghca0aeahc1am7c.xn--p1ai`). HTTPS — Caddy с `tls internal`;
+корневой CA (`caddy-root.crt`) один раз установлен в доверенные Windows
+(`install-cert.ps1`), PKI хранится на volume `infra_caddy_data`, пересборки доверие не ломают.
+
+**hosts.** Оба домена должны смотреть на машину, где крутится Docker. Важно: если
+`127.0.0.1:80/443` уже занят другим локальным проектом (например, старым WordPress —
+слушает как отдельная привязка `wslrelay` и выигрывает у `0.0.0.0` Docker) или
+включён системный прокси — домен надо вести на **LAN-IP машины** и добавить в
+исключения прокси:
+```
+192.168.2.228 xn--b1aghca0aeahc1am7c.xn--p1ai
+192.168.2.228 admin.xn--b1aghca0aeahc1am7c.xn--p1ai
+```
+(192.168.2.228 — адрес, выданный роутером; после смены IP обновить hosts.)
+Прокси: `HKCU:\...\Internet Settings → ProxyOverride` дописать оба домена, иначе
+браузер пойдёт через прокси наружу и откроет реальный сайт.
+
+**Доступ внутрь:**
+```bash
+docker exec investicionno-all psql -h 127.0.0.1 -U newinvest -d newinvest -c "..."  # БД
+docker exec investicionno-all ls /app/uploads                                        # медиа
+```
+API внутри контейнера на `127.0.0.1:4000` (env `PORT=4000`), снаружи только через Caddy.
+
+**Контент из бэкапа прода:** БД — дампом (`psql < dump.sql`, рабочая БД `newinvest`),
+медиа — архивом `uploads/*.tar.gz` в `/app/uploads`. Файлы WP из `wp-content`
+раздаёт блок `handle /wp-content/*` в `infra/docker/Caddyfile.all` из `/app/uploads`.
+
+**Ссылки между сайтом и админкой:** при сборке задаются `VITE_ADMIN_URL` /
+`VITE_SITE_URL` (домены выше), dev-фолбэки — `http://localhost:1001/1002`.
+
+**Dev-режим (без Docker):** фиксированная тройка портов — сайт `:1001`, админка `:1002`,
+API `:1003` (`strictPort` в vite-конфигах, не перескакивает). В Docker это не действует.
+
+---
+
+## Многоконтейнерный стек (compose.yml + local/limits)
+
 Быстрый старт с git: клонируем репозиторий и поднимаем полный стек
 (PostgreSQL+pgvector, API, сайт, админка, Caddy) в Docker.
 
