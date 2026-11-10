@@ -4,7 +4,7 @@ import { useAuth } from '../auth';
  * Кнопка «Редактировать» на страницах контента — только для admin/super_admin.
  * Прямой переход в админку на редактирование этой сущности (новая вкладка).
  * URL админки: env VITE_ADMIN_URL (prod-сборке задать на адрес админ-поддомена),
- * локально — http://localhost:5274.
+ * локально — http://localhost:1002.
  */
 export function AdminEditLink({ to }: { to: string }) {
   const { user } = useAuth();
