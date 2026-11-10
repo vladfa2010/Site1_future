@@ -47,6 +47,21 @@ API внутри контейнера на `127.0.0.1:4000` (env `PORT=4000`), �
 **Ссылки между сайтом и админкой:** при сборке задаются `VITE_ADMIN_URL` /
 `VITE_SITE_URL` (домены выше), dev-фолбэки — `http://localhost:1001/1002`.
 
+**Вход в админку.** Токены админов (admin/super_admin) живут **12 часов** (у обычных
+ролей — 7 дней): по истечении API отвечает `401 {"error":"unauthorized"}` — просто
+войдите заново. Супер-админ создаётся сидом (`ADMIN_EMAIL`/`ADMIN_PASSWORD` в compose,
+в текущем стенде `admin@local` / `admin123`; дополнительных пользователей — в админке,
+раздел «Пользователи»).
+
+**Ключи LLM (ContentMaster, генерация текстов).** В коде ключей нет и быть не должно.
+Порядок применения настроек: **БД → env**. Хранилище — таблица `meta_fields`
+(`owner_type='app'`, ключи `deepseek_api_key`, `kimi_api_key`, `llm_provider`,
+`deepseek_model` и т.д.). Добавить ключ: админка → «Настройки Kimi» → вставить ключ →
+сохранить (переживает пересборки). Альтернатива — env `DEEPSEEK_API_KEY` /
+`MOONSHOT_API_KEY` в compose-файле или `apps/api/.env` (fallback, если БД пустая).
+Без ключа ContentMaster падает на вызовах LLM; каталог моделей DeepSeek — `deepseek-flash`,
+`deepseek-v4-pro` (`deepseek-chat`/`deepseek-reasoner` — устаревшие алиасы).
+
 **Dev-режим (без Docker):** фиксированная тройка портов — сайт `:1001`, админка `:1002`,
 API `:1003` (`strictPort` в vite-конфигах, не перескакивает). В Docker это не действует.
 
