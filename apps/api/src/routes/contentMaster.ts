@@ -251,7 +251,7 @@ function mockRewrite(text: string): { title: string; html: string; excerpt: stri
 /** Извлечь JSON из ответа модели (модели иногда оборачивают в ```json). */
 function parseRewrite(raw: string): { title: string; html: string; excerpt: string } {
   const m = raw.match(/\{[\s\S]*\}/);
-  if (!m) throw new Error('Модель не вернула JSON');
+  if (!m) throw new Error(`Модель не вернула JSON: ${raw.slice(0, 200) || '(пустой ответ)'}`);
   const d = JSON.parse(m[0]) as { title?: unknown; html?: unknown; excerpt?: unknown };
   const title = typeof d.title === 'string' ? d.title.trim() : '';
   const html = typeof d.html === 'string' ? d.html.trim() : '';
@@ -293,7 +293,7 @@ async function rewriteWithLlm(
 /** Разбор JSON фактчека из ответа модели. */
 function parseFactcheck(raw: string): { report: { claim: string; status: string; comment: string }[]; summary: string } {
   const m = raw.match(/\{[\s\S]*\}/);
-  if (!m) throw new Error('Модель не вернула JSON');
+  if (!m) throw new Error(`Модель не вернула JSON: ${raw.slice(0, 200) || '(пустой ответ)'}`);
   const d = JSON.parse(m[0]) as { report?: unknown; summary?: unknown };
   const report = Array.isArray(d.report)
     ? (d.report as { claim?: unknown; status?: unknown; comment?: unknown }[]).map((r) => ({
