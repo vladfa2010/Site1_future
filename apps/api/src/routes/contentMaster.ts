@@ -274,8 +274,11 @@ async function rewriteWithLlm(
         { role: 'system', content: system },
         { role: 'user', content: prompt },
       ],
-      max_tokens: 4096,
+      max_tokens: 8192,
       temperature: 0.5,
+      // гарантируем JSON на выходе (DeepSeek/Moonshot поддерживают response_format);
+      // иначе рассуждающие модели (deepseek-v4-pro) иногда возвращают текст вне схемы
+      response_format: { type: 'json_object' },
     }),
   });
   const data = (await res.json().catch(() => ({}))) as {
