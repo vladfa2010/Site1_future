@@ -25,6 +25,7 @@ import { adminPlansRouter } from './routes/adminPlans.js';
 import { searchRouter } from './routes/search.js';
 import { kimiSettingsRouter } from './routes/kimiSettings.js';
 import { contentMasterRouter } from './routes/contentMaster.js';
+import { telemetryRouter } from './routes/telemetry.js';
 import { metricsRouter } from './routes/metrics.js';
 import { trendingRouter } from './routes/trending.js';
 
@@ -90,6 +91,7 @@ app.use('/api', marketRouter);     // /market/chart
 app.use('/api', featuresRouter);   // /features + /admin/features (ПЕРЕД cabinet: у него router-wide auth)
 app.use('/api/admin/plans', adminPlansRouter); // админка тарифов (новая модель subscription_plans)
 app.use('/api/admin/content-master', contentMasterRouter); // AI-редактор черновиков
+app.use('/api', telemetryRouter); // публичная телеметрия (page-load)
 app.use('/api', cabinetRouter);    // /favorites /subscriptions /feed (auth) — ПОСЛЕДНИЙ: router.use(authRequired)
 
 // ТЗ-10: bot-рендер + sitemap/robots — ПЕРЕД 404-хэндлером и вне /api/ (Caddy шлёт сюда напрямую)

@@ -560,3 +560,12 @@ export const passwordResetCodes = pgTable('password_reset_codes', {
   usedAt: timestamp('used_at', { withTimezone: true }),
   used: boolean('used').notNull().default(false),
 });
+
+// ---------- Телеметрия загрузки страниц (0019) ----------
+export const pageLoadEvents = pgTable('page_load_events', {
+  id: serial('id').primaryKey(),
+  path: varchar('path', { length: 120 }).notNull(),
+  loadMs: integer('load_ms').notNull(),
+  userId: integer('user_id').references(() => users.id, { onDelete: 'set null' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});

@@ -314,3 +314,31 @@ metricsRouter.get('/admin/metrics/at-risk-counts', ...adminOnly, async (_req, re
   for (const r of rows.rows) counts[r.k] = Number(r.n);
   res.json({ counts });
 });
+
+// ---------- Скорость страниц: телеметрия загрузки (page_load_events) ----------
+metricsRouter.get('/admin/metrics/page-load', ...adminOnly, async (req, res) => {
+  const d = days(req, 7, 90);
+  const { rows } = await db.execute<{
+    path: string; loads: string; avg_ms: string; max_ms: string; last_at: string | null;
+  }>(sql`
+    select path,
+           count(*)::int as loads,
+           round(avg(load_ms))::int as avg_ms,
+           max(load_ms)::int as max_ms,
+           max(created_at) as last_at
+    from page_load_events
+    where created_at > now() - ${`${d} days`}::interval
+    group by path
+    order by avg_ms desc
+    limit 50
+  `);
+  res.json({
+    pages: rows.map((r) => ({
+      path: r.path,
+      loads: Number(r.loads),
+      avgMs: Number(r.avg_ms),
+      maxMs: Number(r.max_ms),
+      lastAt: r.last_at,
+    })),
+  });
+});

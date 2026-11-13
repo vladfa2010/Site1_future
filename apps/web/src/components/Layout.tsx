@@ -4,10 +4,13 @@ import { useAuthModal } from '../authModal';
 import AuthModal from './AuthModal';
 import { Avatar } from './Avatar';
 import { TrendingTicker } from './TrendingTicker';
+import { usePageLoadTelemetry, useLoadingBarActive } from '../lib/pageLoad';
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   const { open } = useAuthModal();
+  usePageLoadTelemetry(); // телеметрия скорости страниц → метрики админки
+  const loading = useLoadingBarActive();
 
   const onPropose = () => {
     if (!user) {
@@ -18,6 +21,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
   };
   return (
     <div className="mx-auto flex min-h-screen max-w-5xl flex-col px-4">
+      {/* индикатор загрузки данных: видно, что страница ещё грузится */}
+      {loading && (
+        <div className="fixed inset-x-0 top-0 z-50 h-0.5 overflow-hidden bg-zinc-900">
+          <div className="loading-bar h-full w-1/3 bg-gradient-to-r from-[#beff00] to-[#c9ff2a]" />
+        </div>
+      )}
       <header className="flex items-center justify-between border-b border-[#2a2a2a] py-4">
         <Link to="/" className="text-lg font-bold text-zinc-100">
           Инвестиционно<span className="text-[#beff00]">.рф</span>

@@ -315,6 +315,11 @@ CM=$(curl -s -m 120 -X POST "$B/api/admin/content-master/rewrite" -H "$A" -H "$J
 echo "$CM" | python3 -c "import json,sys; d=json.load(sys.stdin); assert d.get('title') and '<p>' in (d.get('html') or ''), d; print('ok')" > /dev/null 2>&1 && ok || bad "cm: рерайт отдаёт title+html"
 curl -s -o /dev/null -w "%{http_code}" -X POST "$B/api/admin/content-master/rewrite" -H "$A" -H "$J" -d '{"source":"http://localhost:1003/api/health","instruction":"перепиши"}' | grep -q 400 && ok || bad "cm: SSRF localhost 400"
 curl -s -o /dev/null -w "%{http_code}" -X POST "$B/api/admin/content-master/rewrite" -H "$A" -H "$J" -d '{"source":"коротко","instruction":"перепиши"}' | grep -q 400 && ok || bad "cm: короткий source 400"
+# телеметрия скорости страниц: публичный приём + агрегат в метриках
+curl -s -o /dev/null -w "%{http_code}" -X POST "$B/api/telemetry/page-load" -H "$J" -d '{"path":"/novost/e2e-tele","loadMs":1500}' | grep -q 201 && ok || bad "telemetry: приём 201"
+curl -s -o /dev/null -w "%{http_code}" -X POST "$B/api/telemetry/page-load" -H "$J" -d '{"path":"../etc/passwd","loadMs":1500}' | grep -q 400 && ok || bad "telemetry: путь вне / 400"
+curl -s "$B/api/admin/metrics/page-load?days=7" -H "$A" | python3 -c "import json,sys; ps=json.load(sys.stdin)['pages']; assert any(p['path']=='/novost/e2e-tele' and p['loads']>=1 and p['avgMs']==1500 for p in ps), ps; print('ok')" > /dev/null 2>&1 && ok || bad "telemetry: агрегат в метриках"
+curl -s -o /dev/null -w "%{http_code}" "$B/api/admin/metrics/page-load" | grep -q 401 && ok || bad "telemetry: метрика anon 401"
 # события по идее: публично, только sobytie+published, не-идея → 404
 IDEAID=$(curl -s "$B/api/articles/ideya/proekt-prometej-sledujushhij-shag-razvitija-ii" | jqget "d['article']['id']")
 curl -s -o /dev/null -w "%{http_code}" "$B/api/articles/$IDEAID/events" | grep -q 200 && ok || bad "idea-events: 200"

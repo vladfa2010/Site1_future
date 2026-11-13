@@ -10,11 +10,12 @@ interface DayPoint { day: string; n: number; cumulative?: number }
 interface FunnelStep { step: string; count: number; pct_of_prev: number; pct_of_total: number }
 interface DailyRetentionRow { cohort: string; users: number; d1: number | null; d7: number | null; d30: number | null }
 interface AtRiskUser { id: number; email: string; displayName: string | null; lastView: string; views: number }
+interface PageLoadRow { path: string; loads: number; avgMs: number; maxMs: number; lastAt: string | null }
 
 const fmt = (n: number | string) => Number(n).toLocaleString('ru-RU');
 
-type SectionName = 'overview' | 'registrations' | 'engagement' | 'retention' | 'retentionDaily' | 'funnel' | 'topTrends' | 'atRiskCounts';
-const SECTIONS: SectionName[] = ['overview', 'registrations', 'engagement', 'retention', 'retentionDaily', 'funnel', 'topTrends'];
+type SectionName = 'overview' | 'registrations' | 'engagement' | 'retention' | 'retentionDaily' | 'funnel' | 'topTrends' | 'atRiskCounts' | 'pageLoad';
+const SECTIONS: SectionName[] = ['overview', 'pageLoad', 'registrations', 'engagement', 'retention', 'retentionDaily', 'funnel', 'topTrends'];
 
 export default function MetricsPage() {
   const [days, setDays] = useState(30);
@@ -65,6 +66,11 @@ export default function MetricsPage() {
           setData((p) => ({ ...p, funnel: r.funnel }));
           break;
         }
+        case 'pageLoad': {
+          const r = await api<{ pages: PageLoadRow[] }>(`/admin/metrics/page-load?days=${days}`);
+          setData((p) => ({ ...p, pageLoad: r.pages }));
+          break;
+        }
         case 'topTrends': {
           const r = await api<{ trends: { id: number; name: string; articles: number; views: number }[] }>(`/admin/metrics/top-trends?days=${days}`);
           setData((p) => ({ ...p, topTrends: r.trends }));
@@ -95,6 +101,7 @@ export default function MetricsPage() {
   const retentionDaily = (data.retentionDaily as DailyRetentionRow[] | undefined) ?? [];
   const funnel = (data.funnel as FunnelStep[] | undefined) ?? [];
   const topTrends = (data.topTrends as { id: number; name: string; articles: number; views: number }[] | undefined) ?? [];
+  const pageLoad = (data.pageLoad as PageLoadRow[] | undefined) ?? [];
 
   const stickiness = overview && Number(overview.mau) > 0
     ? Math.round((Number(overview.dau) / Number(overview.mau)) * 100)
@@ -161,6 +168,49 @@ export default function MetricsPage() {
           )}
         </section>
       </div>
+
+      {/* Скорость страниц: телеметрия загрузки с сайта */}
+      <section className="card">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="font-semibold">Скорость страниц</h2>
+          {isLoading('pageLoad') && <span className="text-xs text-zinc-500">загрузка…</span>}
+        </div>
+        {pageLoad.length === 0 && !isLoading('pageLoad') ? (
+          <p className="text-sm text-zinc-500">Данных пока нет — замеры появятся после посещений страниц сайта.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="border-b border-zinc-800">
+                <tr>
+                  <th className="th">Страница</th>
+                  <th className="th text-right">Загрузок</th>
+                  <th className="th text-right">Среднее</th>
+                  <th className="th text-right">Макс</th>
+                  <th className="th text-right">Последняя</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pageLoad.map((pg) => (
+                  <tr key={pg.path} className="border-b border-zinc-800 last:border-0">
+                    <td className="td font-mono text-xs">{pg.path}</td>
+                    <td className="td text-right">{pg.loads}</td>
+                    <td className={`td text-right font-semibold ${pg.avgMs > 2000 ? 'text-red-400' : pg.avgMs > 800 ? 'text-amber-400' : 'text-green-400'}`}>
+                      {(pg.avgMs / 1000).toFixed(1)} с
+                    </td>
+                    <td className="td text-right text-zinc-500">{(pg.maxMs / 1000).toFixed(1)} с</td>
+                    <td className="td text-right text-xs text-zinc-500">
+                      {pg.lastAt ? new Date(pg.lastAt).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        <p className="mt-2 text-xs text-zinc-600">
+          Замер: открытие страницы → готовность данных. Полоса прогресса на сайте видна во время загрузки.
+        </p>
+      </section>
 
       {/* Воронка */}
       <section className="card space-y-2">
