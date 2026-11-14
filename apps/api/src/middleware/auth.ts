@@ -21,16 +21,29 @@ declare module 'express-serve-static-core' {
   }
 }
 
-function verifyToken(token: string): AuthUser | null {
+async function verifyToken(token: string): Promise<AuthUser | null> {
   try {
     // алгоритм пиннется: защита от alg-confusion (RS256/None-атаки)
     const payload = jwt.verify(token, config.jwtSecret, { algorithms: ['HS256'] }) as jwt.JwtPayload;
-    if (typeof payload.sub !== 'string') return null;
+    if (typeof payload.sub !== 'string' || !Number.isFinite(Number(payload.sub))) return null;
+    // Роль и тариф — ТОЛЬКО из БД, payload не доверяем (подделка прав/пейволла при утечке секрета, аудит 2026-11-14)
+    const [u] = await db
+      .select({
+        id: users.id,
+        role: users.role,
+        tariffId: users.tariffId,
+        tariffExpiresAt: users.tariffExpiresAt,
+        isBlocked: users.isBlocked,
+      })
+      .from(users)
+      .where(eq(users.id, Number(payload.sub)))
+      .limit(1);
+    if (!u || u.isBlocked) return null; // удалён/заблокирован — токен не принимаем
     return {
-      id: Number(payload.sub),
-      role: payload.role as string,
-      tariffId: (payload.tariffId as number | null) ?? null,
-      tariffExpiresAt: (payload.tariffExpiresAt as string | null) ?? null,
+      id: u.id,
+      role: u.role,
+      tariffId: u.tariffId ?? null,
+      tariffExpiresAt: u.tariffExpiresAt ? u.tariffExpiresAt.toISOString() : null,
     };
   } catch {
     return null;
@@ -38,18 +51,18 @@ function verifyToken(token: string): AuthUser | null {
 }
 
 /** Опциональная авторизация: токен есть — заполняем req.user, нет — пропускаем */
-export function optionalAuth(req: Request, _res: Response, next: NextFunction) {
+export async function optionalAuth(req: Request, _res: Response, next: NextFunction) {
   const header = req.headers.authorization;
   if (header?.startsWith('Bearer ')) {
-    req.user = verifyToken(header.slice(7)) ?? undefined;
+    req.user = (await verifyToken(header.slice(7))) ?? undefined;
   }
   next();
 }
 
 /** Обязательная авторизация */
-export function authRequired(req: Request, res: Response, next: NextFunction) {
+export async function authRequired(req: Request, res: Response, next: NextFunction) {
   const header = req.headers.authorization;
-  const user = header?.startsWith('Bearer ') ? verifyToken(header.slice(7)) : null;
+  const user = header?.startsWith('Bearer ') ? await verifyToken(header.slice(7)) : null;
   if (!user) {
     res.status(401).json({ error: 'unauthorized' });
     return;

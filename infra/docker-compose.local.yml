@@ -11,6 +11,10 @@ services:
 
   api:
     environment:
+      # Локальный dev-стек: development-режим — дефолтные секреты ниже допустимы
+      # (production-guard'ы в config.ts/seed.ts применяться не будут).
+      # НИКОГДА не использовать эти значения на сервере.
+      NODE_ENV: development
       JWT_SECRET: local-dev-secret-change-me
       CORS_ORIGINS: http://xn--b1aghca0aeahc1am7c.xn--p1ai,http://admin.xn--b1aghca0aeahc1am7c.xn--p1ai
       PUBLIC_SITE_URL: http://xn--b1aghca0aeahc1am7c.xn--p1ai

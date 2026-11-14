@@ -6,9 +6,20 @@
 Caddy со статикой сайта и админки, supervisord внутри). Лимиты контейнера:
 **1 CPU, 3 ГБ ОЗУ**. Ничего на внешний сервер не публикуется — это локальная копия.
 
+**Секреты (обязательно).** Дефолтные значения из репо запрещены (аудит 2026-11-14:
+публично известный JWT_SECRET → подделка токена с ролью super_admin, обход пейволла,
+выгрузка базы через /api/admin/users/export.csv). Контейнер доступен по LAN — создайте
+`infra/.env` со своими значениями:
+```
+POSTGRES_PASSWORD=<сильный пароль>
+ADMIN_PASSWORD=<сильный пароль супер-админа>
+JWT_SECRET=<сильный секрет, не короче 32 символов>
+```
+Без этих переменных compose упадёт ещё на `up` (`${VAR:?}`), а API — при старте (fail fast).
+
 **Запуск/пересборка:**
 ```bash
-docker-compose -f infra/docker-compose.all.yml up -d --build   # старт/пересоздание
+docker-compose -f infra/docker-compose.all.yml --env-file infra/.env up -d --build   # старт/пересоздание
 docker-compose -f infra/docker-compose.all.yml down            # стоп
 docker exec investicionno-all supervisorctl status             # postgres / api / caddy
 docker exec investicionno-all supervisorctl restart api        # перезапуск сервиса внутри
@@ -129,7 +140,7 @@ docker compose -f infra/docker-compose.yml -f infra/docker-compose.local.yml dow
    ```
    POSTGRES_USER=newinvest
    POSTGRES_PASSWORD=<сильный пароль>
-   JWT_SECRET=<сильный секрет>
+   JWT_SECRET=<сильный секрет ≥ 32 символов — иначе API не стартует (fail fast)>
    PUBLIC_SITE_URL=https://xn--b1aghca0aeahc1am7c.xn--p1ai
    MOONSHOT_API_KEY=<опционально>
    DEEPSEEK_API_KEY=<опционально>

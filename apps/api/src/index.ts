@@ -29,10 +29,7 @@ import { telemetryRouter } from './routes/telemetry.js';
 import { metricsRouter } from './routes/metrics.js';
 import { trendingRouter } from './routes/trending.js';
 
-// В production запрет на дефолтный секрет — fail fast
-if (process.env.NODE_ENV === 'production' && config.jwtSecret === 'dev-secret-change-me') {
-  throw new Error('JWT_SECRET не задан (production). Остановка.');
-}
+// Проверка JWT_SECRET в production — в config.ts (throw до старта, fail fast)
 
 const app = express();
 app.disable('x-powered-by'); // фингерпринт (аудит 2026-11-08)

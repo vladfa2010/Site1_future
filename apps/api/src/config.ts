@@ -1,8 +1,19 @@
 import 'dotenv/config';
 
+// В production JWT_SECRET обязателен: короткие значения и известные дефолты
+// (они публиковались в репо) отклоняем до старта сервера — fail fast вместо
+// молчаливой работы с ключом, которым любой может подписать токен.
+// Аудит 2026-11-14: guard раньше сравнивался с 'dev-secret-change-me', а дефолты
+// в compose/Dockerfile были 'local-dev-secret-change-me' — проверка никогда не срабатывала.
+const KNOWN_WEAK_SECRETS = new Set(['dev-secret-change-me', 'local-dev-secret-change-me']);
+const envJwtSecret = process.env.JWT_SECRET ?? '';
+if (process.env.NODE_ENV === 'production' && (envJwtSecret.length < 32 || KNOWN_WEAK_SECRETS.has(envJwtSecret))) {
+  throw new Error('JWT_SECRET не задан, короче 32 символов или совпадает с дефолтом из репо (production). Задайте сильный секрет в env. Остановка.');
+}
+
 export const config = {
   port: Number(process.env.PORT ?? 1003), // фиксированный порт API: 1001 сайт / 1002 админка / 1003 API
-  jwtSecret: process.env.JWT_SECRET ?? 'dev-secret-change-me',
+  jwtSecret: envJwtSecret || 'dev-secret-change-me', // dev-fallback; в production выше — throw
   // DATABASE_URL читает напрямую packages/db (drizzle), здесь не дублируем
   adminEmail: process.env.ADMIN_EMAIL ?? 'admin@local',
   adminPassword: process.env.ADMIN_PASSWORD ?? 'admin123',

@@ -1,5 +1,7 @@
 # Моноконтейнер «всё в одном»: PostgreSQL+pgvector, API, Caddy (статика сайта и админки).
-# Старт с нуля: docker-compose -f infra/docker-compose.all.yml up -d --build
+# Старт с нуля:
+#   1) создайте infra/.env c POSTGRES_PASSWORD, ADMIN_PASSWORD, JWT_SECRET (см. DEPLOY.md)
+#   2) docker-compose -f infra/docker-compose.all.yml --env-file infra/.env up -d --build
 # Логи:      docker-compose -f infra/docker-compose.all.yml logs -f
 # Стоп:      docker-compose -f infra/docker-compose.all.yml down
 services:
@@ -24,12 +26,15 @@ services:
     mem_limit: 3g
     mem_reservation: 512m
     environment:
-      POSTGRES_USER: newinvest
-      POSTGRES_PASSWORD: newinvest-local
+      # Секреты обязательны — без них compose упадёт ещё на up, а не на старте API.
+      # Дефолтные значения из репо запрещены (аудит 2026-11-14: публично известные
+      # секреты → подделка JWT с ролью super_admin и обход пейволла).
+      POSTGRES_USER: ${POSTGRES_USER:-newinvest}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Задайте POSTGRES_PASSWORD в infra/.env}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@local}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Задайте ADMIN_PASSWORD в infra/.env (сильный пароль супер-админа)}
+      JWT_SECRET: ${JWT_SECRET:?Задайте JWT_SECRET в infra/.env (не короче 32 символов)}
       PORT: 4000
-      ADMIN_EMAIL: admin@local
-      ADMIN_PASSWORD: admin123
-      JWT_SECRET: local-dev-secret-change-me
       CORS_ORIGINS: https://xn--b1aghca0aeahc1am7c.xn--p1ai,https://admin.xn--b1aghca0aeahc1am7c.xn--p1ai
       PUBLIC_SITE_URL: https://xn--b1aghca0aeahc1am7c.xn--p1ai
 

@@ -8,6 +8,8 @@ services:
       POSTGRES_DB: newinvest
       POSTGRES_USER: ${POSTGRES_USER:-newinvest}
       # ⚠️ локальный дефолт для запуска без .env; на СЕРВЕРЕ обязательно задать свой в infra/.env
+      # (API в production (NODE_ENV=production в Dockerfile.api) отказывается стартовать
+      # с коротким/дефолтным паролем — fail fast, см. apps/api/src/config.ts)
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-newinvest-local}
     volumes:
       - pgdata:/var/lib/postgresql/data
@@ -27,11 +29,15 @@ services:
         condition: service_healthy
     environment:
       DATABASE_URL: postgres://${POSTGRES_USER:-newinvest}:${POSTGRES_PASSWORD:-newinvest-local}@db:5432/newinvest
+      # ⚠️ локальный дефолт; на СЕРВЕРЕ задайте свой в infra/.env. Дефолт из репо — публично
+      # известный: API в production (NODE_ENV=production в Dockerfile.api) не стартует с ним —
+      # fail fast (аудит 2026-11-14). Локальный docker-стек переопределяет в docker-compose.local.yml.
       JWT_SECRET: ${JWT_SECRET:-local-dev-secret-change-me}
       CORS_ORIGINS: ${CORS_ORIGINS:-https://xn--b1aghca0aeahc1am7c.xn--p1ai,https://admin.xn--b1aghca0aeahc1am7c.xn--p1ai}  # punycode! Origin из браузера всегда xn--
       UPLOAD_DIR: /app/uploads
       # ключи/модели Kimi удобнее задавать в админке (/kimi) — env как fallback:
       MOONSHOT_API_KEY: ${MOONSHOT_API_KEY:-}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
       RESEND_API_KEY: ${RESEND_API_KEY:-}
       TG_BOT_TOKEN: ${TG_BOT_TOKEN:-}
       PUBLIC_SITE_URL: ${PUBLIC_SITE_URL:-https://xn--b1aghca0aeahc1am7c.xn--p1ai}
