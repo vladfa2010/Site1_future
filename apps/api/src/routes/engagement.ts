@@ -13,7 +13,7 @@
  * Доверие к X-Forwarded-For (нужно для key IP анонимов) — app.set('trust proxy', …) в index.ts.
  */
 import { Router } from 'express';
-import rateLimit from 'express-rate-limit';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import { z } from 'zod';
 import { and, eq, gte, sql } from 'drizzle-orm';
 import { db, articles, articleLikes, articleShareEvents } from '@newinvest/db';
@@ -41,7 +41,7 @@ const shareLimiterAnon = rateLimit({
   windowMs: 3_600_000,
   limit: 10,
   ...limiterDefaults,
-  keyGenerator: (req) => req.ip ?? 'unknown-ip',
+  keyGenerator: (req) => ipKeyGenerator(req.ip ?? 'unknown-ip'), // IPv6-нормализация: иначе обход лимита (ERR_ERL_KEY_GEN_IPV6)
   skip: (req) => !!req.user,
   message: { error: 'share limit reached' },
 });

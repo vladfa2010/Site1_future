@@ -365,7 +365,7 @@ export default function AuthModal() {
                                 onChange={(e) => setNewPassword(e.target.value)}
                                 placeholder="Минимум 8 символов"
                                 autoComplete="new-password"
-                                className={`${inputCls} px-11`}
+                                className={`${inputCls} pl-11 pr-11`}
                               />
                               <button
                                 type="button"
@@ -433,7 +433,7 @@ export default function AuthModal() {
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
                             placeholder="••••••••"
-                            className={`${inputCls} px-11`}
+                            className={`${inputCls} pl-11 pr-11`}
                           />
                           <button
                             type="button"
@@ -578,7 +578,7 @@ export default function AuthModal() {
                                     }}
                                     placeholder="••••••••"
                                     autoComplete="new-password"
-                                    className={`${inputCls} px-11`}
+                                    className={`${inputCls} pl-11 pr-11`}
                                   />
                                   <button
                                     type="button"
