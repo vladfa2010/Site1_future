@@ -83,3 +83,27 @@ Disallow: /
       reverse_proxy admin:80
   }
 }
+
+# Админка по IP:8080 — доступ до переключения DNS и как запасной адрес.
+# Держим НЕ в git-игноре: блок статичный, секретов нет. Сертификат — внутренний Caddy (предупреждение в браузере).
+:8080 {
+  import security
+
+  handle /robots.txt {
+      respond 200 {
+          body "User-agent: *
+Disallow: /
+"
+      }
+  }
+
+  handle /api/* {
+      reverse_proxy api:1003
+  }
+  handle /uploads/* {
+      reverse_proxy api:1003
+  }
+  handle {
+      reverse_proxy admin:80
+  }
+}

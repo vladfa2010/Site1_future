@@ -12,9 +12,13 @@ services:
     image: investicionno-all:latest
     container_name: investicionno-all
     restart: unless-stopped
+    # Локальный стенд по умолчанию слушает ТОЛЬКО localhost (аудит 2026-11-14:
+    # бинд 0.0.0.0 + дефолтные креденшелы = захват админки из LAN).
+    # Доступ из LAN — только осознанно: BIND_ADDR=<LAN-IP> в infra/.env + сильные
+    # JWT_SECRET/ADMIN_PASSWORD (см. DEPLOY.md, раздел «Секреты» и «hosts»).
     ports:
-      - '80:80'
-      - '443:443'
+      - '${BIND_ADDR:-127.0.0.1}:80:80'
+      - '${BIND_ADDR:-127.0.0.1}:443:443'
     volumes:
       # Переиспользуем данные из прежнего многоконтейнерного стека
       - pgdata:/var/lib/postgresql/data
