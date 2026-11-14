@@ -18,18 +18,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   });
 
-  // SSO-проброс: сайт передаёт ?auth=<token> → сохраняем, убираем из URL,
-  // затем подтягиваем профиль через /auth/me
+  // Профиль по токену: при монтировании и при SSO-пробросе из сайта
+  // (событие 'invest-sso' диспатчит main.tsx, когда postMessage принёс токен)
   useEffect(() => {
-    const url = new URL(window.location.href);
-    const handed = url.searchParams.get('auth');
-    if (handed) {
-      localStorage.setItem('token', handed);
-      url.searchParams.delete('auth');
-      window.history.replaceState(null, '', url.pathname + url.search);
-    }
-    const token = localStorage.getItem('token');
-    if (token && !user) {
+    const loadMe = () => {
+      const token = localStorage.getItem('token');
+      if (!token) return;
       void fetch('/api/auth/me', { headers: { Authorization: `Bearer ${token}` } })
         .then((r) => (r.ok ? r.json() : Promise.reject()))
         .then((data) => {
@@ -39,7 +33,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .catch(() => {
           localStorage.removeItem('token');
         });
-    }
+    };
+    loadMe();
+    window.addEventListener('invest-sso', loadMe);
+    return () => window.removeEventListener('invest-sso', loadMe);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const login = async (email: string, password: string) => {

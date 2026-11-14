@@ -37,6 +37,34 @@ export default function CabinetPage() {
   const isAdmin = user?.role === 'admin' || user?.role === 'super_admin';
   const ADMIN_URL = import.meta.env.VITE_ADMIN_URL ?? 'http://localhost:1002';
 
+  // SSO в админку через postMessage, НЕ через URL (аудит 2026-11-14: токен в ?auth=
+  // оседал в логах Caddy, истории браузера и Referer). Открываем админку и шлём токен
+  // на её origin, повторяя отправку, пока она не загрузится и не ответит ack.
+  // Фолбэк при блокировке попапа — обычный переход без токена (вход через форму логина).
+  const openAdmin = () => {
+    const origin = new URL(ADMIN_URL).origin;
+    const token = localStorage.getItem('token');
+    const win = window.open(ADMIN_URL, '_blank');
+    if (!win) {
+      window.location.href = ADMIN_URL;
+      return;
+    }
+    if (!token) return;
+    const payload = { type: 'invest-sso', token };
+    const send = () => win.postMessage(payload, origin);
+    send();
+    const timer = window.setInterval(send, 500);
+    const cleanup = () => {
+      window.clearInterval(timer);
+      window.removeEventListener('message', onAck);
+    };
+    const onAck = (e: MessageEvent) => {
+      if (e.origin === origin && (e.data as { type?: string } | null)?.type === 'invest-sso-ack') cleanup();
+    };
+    window.addEventListener('message', onAck);
+    window.setTimeout(cleanup, 10_000); // ack не пришёл — больше не дёргаем окно
+  };
+
   if (!user) {
     return (
       <div className="mx-auto max-w-md py-10 text-center">
@@ -72,12 +100,12 @@ export default function CabinetPage() {
         </div>
         <div className="flex shrink-0 items-center gap-2">
           {isAdmin && (
-            <a
-              href={`${ADMIN_URL}/?auth=${localStorage.getItem('token') ?? ''}`}
+            <button
+              onClick={openAdmin}
               className="rounded-full border border-[#beff00]/50 px-4 py-2 text-sm text-[#c9ff2a] hover:bg-[#beff00]/10"
             >
               Админка
-            </a>
+            </button>
           )}
           <button onClick={logout} className="rounded-full border border-[#2a2a2a] px-4 py-2 text-sm text-zinc-400 hover:border-red-500/50 hover:text-red-400">
             Выйти
