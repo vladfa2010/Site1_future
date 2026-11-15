@@ -15,11 +15,12 @@ export async function generateText(prompt: string, maxChars = 400, persona: Text
   return chatCompletion(s.baseUrl, key, s.textModel, prompt, maxChars, persona, 'Kimi');
 }
 
-export type TextPersona = 'editor' | 'seo';
+export type TextPersona = 'editor' | 'seo' | 'visual';
 
 const PERSONA_PROMPTS: Record<TextPersona, string> = {
   editor: 'Ты редактор инвестиционного медиа. Пишешь короткие ёмкие лиди на русском. Отвечаешь ТОЛЬКО готовым текстом без пояснений и кавычек.',
   seo: 'Ты опытный SEO-специалист. Читаешь статью целиком и пишешь meta description: уникально, информативно, с ключевыми словами из текста, с призывом к действию где уместно. Без кликбейта и обещаний. Отвечаешь ТОЛЬКО готовым текстом без пояснений и кавычек.',
+  visual: 'Ты арт-директор новостного медиа. По тексту статьи пишешь промпт для фотореалистичной новостной обложки на английском: главный объект/сцена, обстановка, кинематографический свет, объектив и ракурс, настроение. Одним абзацем 40-80 слов, без пояснений и кавычек.',
 };
 
 /** OpenAI-совместимый chat/completions — общий для Kimi и DeepSeek. */

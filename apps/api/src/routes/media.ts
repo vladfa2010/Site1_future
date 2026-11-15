@@ -126,7 +126,7 @@ mediaRouter.post('/media/generate', authRequired, requireRole('admin', 'super_ad
 const generateTextSchema = z.object({
   prompt: z.string().min(10),
   maxChars: z.number().int().min(50).max(2000).default(400),
-  persona: z.enum(['editor', 'seo']).default('editor'), // системный промпт — только из этого списка (сервер)
+  persona: z.enum(['editor', 'seo', 'visual']).default('editor'), // системный промпт — только из этого списка (сервер)
 });
 
 // POST /api/media/generate-text {prompt, maxChars, persona} — текст по промпту (клиент собирает контекст)

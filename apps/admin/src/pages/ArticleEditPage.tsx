@@ -278,6 +278,35 @@ export default function ArticleEditPage() {
   };
 
   // ---- ТЗ-11: генерация заголовка — промпт читает ВСЕ поля, модель даёт 3 варианта ----
+  // ---- Двухэтапная генерация обложки: этап 1 — DeepSeek пишет фотореалистичный промпт ----
+  const genCoverPrompt = async () => {
+    setGenBusy(true);
+    setGenError(null);
+    try {
+      const plain = stripHtml(form.contentHtml);
+      if (plain.length < 50) {
+        setGenError('Сначала заполните текст статьи — промпт пишется из него');
+        return;
+      }
+      const prompt = [
+        `ЗАГОЛОВОК: ${form.title}`,
+        form.excerpt ? `ЛИД: ${form.excerpt}` : '',
+        `ТИП: ${form.type}`,
+        `ТЕКСТ: ${plain.slice(0, 4000)}`,
+      ].filter(Boolean).join('\n');
+      const res = await api<{ text: string; mock: boolean }>('/media/generate-text', {
+        method: 'POST',
+        body: JSON.stringify({ prompt, maxChars: 700, persona: 'visual' }),
+      });
+      setGenPrompt(res.text.trim());
+      if (res.mock) setGenError('Промпт собран из текста (mock — без ключа LLM). Его можно править и копировать.');
+    } catch (e) {
+      setGenError(e instanceof Error ? e.message : 'Ошибка генерации промпта');
+    } finally {
+      setGenBusy(false);
+    }
+  };
+
   const genTitle = async () => {
     setTitleBusy(true);
     setError(null);
@@ -674,11 +703,16 @@ export default function ArticleEditPage() {
         )}
         {genOpen && (
           <div className="space-y-2 rounded-lg border border-zinc-800 bg-zinc-800/50 p-3">
-            <label className="label">Промпт (собран из контекста статьи — можно редактировать)</label>
-            <textarea className="input font-mono" rows={5} value={genPrompt} onChange={(e) => setGenPrompt(e.target.value)} />
+            <div className="flex items-end justify-between">
+              <label className="label">Промпт (этап 1 — из статьи, можно править и копировать)</label>
+              <button type="button" className="btn-secondary px-2 py-0.5 text-xs" onClick={() => void genCoverPrompt()} disabled={genBusy}>
+                {genBusy && genPrompt === '' ? 'Пишем…' : '✨ Из статьи'}
+              </button>
+            </div>
+            <textarea className="input font-mono" rows={5} value={genPrompt} onChange={(e) => setGenPrompt(e.target.value)} placeholder="Нажмите «✨ Из статьи» — DeepSeek напишет фотореалистичный промпт. При ошибке Kimi промпт останется здесь для копирования." />
             {genError && <p className="text-sm text-red-400">{genError}</p>}
             <button type="button" className="btn" onClick={() => void generateCover()} disabled={genBusy || genPrompt.length < 10}>
-              {genBusy ? 'Генерируем…' : 'Сгенерировать'}
+              {genBusy ? 'Генерируем…' : 'Сгенерировать (этап 2 — Kimi)'}
             </button>
           </div>
         )}
