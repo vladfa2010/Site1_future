@@ -33,6 +33,6 @@ export const config = {
   // Ключ также задаётся в админке (хранится в БД); env — fallback.
   deepseekApiKey: process.env.DEEPSEEK_API_KEY ?? '',
   uploadDir: process.env.UPLOAD_DIR ?? 'uploads',
-  // CORS: доверенные origin'ы (через запятую)
-  corsOrigins: (process.env.CORS_ORIGINS ?? 'http://localhost:1001,http://localhost:1002,http://localhost:5173,http://localhost:5174').split(','),
+  // CORS: доверенные origin'ы (через запятую; trim — пробел в списке не должен ломать origin, аудит 2026-11-14)
+  corsOrigins: (process.env.CORS_ORIGINS ?? 'http://localhost:1001,http://localhost:1002,http://localhost:5173,http://localhost:5174').split(',').map((s) => s.trim()).filter(Boolean),
 };

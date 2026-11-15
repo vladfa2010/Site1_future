@@ -3,7 +3,7 @@
  * Логин: test@test.ru / test
  * В PRODUCTION не работает (защита от поднятия админа с паролем "test" в проде).
  */
-import bcrypt from 'bcrypt';
+import bcrypt from 'bcryptjs';
 import { db, users } from '@newinvest/db';
 import { eq } from 'drizzle-orm';
 

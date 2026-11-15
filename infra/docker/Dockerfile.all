@@ -5,9 +5,8 @@
 # ── Этап 1: сборка фронтов (web, admin) и установка зависимостей всех воркспейсов ──
 FROM node:20-slim AS build
 WORKDIR /app
-# bcrypt собирается из исходников при недоступности prebuilt-бинарников
-RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ \
-  && rm -rf /var/lib/apt/lists/*
+# bcryptjs — чистый JS (без native-модулей), toolchain для сборки не нужен
+# (аудит 2026-11-14: замена bcrypt — закрыт critical tar / high node-pre-gyp)
 COPY package.json package-lock.json ./
 COPY packages/db/package.json packages/db/
 COPY apps/web/package.json apps/web/

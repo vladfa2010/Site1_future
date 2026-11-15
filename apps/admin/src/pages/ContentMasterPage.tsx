@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { api } from '../api';
+import { sanitizeArticleHtml } from '../lib/sanitize';
 
 /**
  * ContentMaster — AI-редактор для быстрого производства черновиков.
@@ -56,14 +57,8 @@ function slugify(title: string): string {
     .slice(0, 80) || 'novyj-material';
 }
 
-/** Минимальная очистка для ПРЕДПРОСМОТРА (на сайте рендер идёт через полноценный sanitize). */
-function previewHtml(html: string): string {
-  return html
-    .replace(/<(script|iframe|object|embed|form)[\s\S]*?(<\/\1>|$)/gi, '')
-    .replace(/\son\w+\s*=\s*"[^"]*"/gi, '')
-    .replace(/\son\w+\s*=\s*'[^']*'/gi, '')
-    .replace(/javascript:/gi, '');
-}
+/** Предпросмотр — только через sanitize-html с allowlist (apps/admin/src/lib/sanitize).
+ *  Регулярная «очистка» HTML запрещена: обходится тривиально (аудит 2026-11-14). */
 
 /** Тег-инпут с автодополнением: ввод → дроплист → Enter добавляет. */
 function TagInput({ label, value, onChange, fetchOptions, placeholder }: {
@@ -329,7 +324,7 @@ export default function ContentMasterPage() {
                 {m.result.html && (
                   <div
                     className="prose-sm max-h-56 space-y-2 overflow-y-auto rounded border border-zinc-800 bg-zinc-950 p-3 text-sm leading-relaxed text-zinc-300 [&_h2]:mt-3 [&_h2]:font-bold [&_h3]:mt-2 [&_h3]:font-bold [&_ul]:list-disc [&_ul]:pl-5 [&_blockquote]:border-l-2 [&_blockquote]:border-zinc-700 [&_blockquote]:pl-3 [&_a]:text-[#c9ff2a]"
-                    dangerouslySetInnerHTML={{ __html: previewHtml(m.result.html) }}
+                    dangerouslySetInnerHTML={{ __html: sanitizeArticleHtml(m.result.html) }}
                   />
                 )}
               </div>

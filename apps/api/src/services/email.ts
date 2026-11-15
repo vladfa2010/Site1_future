@@ -96,3 +96,16 @@ export function renderWeeklyReport(
   }
   return SHELL(`Неделя на Инвестиционно.рф: итоги для вас, ${esc(name)}`, parts.join(''));
 }
+
+/** Письмо с кодом восстановления пароля. name — пользовательский ввод,
+ *  экранируется обязательно (аудит 2026-11-14: раньше в auth.ts вставлялся сырым). */
+export function renderResetCodeEmail(name: string, code: string): string {
+  const greeting = name.trim() ? `${esc(name.trim())}, здравствуйте!` : 'Здравствуйте!';
+  return SHELL(
+    'Код восстановления пароля',
+    `<p style="color:#e5e7eb;font-size:14px;">${greeting}</p>
+   <p style="color:#9ca3af;font-size:14px;">Код для восстановления пароля:</p>
+   <p style="margin:12px 0;"><b style="font-size:24px;letter-spacing:4px;color:#beff00;">${esc(code)}</b></p>
+   <p style="color:#9ca3af;font-size:13px;">Код действует 15 минут. Если вы не запрашивали восстановление — просто проигнорируйте это письмо.</p>`,
+  );
+}

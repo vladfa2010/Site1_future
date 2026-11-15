@@ -2,14 +2,14 @@
  * Auth: регистрация (reader/author) и вход. JWT как во втором проекте (bcrypt + jsonwebtoken).
  */
 import { Router } from 'express';
-import bcrypt from 'bcrypt';
+import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { z } from 'zod';
 import { db, users, articles, tariffPlans, passwordResetCodes } from '@newinvest/db';
 import { and, eq, sql, desc } from 'drizzle-orm';
-import { randomInt } from 'node:crypto';
+import { randomInt, timingSafeEqual } from 'node:crypto';
 import { signToken, authRequired } from '../middleware/auth.js';
-import { sendEmail, emailEnabled } from '../services/email.js';
+import { sendEmail, emailEnabled, renderResetCodeEmail } from '../services/email.js';
 import { config } from '../config.js';
 
 export const authRouter = Router();
@@ -17,6 +17,7 @@ export const authRouter = Router();
 const passwordSchema = z.string()
   .min(8, 'Минимум 8 символов')
   .max(100)
+  .refine((p) => Buffer.byteLength(p, 'utf8') <= 72, 'Пароль длиннее 72 байт — сократите (кириллица занимает 2 байта на символ)')
   .refine((p) => {
     // минимум 2 класса символов из: буквы / цифры / спецсимволы; не все символы одинаковые
     const hasLetters = /[a-zA-Zа-яА-ЯёЁ]/.test(p);
@@ -169,8 +170,14 @@ const resetPasswordSchema = z.object({
   password: passwordSchema,
 });
 
+// Аудит 2026-11-14: защита восстановления пароля от перебора и email-бомбинга
+const MAX_CODE_ATTEMPTS = 5;        // промахов подряд → код инвалидируется
+const RESEND_INTERVAL_MS = 60_000;  // повторная отправка письма на email — не чаще раза в минуту
+
 // POST /api/auth/forgot-password — 6-значный код на почту, TTL 15 минут.
 // Анти-перебор: ответ всегда {success:true} — не раскрываем, существует ли email.
+// Анти-бомбинг (аудит 2026-11-14): живой код не пересоздаём, а повторно шлём тот же;
+// плюс не чаще раза в минуту на email и отдельный лимитер forgotPasswordLimiter на IP.
 // Без RESEND_API_KEY письмо не уходит: в dev код пишется в лог (подсказка в ответе).
 authRouter.post('/forgot-password', async (req, res) => {
   const parsed = forgotSchema.safeParse(req.body);
@@ -185,22 +192,32 @@ authRouter.post('/forgot-password', async (req, res) => {
     res.json({ success: true }); // не раскрываем существование аккаунта
     return;
   }
-  await db.delete(passwordResetCodes).where(eq(passwordResetCodes.userId, user.id));
-  const code = randomInt(100000, 1000000).toString();
-  await db.insert(passwordResetCodes).values({
-    userId: user.id,
-    code,
-    expiresAt: new Date(Date.now() + 15 * 60 * 1000),
-  });
+  const now = new Date();
+  const [active] = await db.select().from(passwordResetCodes)
+    .where(and(eq(passwordResetCodes.userId, user.id), eq(passwordResetCodes.used, false)))
+    .orderBy(desc(passwordResetCodes.createdAt))
+    .limit(1);
+  let code: string;
+  if (active && active.expiresAt > now) {
+    // код жив — не пересоздаём (иначе бесконечный поток писем на чужую почту);
+    // но и не флудим: повторная отправка не чаще раза в минуту на email
+    if (now.getTime() - active.createdAt.getTime() < RESEND_INTERVAL_MS) {
+      res.json({ success: true, delivered: emailEnabled() });
+      return;
+    }
+    code = active.code; // пересылаем тот же код
+  } else {
+    await db.delete(passwordResetCodes).where(eq(passwordResetCodes.userId, user.id));
+    code = randomInt(100000, 1000000).toString();
+    await db.insert(passwordResetCodes).values({
+      userId: user.id,
+      code,
+      expiresAt: new Date(now.getTime() + 15 * 60 * 1000),
+    });
+  }
   if (emailEnabled()) {
-    const name = user.displayName ?? '';
-    await sendEmail(
-      email,
-      'Код восстановления пароля — Инвестиционно.рф',
-      `<p>${name ? `${name}, здравствуйте!` : 'Здравствуйте!'}</p>
-       <p>Код для восстановления пароля: <b style="font-size:20px">${code}</b></p>
-       <p>Код действует 15 минут. Если вы не запрашивали восстановление — просто проигнорируйте это письмо.</p>`,
-    ).catch((e) => console.error('[auth] reset email failed:', (e as Error).message));
+    await sendEmail(email, 'Код восстановления пароля — Инвестиционно.рф', renderResetCodeEmail(user.displayName ?? '', code))
+      .catch((e) => console.error('[auth] reset email failed:', (e as Error).message));
   } else {
     // dev-режим без почты: код в лог, чтобы поток можно было пройти локально
     console.log(`[auth] reset code для ${email}: ${code} (RESEND_API_KEY не задан)`);
@@ -209,24 +226,44 @@ authRouter.post('/forgot-password', async (req, res) => {
 });
 
 // POST /api/auth/verify-code — проверка кода → resetToken (JWT purpose=password_reset, 15 минут)
+// Анти-перебор (аудит 2026-11-14): счётчик попыток на код, MAX_CODE_ATTEMPTS промахов →
+// код инвалидируется; сравнение через timingSafeEqual; плюс лимитер verifyCodeLimiter на IP.
 authRouter.post('/verify-code', async (req, res) => {
   const parsed = verifyCodeSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: 'validation', details: parsed.error.flatten() });
     return;
   }
+  const invalid = () => res.status(400).json({ error: 'Неверный или просроченный код' });
   const [user] = await db.select({ id: users.id }).from(users)
     .where(sql`lower(${users.email}) = lower(${parsed.data.email})`).limit(1);
   if (!user) {
-    res.status(400).json({ error: 'Неверный или просроченный код' });
+    invalid();
     return;
   }
   const [row] = await db.select().from(passwordResetCodes)
     .where(and(eq(passwordResetCodes.userId, user.id), eq(passwordResetCodes.used, false)))
     .orderBy(desc(passwordResetCodes.createdAt))
     .limit(1);
-  if (!row || row.code !== parsed.data.code || row.expiresAt < new Date()) {
-    res.status(400).json({ error: 'Неверный или просроченный код' });
+  if (!row || row.expiresAt < new Date()) {
+    invalid();
+    return;
+  }
+  // безопасное сравнение без раннего выхода по различию (паддинг на случай смены формата кода)
+  const a = Buffer.from(row.code.padEnd(8, '\0'));
+  const b = Buffer.from(parsed.data.code.padEnd(8, '\0'));
+  if (a.length !== b.length || !timingSafeEqual(a, b)) {
+    const attempts = row.attempts + 1;
+    if (attempts >= MAX_CODE_ATTEMPTS) {
+      await db.update(passwordResetCodes)
+        .set({ used: true, usedAt: new Date() })
+        .where(eq(passwordResetCodes.id, row.id)); // код исчерпан — инвалидируем
+    } else {
+      await db.update(passwordResetCodes)
+        .set({ attempts })
+        .where(eq(passwordResetCodes.id, row.id));
+    }
+    invalid();
     return;
   }
   await db.update(passwordResetCodes).set({ used: true, usedAt: new Date() }).where(eq(passwordResetCodes.id, row.id));

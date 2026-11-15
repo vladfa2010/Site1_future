@@ -34,8 +34,10 @@ const RENDER_TTL_MS = 15 * 60 * 1000;
 const BODY_WORDS = 100; // первые ~100 слов текста (не 300 — не выдаём текст бесплатно)
 const FEED_LINKS = 8; // внутренние ссылки в лентах для краулинга (§6.2: 5–10)
 
-// ---------- Кэш рендера (путь → HTML) ----------
-const renderCache = new Map<string, { html: string; expiresAt: number }>();
+// ---------- Кэш рендера (путь → origin → HTML) ----------
+// Аудит 2026-11-14: ключ кэша включает origin — иначе запрос с поддельным Host
+// отравливал canonical/OG/JSON-LD для всех ботов на 15 минут (host-header poisoning).
+const renderCache = new Map<string, Map<string, { html: string; expiresAt: number }>>();
 
 /** Инвалидация кэша рендера: конкретный путь (path без query) или весь кэш */
 export function invalidateRenderCache(path?: string): void {
@@ -78,12 +80,26 @@ export function normalizePath(raw: string): string | null {
   return p === '' ? '/' : p;
 }
 
-/** Публичный origin: PUBLIC_SITE_URL, fallback — Host заголовка запроса */
-export function siteOrigin(hostHeader: string | undefined): string {
+/** Публичный origin.
+ *  Аудит 2026-11-14: Host заголовку НЕ доверяем (host-header poisoning) —
+ *  принимаем только хост PUBLIC_SITE_URL и loopback (dev). Чужой/отсутствующий
+ *  Host → канонический origin из env (fallback localhost). */
+const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '::1', '[::1]']);
+
+function canonicalOrigin(): string {
   const env = process.env.PUBLIC_SITE_URL?.trim();
   if (env) return env.replace(/\/+$/, '');
-  const host = (hostHeader ?? `localhost:${process.env.PORT ?? 4000}`).trim();
-  return `http://${host}`.replace(/\/+$/, '');
+  return `http://localhost:${process.env.PORT ?? 4000}`;
+}
+
+export function siteOrigin(hostHeader: string | undefined): string {
+  const host = (hostHeader ?? '').trim().toLowerCase();
+  if (!host) return canonicalOrigin();
+  const env = process.env.PUBLIC_SITE_URL?.trim();
+  const envHost = env ? new URL(env).host.toLowerCase() : null;
+  if (envHost && host === envHost) return env!.replace(/\/+$/, '');
+  if (LOOPBACK_HOSTS.has(host)) return `http://${host}`;
+  return canonicalOrigin(); // поддельный Host — не попадает в canonical/OG/sitemap
 }
 
 // ---------- Рубрики и статические страницы (маппинг-источник текстов — здесь) ----------
@@ -553,7 +569,8 @@ export async function renderPath(rawPath: string, origin: string): Promise<Rende
     return { status: code, location: origin + redirect.newPath };
   }
 
-  const hit = renderCache.get(path);
+  const bucket = renderCache.get(path);
+  const hit = bucket?.get(origin);
   if (hit && hit.expiresAt > Date.now()) {
     return { status: 200, html: hit.html };
   }
@@ -562,6 +579,7 @@ export async function renderPath(rawPath: string, origin: string): Promise<Rende
   if (!page) return { status: 404 };
 
   const html = renderHtml(page, origin);
-  renderCache.set(path, { html, expiresAt: Date.now() + RENDER_TTL_MS });
+  if (!renderCache.has(path)) renderCache.set(path, new Map());
+  renderCache.get(path)!.set(origin, { html, expiresAt: Date.now() + RENDER_TTL_MS });
   return { status: 200, html };
 }

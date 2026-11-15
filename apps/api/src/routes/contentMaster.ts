@@ -8,6 +8,9 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { rateLimit } from 'express-rate-limit';
+import http from 'node:http';
+import https from 'node:https';
+import dns from 'node:dns/promises';
 import { authRequired, requireRole } from '../middleware/auth.js';
 import { getKimiSettings, DEEPSEEK_BASE_URL } from '../services/kimiSettings.js';
 
@@ -181,7 +184,7 @@ const FACTCHECK_SYSTEM = `Ты фактчекер инвестиционного
 
 const URL_RE = /^https?:\/\//i;
 
-/** Хосты, куда серверу (с LLM-ключами на борту) ходить нельзя — SSRF-защита. */
+/** Хосты, куда серверу (с LLM-ключами на борту) ходить нельзя — SSRF-защита (строковая, до резолва). */
 function assertPublicHost(hostname: string): void {
   const h = hostname.toLowerCase().replace(/^\[|\]$/g, '');
   if (
@@ -200,23 +203,89 @@ function assertPublicHost(hostname: string): void {
   }
 }
 
+/** IP-адрес публичный (не loopback/private/link-local/CGNAT/ULA/unspecified)? */
+function ipIsPublic(ip: string): boolean {
+  const v4 = ip.startsWith('::ffff:') ? ip.slice(7) : ip; // IPv4-mapped
+  if (/^127\./.test(v4) || v4 === '0.0.0.0') return false;
+  if (/^(10|169\.254|192\.168)\./.test(v4)) return false;
+  if (/^172\.(1[6-9]|2\d|3[01])\./.test(v4)) return false;
+  if (/^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(v4)) return false; // CGNAT 100.64/10
+  if (/^224\./.test(v4) || /^255\./.test(v4)) return false; // multicast/broadcast
+  const low = ip.toLowerCase();
+  if (low === '::1' || low === '::' || low.startsWith('fe80') || low.startsWith('fc') || low.startsWith('fd')) return false;
+  if (low.startsWith('ff')) return false; // IPv6 multicast
+  return true;
+}
+
+/** DNS lookup с проверкой адресов: хост допустим ТОЛЬКО если ВСЕ его адреса публичны.
+ *  Пропуск приватного среди публичных закрывает DNS rebinding (аудит 2026-11-14) —
+ *  иначе домен мог резолвиться в 127.0.0.1/10.x мимо строковой проверки hostname. */
+interface LookupAddr { address: string; family: number }
+
+async function lookupPublic(hostname: string): Promise<LookupAddr[]> {
+  const addrs = await dns.lookup(hostname, { all: true });
+  if (addrs.length === 0) throw new Error(`Не резолвится: ${hostname}`);
+  if (!addrs.every((a) => ipIsPublic(a.address))) {
+    throw new Error('Запрещённый адрес: hostname резолвится в приватную/служебную сеть (SSRF)');
+  }
+  return addrs;
+}
+
+/** SSRF-безопасный fetch: валидация hostname ДО и ПОСЛЕ резолва, ручные редиректы
+ *  (каждый хоп перепроверяется), таймаут, лимит тела. Возвращает {status, headers, body}. */
+function safeGet(rawUrl: string, redirectsLeft = 3): Promise<{ status: number; headers: http.IncomingHttpHeaders; body: string }> {
+  return new Promise((resolve, reject) => {
+    const u = new URL(rawUrl);
+    if (!/^https?:$/.test(u.protocol)) return reject(new Error('Только http(s) ссылки'));
+    if (u.username || u.password) return reject(new Error('URL с credentials не поддерживаются'));
+    assertPublicHost(u.hostname); // строковая проверка ДО резолва
+    const transport = u.protocol === 'https:' ? https : http;
+    lookupPublic(u.hostname)
+      .then((addrs) => {
+        const req = transport.get(
+          {
+            hostname: u.hostname,
+            port: u.port || (u.protocol === 'https:' ? 443 : 80),
+            path: `${u.pathname}${u.search}`,
+            headers: { 'User-Agent': 'Mozilla/5.0 (compatible; ContentMaster/1.0)' },
+            lookup: (_h, _o, cb) => cb(null, addrs[0].address, addrs[0].family),
+            timeout: 10_000,
+          },
+          (res) => {
+            const loc = res.headers.location;
+            if (res.statusCode! >= 300 && res.statusCode! < 400 && loc) {
+              res.resume(); // тело редиректа не нужно
+              if (redirectsLeft <= 0) return reject(new Error('Слишком много редиректов'));
+              const next = new URL(loc, u).toString();
+              safeGet(next, redirectsLeft - 1).then(resolve, reject); // хоп перепроверится целиком
+              return;
+            }
+            const chunks: Buffer[] = [];
+            let size = 0;
+            res.on('data', (c: Buffer) => {
+              size += c.length;
+              if (size > 2_000_000) { req.destroy(); reject(new Error('Страница больше 2 МБ')); return; }
+              chunks.push(c);
+            });
+            res.on('end', () => resolve({ status: res.statusCode!, headers: res.headers, body: Buffer.concat(chunks).toString('utf8') }));
+          },
+        );
+        req.on('timeout', () => req.destroy(new Error('Таймаут запроса (10 с)')));
+        req.on('error', reject);
+      })
+      .catch(reject);
+  });
+}
+
 /** Выкачать страницу и сверстать в чистый текст (strip scripts/styles/тегов). */
 async function fetchUrlText(rawUrl: string): Promise<string> {
-  const u = new URL(rawUrl);
-  if (!/^https?:$/.test(u.protocol)) throw new Error('Только http(s) ссылки');
-  assertPublicHost(u.hostname);
-  const res = await fetch(u.toString(), {
-    signal: AbortSignal.timeout(10_000),
-    redirect: 'follow',
-    headers: { 'User-Agent': 'Mozilla/5.0 (compatible; ContentMaster/1.0)' },
-  });
-  assertPublicHost(new URL(res.url).hostname); // редирект не должен увести во внутреннюю сеть
-  const type = res.headers.get('content-type') ?? '';
+  const res = await safeGet(rawUrl);
+  const type = String(res.headers['content-type'] ?? '');
   if (!/text\/html|text\/plain|application\/json/.test(type)) {
     throw new Error(`Неподдерживаемый тип контента: ${type.slice(0, 60)}`);
   }
-  const raw = (await res.text()).slice(0, 2_000_000);
-  if (!res.ok) throw new Error(`Страница ответила HTTP ${res.status}`);
+  const raw = res.body.slice(0, 2_000_000);
+  if (res.status < 200 || res.status >= 300) throw new Error(`Страница ответила HTTP ${res.status}`);
   return htmlToText(raw);
 }
 

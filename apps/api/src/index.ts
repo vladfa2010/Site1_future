@@ -1,8 +1,9 @@
 import express from 'express';
 import path from 'node:path';
 import cron from 'node-cron';
+import multer from 'multer';
 import { config } from './config.js';
-import { securityHeaders, corsAllowlist, apiLimiter, loginLimiter, registerLimiter, generateLimiter, generateTextLimiter, telegramLinkLimiter, searchLimiter, renderLimiter } from './middleware/security.js';
+import { securityHeaders, corsAllowlist, apiLimiter, loginLimiter, registerLimiter, forgotPasswordLimiter, verifyCodeLimiter, generateLimiter, generateTextLimiter, telegramLinkLimiter, searchLimiter, renderLimiter } from './middleware/security.js';
 import { runDailyDigest, runWeeklyReport } from './services/digest.js';
 import { runViewsBump } from './services/viewsBump.js';
 import { startTelegramPolling } from './services/telegram.js';
@@ -45,8 +46,12 @@ app.set('trust proxy', ['loopback', 'linklocal', 'uniquelocal']);
 process.on('unhandledRejection', (reason) => {
   console.error('[unhandledRejection]', reason instanceof Error ? reason.message : reason);
 });
+// Аудит 2026-11-14: uncaughtException → логируем и ЗАВЕРШАЕМ процесс. Работа после
+// необработанного исключения — неконсистентное состояние (открытые транзакции,
+// полуобновлённые кэши); supervisor/docker restart поднимают чистый процесс.
 process.on('uncaughtException', (reason) => {
-  console.error('[uncaughtException]', reason instanceof Error ? reason.message : reason);
+  console.error('[uncaughtException]', reason);
+  process.exit(1);
 });
 
 app.use(securityHeaders);
@@ -54,6 +59,8 @@ app.use(corsAllowlist(config.corsOrigins));
 app.use('/api/', apiLimiter);
 app.use('/api/auth/login', loginLimiter);
 app.use('/api/auth/register', registerLimiter);
+app.use('/api/auth/forgot-password', forgotPasswordLimiter); // аудит 2026-11-14
+app.use('/api/auth/verify-code', verifyCodeLimiter);         // аудит 2026-11-14
 app.use('/api/media/generate', generateLimiter);
 app.use('/api/media/generate-text', generateTextLimiter);
 app.use('/api/telegram/link', telegramLinkLimiter);
@@ -101,6 +108,12 @@ app.use((_req, res) => {
 
 // Единый обработчик ошибок: НЕ leak'им внутренние детали клиенту
 app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  // multer: превышение лимита размера / битый multipart — клиентская ошибка, не 500
+  // (аудит 2026-11-14: раньше уходило в общий 500)
+  if (err instanceof multer.MulterError) {
+    res.status(400).json({ error: 'upload error', code: err.code });
+    return;
+  }
   console.error('[api error]', err.message);
   res.status(500).json({ error: 'internal' });
 });

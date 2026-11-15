@@ -71,6 +71,15 @@ HS256 против alg-confusion) → сверка с БД (роль/тариф/
 | Дефолтный пароль супер-админа (`admin123`) | Seed отказывается стартовать в production с дефолтом; обход через `NODE_ENV=development` убран | `seed.ts`, `api.sh` |
 | Выгрузка персональных данных (email) | Роут за `authRequired + requireRole(ADMIN_ROLES)`; права из БД | `routes/admin.ts` |
 | Стенд с дефолтными креденшелами, открытый в LAN/интернет | Секреты обязательны (`${VAR:?}` + fail fast в сиде); порты биндятся на `127.0.0.1` по умолчанию (`BIND_ADDR`), LAN-бинд — осознанное действие с сильными секретами | `docker-compose.all.yml`, `DEPLOY.md` |
+| SSO-токен админа в URL (`?auth=`) → логи Caddy, история, Referer | SSO через `postMessage` с пиннингом origin в обе стороны и ack-рукопожатием; поддержка `?auth=` удалена | `web: CabinetPage.tsx`, `admin: main.tsx`, `auth.tsx` |
+| Перебор 6-значного кода восстановления | Счётчик попыток на код (5 промахов → инвалидация), `timingSafeEqual`, лимитер `verifyCodeLimiter` (20/15 мин/IP) | `routes/auth.ts`, `middleware/security.ts`, миграция 0020 |
+| Email-бомбинг через forgot-password | Код не пересоздаётся, пока жив (пересылка того же), троттлинг 1 письмо/мин на email, лимитер `forgotPasswordLimiter` (10/15 мин/IP) | `routes/auth.ts`, `middleware/security.ts` |
+| Stored XSS в админке (regex-«санитайзер» ContentMaster, HTML из LLM) | Только `sanitize-html` с жёстким allowlist, общий для сайта и админки (`admin/lib/sanitize.ts` = `web/lib/sanitize.ts`); регулярки для HTML запрещены | `admin: ContentMasterPage.tsx`, `PreviewModal.tsx`, `lib/sanitize.ts` |
+| Host-header poisoning: canonical/OG/sitemap/redirects через Host заголовок | `siteOrigin` принимает только хост `PUBLIC_SITE_URL` и loopback, иначе канонический origin; кэши рендера и sitemap ключуются по origin | `services/botRender.ts`, `routes/seo.ts`, `routes/render.ts` |
+| HTML-инъекция в письмо сброса (displayName в HTML) | Шаблон в `email.ts` (`renderResetCodeEmail`), экранирование `esc()` как во всех письмах | `services/email.ts`, `routes/auth.ts` |
+| XSS → кража JWT из localStorage; понижение HTTPS | CSP на всех Caddyfile'ах (`default-src 'self'`, скрипты only same-origin); HSTS в прод-Caddyfile | `infra/Caddyfile*`, `apps/*/index.html` |
+| SSRF/DNS rebinding в ContentMaster (fetch URL с LLM-ключами на борту) | Строковая проверка hostname + DNS lookup: хост допустим только если ВСЕ адреса публичны; ручные редиректы с перепроверкой каждого хопа; connect через валидированный lookup | `routes/contentMaster.ts` |
+| Active content через /uploads (SVG-обложки) | Только растр jpeg/png/webp с проверкой магических байт (upload и генерация); mock-обложка — PNG через встроенный энкодер | `utils/imageSniff.ts`, `services/mediaGen.ts`, `routes/media.ts` |
 | Утечка через заголовки/фингерпринт | `X-Powered-By` отключён, security-заголовки | `index.ts`, `middleware/security.ts` |
 | CSRF на мутациях | Bearer-токен (не cookie) + CORS-allowlist | `index.ts`, `middleware/security.ts` |
 
@@ -119,6 +128,109 @@ HS256 против alg-confusion) → сверка с БД (роль/тариф/
 `super_admin` → 403; верно подписанный токен реального админа с `role=reader` в payload → 200
 (права из БД); легитимный reader → 403; поддельный `tariffId` не открывает платные материалы.
 
+### 2026-11-14 (вторая находка) — SSO-токен админа в URL
+
+**Найдено:** `CabinetPage.tsx` открывал админку как `/?auth=<JWT>`; админка
+(`main.tsx`, `auth.tsx`) подхватывала токен из query. Админский JWT (TTL 12 ч) оседал в
+access-логах Caddy/сервера, истории браузера и потенциально в Referer.
+
+**Исправлено:** SSO переведён на `postMessage` с пиннингом origin в обе стороны
+(админка принимает сообщения только с origin сайта, сайт — ack только с origin админки)
+и ack-рукопожатием: сайт открывает админку через `window.open`, шлёт `{type:'invest-sso', token}`,
+повторяя отправку каждые 500 мс до ack (страховка от медленной загрузки), не более 10 с;
+поддержка `?auth=` полностью удалена с обеих сторон. Попап заблокирован — фолбэк переход
+без токена (вход через форму логина). При приёме токена старый профиль сбрасывается,
+`/api/auth/me` подтягивает актуальный; поздний приём (админка уже открыта) — через
+DOM-событие `invest-sso`, которое слушает `auth.tsx`.
+
+**Проверка:** e2e на Playwright (Chromium) против собранного фронта, 4/4 в позитивном
+сценарии (токен не в URL, сохранён, профиль подтянут, ack ровно один) и 2/2 в негативном
+(чужой origin — токен отклонён, URL чистый).
+
+### 2026-11-14 (третья находка) — перебор кода восстановления + email-бомбинг
+
+**Найдено:** `/api/auth/verify-code` принимал 6-значный код без счётчика попыток и без
+отдельного лимитера (только общий 300/мин → ~4500 комбинаций за 15-минутное окно с IP).
+`/api/auth/forgot-password` при каждом запросе удалял и пересоздавал код и слал новое
+письмо — неограниченный флуд чужой почты.
+
+**Исправлено:**
+- Миграция `0020_reset_attempts`: колонка `password_reset_codes.attempts`; 5 промахов →
+  код инвалидируется (`used=true`), верный код после этого тоже отклоняется. Сравнение
+  через `timingSafeEqual` без раннего выхода.
+- Лимитер `verifyCodeLimiter` — 20 попыток/15 мин/IP.
+- forgot-password: живой неиспользованный код не пересоздаётся (пересылается тот же),
+  повторная отправка — не чаще 1 письма/мин на email; лимитер `forgotPasswordLimiter` —
+  10 запросов/15 мин/IP.
+
+**Проверка:** смоук против живой БД, 8/8 (регистрация → forgot → 5 промахов → верный код
+отклонён → повторный forgot → новый код принят → reset-password → логин новым паролем)
++ троттлинг: 3 forgot подряд = 1 письмо.
+
+### 2026-11-14 (четвёртая находка) — XSS в админке через regex-«санитайзер»
+
+**Найдено:** `ContentMasterPage.previewHtml` чистил HTML регулярками (`on\w+="…"`,
+`javascript:`), результат вставлялся через `dangerouslySetInnerHTML`. Обходы: `<svg onload=…>`
+(не в списке тегов), `onerror=…` без кавычек, `java&#x73;cript:`. Источник HTML — вывод
+LLM, отравляемый prompt-injection'ом через выкачиваемую страницу; в админке в localStorage
+лежит JWT админа.
+
+**Исправлено:** regex-очистка запрещена; создан общий модуль `apps/admin/src/lib/sanitize.ts`
+(allowlist идентичен сайтовому `apps/web/src/lib/sanitize.ts`), через него рендерятся
+предпросмотр ContentMaster и `PreviewModal`.
+
+**Проверка:** 8/8 XSS-пейлоадов нейтрализованы (`<svg onload>`, безкавычечный `onerror`,
+HTML-entities в `javascript:`, `<script>`, `<iframe>` и т.д.), легитимная разметка
+(ссылки с `target="_blank"`, списки, цитаты) сохраняется. Сборка админки и сайта — зелёная.
+
+### 2026-11-14 (пятая находка) — пакет medium-находок из npm audit и ревью
+
+**Host-header poisoning (sitemap/robots/bot-render).** `siteOrigin` доверял Host
+заголовку при незаданном PUBLIC_SITE_URL, кэши рендера и sitemap ключовались по пути —
+запрос с чужим Host отравлял canonical/OG/JSON-LD/sitemap на 15 минут. Исправлено:
+`siteOrigin` принимает только хост PUBLIC_SITE_URL и loopback, иначе канонический origin;
+кэш рендера — `путь → origin → HTML`, кэш sitemap — по origin. Проверка: запросы
+с `Host: evil.example.com` на /render, /sitemap.xml, /robots.txt отдают канонический
+origin, кэш не перемешивается.
+
+**HTML-инъекция в письмо сброса.** `displayName` (пользовательский ввод) вставлялся в
+HTML письма сброса сырым. Шаблон перенесён в `email.ts` (`renderResetCodeEmail`) с
+экранированием через общий `esc()` — паритет с дайджестами/отчётами.
+
+**Нет CSP / HSTS.** JWT в localStorage: любой XSS = кража токена. Добавлен CSP на все
+Caddyfile'ы (`default-src 'self'; script-src 'self'` — сборки Vite без инлайна;
+`style-src 'unsafe-inline'` для style-атрибутов React; `frame-src 'self'` для srcDoc-превью),
+HSTS `max-age=31536000; includeSubDomains` — только в прод-Caddyfile (не в internal-CA и
+не в локальном HTTP).
+
+**Процесс после необработанных ошибок.** `uncaughtException` раньше логировал и работал
+дальше в неконсистентном состоянии — теперь логирует и завершает процесс (supervisor/docker
+поднимают чистый). `MulterError` (превышение 5 МБ, битый multipart) — отдельно: 400 с кодом,
+не общий 500.
+
+**SSRF / DNS rebinding в ContentMaster.** Строковая проверка hostname шла до резолва —
+домен мог резолвиться в 127.0.0.1/10.x. Теперь: строковая проверка + DNS lookup, хост
+допустим только если ВСЕ его адреса публичны (loopback/private/link-local/CGNAT/ULA/IPv4-mapped
+отвергаются); fetch заменён на http(s).get с валидированным lookup и ручными редиректами
+(каждый хоп перепроверяется, лимит 3, таймаут 10 с, лимит тела 2 МБ).
+
+**SVG-обложки (active content в /uploads).** Mock-режим генерировал SVG с
+`image/svg+xml`, `kimiImage` доверял content-type скачанной картинки. Теперь формат
+определяется только по магическим байтам (`utils/imageSniff.ts`), сохраняется и
+отдаётся только jpeg/png/webp; mock-обложка — PNG, генерируется встроенным энкодером
+(`zlib`, без новых зависимостей), файл проверен как валидный PNG 768×1024.
+⚠️ Ранее сохранённые SVG в /uploads остаются — при желании вычистить скриптом.
+
+**Зависимости.** `npm audit`: critical (tar) и high (@mapbox/node-pre-gyp) закрыты
+переходом bcrypt → bcryptjs (чистый JS, тот же формат хэшей $2a$, миграция не нужна);
+drizzle-orm 0.44.7 → 0.45.4 (GHSA-gpj5-g38j-94v9). CORS_ORIGINS парсится с trim.
+Осталось (запланировано): **zod 3→4** (high GHSA-mrhx-c7xc-m3w5, breaking — нужна
+отдельная миграция валидаций), **bcryptjs vs 72-байтный лимит** (zod допускает пароли
+до 100 символов — bcrypt обрезает; ограничить схему до 72 байт или мигрировать на
+scrypt), **root в контейнере** (supervisord/Caddy/API под root; план — непривилегированный
+пользователь + роль БД без SUPERUSER), **JWT без iss/aud**, нет аудит-лога действий
+админов, resetToken валиден 15 мин после смены пароля.
+
 ### 2026-11-08 — предыдущий аудит (справочно)
 
 Укорочен TTL админских токенов до 12 ч (утечка admin-токена необратима 7 дней);
@@ -135,7 +247,24 @@ HS256 против alg-confusion) → сверка с БД (роль/тариф/
    из `req.user`, который гарантированно из БД.
 3. **Любое использование данных из JWT** — только `sub`; всё остальное из payload
    считается недоверенным.
+3.1. **Секреты (токены, пароли) не передаются в URL** — ни в query, ни в path: только
+   тело запроса, заголовки или `postMessage` с пиннингом origin (см. SSO-обмен
+   `invest-sso`/`invest-sso-ack` в `admin/main.tsx` и `web/CabinetPage.tsx`).
 4. **Кастомный `keyGenerator` у rate-limit** — только через `ipKeyGenerator` для IP-ключей.
+4.1. **Любая проверка секретов/кодов по возможности** — `timingSafeEqual`, без раннего
+   выхода по различию; счётчик попыток обязан вести БД (инвалидировать после N промахов).
+4.2. **HTML, вставляемый в DOM (включая превью и iframe/srcDoc)** — только `sanitize-html`
+   с жёстким allowlist (`lib/sanitize.ts` сайта и админки держать идентичными).
+   Регулярные выражения для «очистки» HTML запрещены — обходятся тривиально.
+4.3. **Host заголовку не доверять** — origin для canonical/OG/sitemap/redirects брать
+   только из `PUBLIC_SITE_URL`/allowlist (`siteOrigin` в `botRender.ts`), кэши SEO-выдачи
+   ключовать по origin.
+4.4. **Серверные выкачки URL (SSRF-контур)** — строковая проверка hostname + проверка
+   ВСЕХ DNS-адресов на публичность до connect; редиректы перепроверять по каждому хопу.
+4.5. **Файлы в /uploads** — только растр jpeg/png/webp, формат по магическим байтам;
+   SVG, HTML и прочий active content не сохранять и не раздавать.
+4.6. **Пользовательский ввод в HTML писем** — только через `esc()` из `email.ts`;
+   шаблоны писем живут в `email.ts`, не в роутах.
 5. **Смена контура безопасности** — обновить раздел 3, прогнать `npm run typecheck`,
    `npm run test -w @newinvest/api` и `scripts/auth-smoke.mjs` (нужен локальный Postgres
    и `JWT_SECRET` той же силы, что в проде).

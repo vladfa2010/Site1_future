@@ -16,6 +16,7 @@ import { generateImage } from '../services/mediaGen.js';
 import { generateText } from '../services/textGen.js';
 import { getKimiSettings } from '../services/kimiSettings.js';
 import { config } from '../config.js';
+import { sniffImageFormat } from '../utils/imageSniff.js';
 
 export const mediaRouter = Router();
 
@@ -43,11 +44,8 @@ mediaRouter.post('/media/upload', authRequired, requireRole('admin', 'super_admi
     return;
   }
   // магические байты: mimetype от клиента подделывается — проверяем сигнатуру файла
-  const buf = req.file.buffer;
-  const isPng = buf.length > 8 && buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47;
-  const isJpg = buf.length > 3 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff;
-  const isWebp = buf.length > 12 && buf.toString('ascii', 0, 4) === 'RIFF' && buf.toString('ascii', 8, 12) === 'WEBP';
-  if (!isPng && !isJpg && !isWebp) {
+  const sniffed = sniffImageFormat(req.file.buffer);
+  if (!sniffed) {
     res.status(400).json({ error: 'содержимое не похоже на jpeg/png/webp' });
     return;
   }

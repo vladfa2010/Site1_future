@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import sanitizeHtml from 'sanitize-html';
+import { sanitizeArticleHtml } from '../lib/sanitize';
 
 interface Props {
   title: string;
@@ -26,12 +26,7 @@ const TYPE_LABELS: Record<string, string> = {
 /** Экранирование текста, интерполируемого в srcDoc (защита от инъекции через title/excerpt — аудит 2026-11-08) */
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
-const sanitize = (html: string) =>
-  sanitizeHtml(html, {
-    allowedTags: ['p', 'h2', 'h3', 'h4', 'ul', 'ol', 'li', 'strong', 'em', 'b', 'i', 'a', 'img', 'blockquote', 'br', 'figure', 'figcaption', 'hr'],
-    allowedAttributes: { a: ['href', 'target', 'rel'], img: ['src', 'alt'] },
-    allowedSchemes: ['http', 'https'],
-  });
+// HTML статьи — через общий sanitize-html с allowlist (lib/sanitize, аудит 2026-11-14)
 
 /** Превью статьи в виде как на сайте — рендер в iframe с шириной устройства */
 export default function PreviewModal({ title, type, thesis, excerpt, contentHtml, coverUrl, onClose }: Props) {
@@ -41,7 +36,7 @@ export default function PreviewModal({ title, type, thesis, excerpt, contentHtml
 
   // srcDoc — автономный HTML в стиле сайта (чёрный + лайм)
   const doc = useMemo(() => {
-    const content = sanitize(contentHtml || '<p><em>(текст статьи пуст)</em></p>');
+    const content = sanitizeArticleHtml(contentHtml || '<p><em>(текст статьи пуст)</em></p>');
     return `<!doctype html><html lang="ru"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>

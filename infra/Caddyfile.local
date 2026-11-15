@@ -10,6 +10,8 @@
     X-Content-Type-Options nosniff
     X-Frame-Options DENY
     Referrer-Policy strict-origin-when-cross-origin
+    # CSP (аудит 2026-11-14) — паритет с продом; HSTS нет (локальный HTTP)
+    Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'"
     -Server
   }
 }

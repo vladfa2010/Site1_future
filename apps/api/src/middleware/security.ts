@@ -49,6 +49,24 @@ export const loginLimiter = rateLimit({
   message: { error: 'too many attempts, try later' },
 });
 
+/** Запрос кода восстановления пароля: лимит на IP против флуда письмами (аудит 2026-11-14).
+ *  Дополняется per-email троттлингом 1 письмо/мин внутри роута. */
+export const forgotPasswordLimiter = rateLimit({
+  windowMs: 15 * 60_000,
+  limit: 10,
+  ...limiterDefaults,
+  message: { error: 'too many attempts, try later' },
+});
+
+/** Ввод кода восстановления: лимит на IP против перебора кода (аудит 2026-11-14).
+ *  Дополняется счётчиком попыток на код (5 промахов → инвалидация) внутри роута. */
+export const verifyCodeLimiter = rateLimit({
+  windowMs: 15 * 60_000,
+  limit: 20,
+  ...limiterDefaults,
+  message: { error: 'too many attempts, try later' },
+});
+
 /** Регистрация: защита от спама аккаунтами */
 export const registerLimiter = rateLimit({
   windowMs: 3_600_000,

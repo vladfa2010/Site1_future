@@ -551,6 +551,7 @@ export const articleEmbeddings = pgTable(
 
 // ---------- Восстановление пароля (порт PULSE, миграция 0018) ----------
 // 6-значный код, TTL 15 минут, одноразовый; старые коды юзера удаляются при новом запросе.
+// attempts — счётчик неверных вводов (аудит 2026-11-14): 5 промахов → код инвалидируется.
 export const passwordResetCodes = pgTable('password_reset_codes', {
   id: serial('id').primaryKey(),
   userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
@@ -559,6 +560,7 @@ export const passwordResetCodes = pgTable('password_reset_codes', {
   expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
   usedAt: timestamp('used_at', { withTimezone: true }),
   used: boolean('used').notNull().default(false),
+  attempts: integer('attempts').notNull().default(0),
 });
 
 // ---------- Телеметрия загрузки страниц (0019) ----------

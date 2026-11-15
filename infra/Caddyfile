@@ -9,6 +9,12 @@
     X-Content-Type-Options nosniff
     X-Frame-Options DENY
     Referrer-Policy strict-origin-when-cross-origin
+    # CSP (аудит 2026-11-14): JWT в localStorage — любой XSS = кража токена.
+    # Скрипты — только same-origin (сборки Vite без инлайна); стили допускают
+    # инлайн (style-атрибуты React); srcDoc-iframe превью — под frame-src 'self'.
+    Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'"
+    # HSTS (prod, публичный TLS)
+    Strict-Transport-Security "max-age=31536000; includeSubDomains"
     -Server
   }
 }

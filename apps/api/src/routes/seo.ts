@@ -22,11 +22,12 @@ import { siteOrigin } from '../services/botRender.js';
 export const seoRouter = Router();
 
 const SITEMAP_TTL_MS = 15 * 60 * 1000;
-let sitemapCache: { xml: string; expiresAt: number } | null = null;
+// Аудит 2026-11-14: кэш ключуется по origin — иначе поддельный Host отравлял <loc> на 15 мин
+const sitemapCache = new Map<string, { xml: string; expiresAt: number }>();
 
 /** Инвалидация кэша sitemap при публикации/правке/снятии статьи */
 export function invalidateSitemapCache(): void {
-  sitemapCache = null;
+  sitemapCache.clear();
 }
 
 const SITEMAP_NS = 'http://www.sitemaps.org/schemas/sitemap/0.9';
@@ -117,11 +118,12 @@ async function buildSitemap(origin: string): Promise<string> {
 
 seoRouter.get('/sitemap.xml', async (req, res) => {
   try {
-    if (!sitemapCache || sitemapCache.expiresAt < Date.now()) {
-      const origin = siteOrigin(req.headers.host);
-      sitemapCache = { xml: await buildSitemap(origin), expiresAt: Date.now() + SITEMAP_TTL_MS };
+    const origin = siteOrigin(req.headers.host);
+    const hit = sitemapCache.get(origin);
+    if (!hit || hit.expiresAt < Date.now()) {
+      sitemapCache.set(origin, { xml: await buildSitemap(origin), expiresAt: Date.now() + SITEMAP_TTL_MS });
     }
-    res.status(200).type('application/xml; charset=utf-8').send(sitemapCache.xml);
+    res.status(200).type('application/xml; charset=utf-8').send(sitemapCache.get(origin)!.xml);
   } catch (e) {
     // Express 4 не ловит async-ошибки — без catch упавший sitemap ронял бы весь API
     console.error('[sitemap]', e);

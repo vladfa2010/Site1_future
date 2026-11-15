@@ -1,7 +1,7 @@
 /**
  * Создание супер-админа (idempotent). Запуск: npm run seed -w @newinvest/api
  */
-import bcrypt from 'bcrypt';
+import bcrypt from 'bcryptjs';
 import { db, users } from '@newinvest/db';
 import { eq } from 'drizzle-orm';
 import { config } from './config.js';
