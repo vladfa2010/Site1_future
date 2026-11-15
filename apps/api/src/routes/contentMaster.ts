@@ -183,7 +183,7 @@ interface StreamHandlers {
 
 interface ChatRoundResult {
   content: string;
-  toolCalls: { id: string; function: { arguments: string } }[];
+  toolCalls: { id: string; function: { name: string; arguments: string } }[];
   usage: ChatUsage;
 }
 
@@ -208,7 +208,7 @@ async function chatRound(
   });
   if (!stream) {
     const data = (await res.json().catch(() => ({}))) as {
-      choices?: { message?: { content?: string; tool_calls?: { id: string; function: { arguments: string } }[] } }[];
+      choices?: { message?: { content?: string; tool_calls?: { id: string; function: { name: string; arguments: string } }[] } }[];
       usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
       error?: { message?: string };
     };
@@ -229,18 +229,19 @@ async function chatRound(
     throw new Error(`chat API: ${res.status} ${data.error?.message ?? 'пустой ответ'}`);
   }
   let content = '';
-  const toolCalls: { id: string; function: { arguments: string } }[] = [];
+  const toolCalls: { id: string; function: { name: string; arguments: string } }[] = [];
   let usage: ChatUsage = { ...ZERO_USAGE };
   for await (const payload of readSse(res)) {
     const chunk = JSON.parse(payload) as {
-      choices?: { delta?: { content?: string; tool_calls?: { index?: number; id?: string; function?: { arguments?: string } }[] }; finish_reason?: string }[];
+      choices?: { delta?: { content?: string; tool_calls?: { index?: number; id?: string; function?: { name?: string; arguments?: string } }[] }; finish_reason?: string }[];
       usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
     };
     const delta = chunk.choices?.[0]?.delta;
     if (delta?.content) { content += delta.content; h.onDelta?.(delta.content); }
     for (const tc of delta?.tool_calls ?? []) {
-      const slot = toolCalls[tc.index ?? 0] ?? (toolCalls[tc.index ?? 0] = { id: '', function: { arguments: '' } });
+      const slot = toolCalls[tc.index ?? 0] ?? (toolCalls[tc.index ?? 0] = { id: '', function: { name: '', arguments: '' } });
       if (tc.id) slot.id = tc.id;
+      if (tc.function?.name) slot.function.name += tc.function.name;
       if (tc.function?.arguments) slot.function.arguments += tc.function.arguments;
     }
     if (chunk.usage) {
@@ -305,17 +306,17 @@ async function chatWithSearch(
       let query = '';
       try { query = (JSON.parse(c.function.arguments) as { query?: string }).query ?? ''; } catch { /* ignore */ }
       if (!query) {
-        messages.push({ role: 'tool', tool_call_id: c.id, content: JSON.stringify({ error: 'пустой запрос' }) });
+        messages.push({ role: 'tool', tool_call_id: c.id, name: c.function.name, content: JSON.stringify({ error: 'пустой запрос' }) });
         continue;
       }
       try {
         const hits = await executeSearch(query);
         hits.forEach((hit) => { if (!sources.some((s) => s.url === hit.url)) sources.push(hit); });
-        messages.push({ role: 'tool', tool_call_id: c.id, content: JSON.stringify({ results: hits }) });
+        messages.push({ role: 'tool', tool_call_id: c.id, name: c.function.name, content: JSON.stringify({ results: hits }) });
       } catch (e) {
         const msg = e instanceof Error ? e.message : 'search failed';
         console.error(`[content-master] web_search "${query}" failed: ${msg}`);
-        messages.push({ role: 'tool', tool_call_id: c.id, content: JSON.stringify({ error: msg }) });
+        messages.push({ role: 'tool', tool_call_id: c.id, name: c.function.name, content: JSON.stringify({ error: msg }) });
       }
     }
   }
