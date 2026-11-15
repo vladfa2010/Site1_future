@@ -18,12 +18,18 @@ async function probe(name, token, expectStatus) {
 // 1) Подделка: токен с role=super_admin для реального reader (id=6), выдуманный тариф
 const forged = jwt.sign(
   { role: 'super_admin', tariffId: 1, tariffExpiresAt: '2099-01-01T00:00:00Z' },
-  SECRET, { subject: '6', expiresIn: '1h', algorithm: 'HS256' });
+  SECRET, { subject: '6', expiresIn: '1h', algorithm: 'HS256', issuer: 'invest-api', audience: 'invest-spa' });
 await probe('подделанный super_admin для reader (id=6)', forged, 403);
+
+// 1.1) Токен с верной подписью, но ЧУЖИМ audience — должен быть отклонён (ТЗ 4.1, iss/aud)
+const wrongAud = jwt.sign(
+  { role: 'super_admin', tariffId: 1 },
+  SECRET, { subject: '6', expiresIn: '1h', algorithm: 'HS256', issuer: 'invest-api', audience: 'evil-spa' });
+await probe('верная подпись, чужой audience → 401 на входе (ТЗ 4.1)', wrongAud, 401);
 
 // 2) Верная подпись, но payload занижен (реальный super_admin id=1, role=reader в токене):
 //    права теперь из БД → доступ должен БЫТЬ (проверка, что БД-источник работает в обе стороны)
-const adminToken = jwt.sign({ role: 'reader' }, SECRET, { subject: '1', expiresIn: '1h', algorithm: 'HS256' });
+const adminToken = jwt.sign({ role: 'reader' }, SECRET, { subject: '1', expiresIn: '1h', algorithm: 'HS256', issuer: 'invest-api', audience: 'invest-spa' });
 await probe('верно подписанный, payload role=reader (реальный admin id=1)', adminToken, 200);
 
 // 3) Легитимный токен reader: admin-роут должен отказать

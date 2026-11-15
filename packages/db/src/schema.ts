@@ -36,8 +36,23 @@ export const users = pgTable('users', {
   oldWpId: integer('old_wp_id'),                                    // миграция из Ultimate Member
   bio: text('bio'),                                                 // ТЗ-05: биография автора
   isBlocked: boolean('is_blocked').notNull().default(false),        // порт PULSE: блокировка (логин + requireRole)
+  // аудит 2026-11-15 (ТЗ 4.2): смена пароля → все ранее выданные resetToken/JWT
+  // с iat < passwordChangedAt отклоняются (инвалидация при компрометации)
+  passwordChangedAt: timestamp('password_changed_at', { withTimezone: true }),
   createdAt: createdAt(),
 });
+
+// ---------- Аудит действий админов (ТЗ 4.3) ----------
+// Кто, что, над каким объектом, откуда. Без payload'ов с секретами.
+export const adminAuditLog = pgTable('admin_audit_log', {
+  id: serial('id').primaryKey(),
+  adminId: integer('admin_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  action: text('action').notNull(),      // users.patch | notifications.send | redirects.create | redirects.delete | ...
+  target: text('target'),                // например "user:42", "/old-path" — без персональных данных сверх ID
+  meta: text('meta'),                    // JSON-строка усечённая (≤2 КБ), без секретов
+  ip: text('ip'),
+  createdAt: createdAt(),
+}, (t) => [index('admin_audit_log_created_idx').on(t.createdAt)]);
 
 // ---------- Медиатека ----------
 

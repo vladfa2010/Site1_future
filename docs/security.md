@@ -229,8 +229,16 @@ adminPlans/entities). Все high/critical закрыты; остаются 4 mo
 — инструменты сборки, в рантайм не входят (даунгрейд drizzle-kit до 0.18 потеряет
 `drizzle-kit migrate`, не делаем). CORS_ORIGINS парсится с trim.
 Осталось (запланировано): **контейнер без root** (supervisord/Caddy/API под root;
-план — непривилегированный пользователь + роль БД без SUPERUSER), **JWT без iss/aud**,
-нет аудит-лога действий админов, resetToken валиден 15 мин после смены пароля.
+план — непривилегированный пользователь + роль БД без SUPERUSER).
+Сделано 2026-11-15 (ТЗ 4.1–4.3): **JWT iss/aud** (`invest-api`/`invest-spa`, проверка
+в verifyToken и reset-password — токен чужого назначения отклоняется; смена значений
+инвалидирует сессии); **инвалидация resetToken** (`users.password_changed_at`, миграция
+0021 — токены с iat до смены пароля отклоняются, допуск 1 с на секундное разрешение iat);
+**аудит-лог админов** (`admin_audit_log` — кто/что/над чем/IP; записи в users.patch,
+redirects.create/delete, notifications.send; просмотр `GET /api/admin/audit-log`
+только супер-админом, 200 последних). Проверка: auth-smoke 5/5 (включая чужой audience
+→ 401), reset-smoke 8/8, tz43-smoke 7/7 (повторный resetToken → 401, аудит-запись
+присутствует, доступ не-супер-админа → 403).
 
 ### 2026-11-08 — предыдущий аудит (справочно)
 

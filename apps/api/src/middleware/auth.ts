@@ -24,7 +24,11 @@ declare module 'express-serve-static-core' {
 async function verifyToken(token: string): Promise<AuthUser | null> {
   try {
     // алгоритм пиннется: защита от alg-confusion (RS256/None-атаки)
-    const payload = jwt.verify(token, config.jwtSecret, { algorithms: ['HS256'] }) as jwt.JwtPayload;
+    const payload = jwt.verify(token, config.jwtSecret, {
+      algorithms: ['HS256'],
+      issuer: config.jwtIssuer, // ТЗ 4.1: токен чужого назначения не принимаем
+      audience: config.jwtAudience,
+    }) as jwt.JwtPayload;
     if (typeof payload.sub !== 'string' || !Number.isFinite(Number(payload.sub))) return null;
     // Роль и тариф — ТОЛЬКО из БД, payload не доверяем (подделка прав/пейволла при утечке секрета, аудит 2026-11-14)
     const [u] = await db
@@ -95,7 +99,7 @@ export function signToken(user: { id: number; role: string; tariffId?: number | 
   return jwt.sign(
     { role: user.role, tariffId: user.tariffId ?? null, tariffExpiresAt: user.tariffExpiresAt ? new Date(user.tariffExpiresAt).toISOString() : null },
     config.jwtSecret,
-    { subject: String(user.id), expiresIn: isAdmin ? '12h' : '7d' },
+    { subject: String(user.id), expiresIn: isAdmin ? '12h' : '7d', issuer: config.jwtIssuer, audience: config.jwtAudience },
   );
 }
 

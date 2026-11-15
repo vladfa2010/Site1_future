@@ -270,7 +270,7 @@ authRouter.post('/verify-code', async (req, res) => {
   const resetToken = jwt.sign(
     { purpose: 'password_reset' },
     config.jwtSecret,
-    { subject: String(user.id), expiresIn: '15m' },
+    { subject: String(user.id), expiresIn: '15m', issuer: config.jwtIssuer, audience: config.jwtAudience },
   );
   res.json({ resetToken });
 });
@@ -284,7 +284,12 @@ authRouter.post('/reset-password', async (req, res) => {
   }
   let payload: jwt.JwtPayload;
   try {
-    payload = jwt.verify(parsed.data.resetToken, config.jwtSecret, { algorithms: ['HS256'] }) as jwt.JwtPayload;
+    // iss/aud (ТЗ 4.1) + пиннинг алгоритма; resetToken не принимает сессионные JWT
+    payload = jwt.verify(parsed.data.resetToken, config.jwtSecret, {
+      algorithms: ['HS256'],
+      issuer: config.jwtIssuer,
+      audience: config.jwtAudience,
+    }) as jwt.JwtPayload;
   } catch {
     res.status(401).json({ error: 'Недействительная или просроченная ссылка' });
     return;
@@ -298,8 +303,18 @@ authRouter.post('/reset-password', async (req, res) => {
     res.status(404).json({ error: 'Пользователь не найден' });
     return;
   }
+  // ТЗ 4.2 (2026-11-15): токен, выданный ДО последней смены пароля, не принимаем —
+  // украденный resetToken не живёт 15 минут после того, как владелец сменил пароль.
+  // Сравнение в миллисекундах с допуском 1 с (iat — с секундным разрешением).
+  if (user.passwordChangedAt && typeof payload.iat === 'number'
+      && payload.iat * 1000 <= user.passwordChangedAt.getTime() + 1000) {
+    res.status(401).json({ error: 'Недействительная или просроченная ссылка' });
+    return;
+  }
   const passwordHash = await bcrypt.hash(parsed.data.password, 12);
-  await db.update(users).set({ passwordHash }).where(eq(users.id, user.id));
+  await db.update(users)
+    .set({ passwordHash, passwordChangedAt: new Date() })
+    .where(eq(users.id, user.id));
   res.json({
     user: { id: user.id, email: user.email, role: user.role, displayName: user.displayName },
     token: signToken(user),

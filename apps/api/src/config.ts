@@ -14,6 +14,10 @@ if (process.env.NODE_ENV === 'production' && (envJwtSecret.length < 32 || KNOWN_
 export const config = {
   port: Number(process.env.PORT ?? 1003), // фиксированный порт API: 1001 сайт / 1002 админка / 1003 API
   jwtSecret: envJwtSecret || 'dev-secret-change-me', // dev-fallback; в production выше — throw
+  // iss/aud (ТЗ 4.1, 2026-11-15): токены чужого назначения/сервиса не принимаются;
+  // смена значений инвалидирует все сессии (перелогин)
+  jwtIssuer: process.env.JWT_ISSUER ?? 'invest-api',
+  jwtAudience: process.env.JWT_AUDIENCE ?? 'invest-spa',
   // DATABASE_URL читает напрямую packages/db (drizzle), здесь не дублируем
   adminEmail: process.env.ADMIN_EMAIL ?? 'admin@local',
   adminPassword: process.env.ADMIN_PASSWORD ?? 'admin123',

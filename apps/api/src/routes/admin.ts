@@ -1,16 +1,54 @@
 /**
  * Административные эндпоинты: пользователи/роли, редиректы, статистика.
  */
-import { Router } from 'express';
+import { Router, type Request } from 'express';
 import { z } from 'zod';
 import { and, desc, eq, gte, sql } from 'drizzle-orm';
-import { db, users, redirects, articleViews, articles, tariffPlans } from '@newinvest/db';
+import { db, users, redirects, articleViews, articles, tariffPlans, adminAuditLog } from '@newinvest/db';
 import { authRequired, requireRole, ADMIN_ROLES } from '../middleware/auth.js';
 import { runDailyDigest, runWeeklyReport } from '../services/digest.js';
 import { runViewsBump, virtualViewsSql } from '../services/viewsBump.js';
 import { invalidateRedirectsCache } from '../services/botRender.js';
 
 export const adminRouter = Router();
+
+// ---------- Аудит действий админов (ТЗ 4.3, 2026-11-15) ----------
+// Кто/что/над чем/откуда — без секретов и персональных данных сверх ID в meta.
+async function audit(req: Request, action: string, target: string, meta?: unknown): Promise<void> {
+  try {
+    await db.insert(adminAuditLog).values({
+      adminId: req.user!.id,
+      action,
+      target: target.slice(0, 200),
+      meta: meta === undefined ? null : JSON.stringify(meta).slice(0, 2000),
+      ip: req.ip ?? null,
+    });
+  } catch (e) {
+    // аудит не должен ронять основную операцию — но ошибка видна в логе
+    console.error('[audit]', action, (e as Error).message);
+  }
+}
+
+// GET /api/admin/audit-log — просмотр только супер-админом, последние 200 записей.
+// Путь /admin/audit-log внутри роутера (смонтирован на /api) — паритет с /api/admin/plans.
+adminRouter.get('/admin/audit-log', authRequired, requireRole('super_admin'), async (_req, res) => {
+  const rows = await db
+    .select({
+      id: adminAuditLog.id,
+      adminId: adminAuditLog.adminId,
+      adminEmail: users.email,
+      action: adminAuditLog.action,
+      target: adminAuditLog.target,
+      meta: adminAuditLog.meta,
+      ip: adminAuditLog.ip,
+      createdAt: adminAuditLog.createdAt,
+    })
+    .from(adminAuditLog)
+    .leftJoin(users, eq(adminAuditLog.adminId, users.id))
+    .orderBy(desc(adminAuditLog.id))
+    .limit(200);
+  res.json({ entries: rows });
+});
 
 // ---------- Пользователи ----------
 
@@ -110,6 +148,7 @@ adminRouter.patch('/users/:id', authRequired, requireRole('super_admin'), async 
     res.status(404).json({ error: 'not found' });
     return;
   }
+  await audit(req, 'users.patch', `user:${id}`, { changed: Object.keys(updates) });
   res.json({ user: row });
 });
 
@@ -136,12 +175,14 @@ adminRouter.post('/redirects', authRequired, requireRole(...ADMIN_ROLES), async 
     .onConflictDoUpdate({ target: redirects.oldPath, set: { newPath: parsed.data.newPath, httpCode: parsed.data.httpCode } })
     .returning();
   invalidateRedirectsCache(); // ТЗ-10 (ревью v2.1 №5): иначе бот-хиты ещё 15 мин по старому кэшу
+  await audit(req, 'redirects.create', parsed.data.oldPath, { newPath: parsed.data.newPath, httpCode: parsed.data.httpCode });
   res.status(201).json({ redirect: row });
 });
 
 adminRouter.delete('/redirects/:oldPath', authRequired, requireRole(...ADMIN_ROLES), async (req, res) => {
   await db.delete(redirects).where(eq(redirects.oldPath, decodeURIComponent(req.params.oldPath)));
   invalidateRedirectsCache(); // ТЗ-10 (ревью v2.1 №5)
+  await audit(req, 'redirects.delete', decodeURIComponent(req.params.oldPath).slice(0, 200));
   res.json({ ok: true });
 });
 
@@ -150,6 +191,7 @@ adminRouter.delete('/redirects/:oldPath', authRequired, requireRole(...ADMIN_ROL
 adminRouter.post('/notifications/send', authRequired, requireRole(...ADMIN_ROLES), async (req, res) => {
   const scope = String(req.body?.scope ?? 'daily');
   const result = scope === 'weekly' ? await runWeeklyReport() : await runDailyDigest();
+  await audit(req, 'notifications.send', scope, result);
   res.json({ scope, ...result });
 });
 
