@@ -20,6 +20,7 @@ import {
   articleStories,
   articles,
   media,
+  articleDealStages,
   ARTICLE_TYPES,
 } from '@newinvest/db';
 import { optionalAuth, authRequired, requireRole, ADMIN_ROLES } from '../middleware/auth.js';
@@ -188,4 +189,27 @@ bindingsRouter.put('/articles/:id/relations', authRequired, requireRole('admin',
   });
 
   res.json({ relations: await getRelations(articleId) });
+});
+
+// ---------- Стадии идеи (таймлайн пайплайна) ----------
+// PUT /api/articles/:id/stages {stageIds: [..]} — заменить набор стадий (транзакционно), admin
+bindingsRouter.put('/articles/:id/stages', authRequired, requireRole('admin', 'super_admin'), async (req, res) => {
+  const articleId = Number(req.params.id);
+  const parsed = z.object({ stageIds: z.array(z.number().int()).max(5) }).safeParse(req.body);
+  if (!Number.isInteger(articleId) || !parsed.success) {
+    res.status(400).json({ error: 'validation', details: parsed.success ? undefined : parsed.error.flatten() });
+    return;
+  }
+  const [article] = await db.select({ id: articles.id }).from(articles).where(eq(articles.id, articleId)).limit(1);
+  if (!article) {
+    res.status(404).json({ error: 'not found' });
+    return;
+  }
+  await db.transaction(async (tx) => {
+    await tx.delete(articleDealStages).where(eq(articleDealStages.articleId, articleId));
+    for (const stageId of parsed.data.stageIds) {
+      await tx.insert(articleDealStages).values({ articleId, stageId }).onConflictDoNothing();
+    }
+  });
+  res.json({ ok: true, stageIds: parsed.data.stageIds });
 });

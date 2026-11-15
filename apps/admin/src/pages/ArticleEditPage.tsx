@@ -54,6 +54,8 @@ export default function ArticleEditPage() {
   const [uploadBusy, setUploadBusy] = useState(false);
   const [rels, setRels] = useState<Relations>(EMPTY);
   const [tariffPlans, setTariffPlans] = useState<{ id: number; name: string }[]>([]);
+  const [dealStages, setDealStages] = useState<{ id: number; name: string }[]>([]);
+  const [stageIds, setStageIds] = useState<number[]>([]);
   const [dicts, setDicts] = useState<{ companies: Option[]; tickers: Option[]; industries: Option[]; trends: Option[] }>({ companies: [], tickers: [], industries: [], trends: [] });
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -74,18 +76,20 @@ export default function ArticleEditPage() {
 
   useEffect(() => {
     void (async () => {
-      const [companies, tickers, industries, trends, plans] = await Promise.all([
+      const [companies, tickers, stages, industries, trends, plans] = await Promise.all([
         api<{ companies: Option[] }>('/companies').catch(() => ({ companies: [] })),
         api<{ tickers: Option[] }>('/tickers').catch(() => ({ tickers: [] })),
+        api<{ stages: { id: number; name: string }[] }>('/deal-stages').catch(() => ({ stages: [] })),
         api<{ industries: Option[] }>('/industries').catch(() => ({ industries: [] })),
         api<{ trends: Option[] }>('/trends').catch(() => ({ trends: [] })),
         api<{ plans: { id: number; name: string }[] }>('/tariff-plans').catch(() => ({ plans: [] })),
       ]);
       setDicts({ companies: companies.companies, tickers: tickers.tickers, industries: industries.industries, trends: trends.trends });
       setTariffPlans(plans.plans);
+      setDealStages(stages.stages);
 
       if (!isNew && urlType && slug) {
-        const detail = await api<{ article: { id: number; type: string; slug: string; title: string; excerpt: string | null; thesis: string | null; contentHtml: string; status: string; coverMediaId: number | null; accessLevel: string | null; accessTariffId: number | null; videoUrl: string | null; viewsBaseOffset: number; viewsAutoBumpEnabled: boolean; viewsAutoBumpEveryHours: number | null; viewsAutoBumpMin: number; viewsAutoBumpMax: number }; coverUrl: string | null; meta: { description: string | null } }>(`/articles/${urlType}/${slug}`);
+        const detail = await api<{ article: { id: number; type: string; slug: string; title: string; excerpt: string | null; thesis: string | null; contentHtml: string; status: string; coverMediaId: number | null; accessLevel: string | null; accessTariffId: number | null; videoUrl: string | null; stageIds?: number[]; viewsBaseOffset: number; viewsAutoBumpEnabled: boolean; viewsAutoBumpEveryHours: number | null; viewsAutoBumpMin: number; viewsAutoBumpMax: number }; coverUrl: string | null; meta: { description: string | null } }>(`/articles/${urlType}/${slug}`);
         const a = detail.article;
         setForm({
           type: a.type, slug: a.slug, title: a.title, excerpt: a.excerpt ?? '', thesis: a.thesis ?? '',
@@ -95,6 +99,7 @@ export default function ArticleEditPage() {
         });
         // ТЗ-03: предзаполнение настроек докрутки (детальный GET отдаёт колонки целиком)
         setViewsBaseOffset(String(a.viewsBaseOffset ?? 0));
+        setStageIds(a.stageIds ?? []);
         setBumpEnabled(a.viewsAutoBumpEnabled ?? false);
         setBumpEveryHours(String(a.viewsAutoBumpEveryHours ?? 24));
         setBumpMin(String(a.viewsAutoBumpMin ?? 1));
@@ -210,6 +215,9 @@ export default function ArticleEditPage() {
           method: 'PUT',
           body: JSON.stringify({ companyIds: rels.companyIds, tickerIds: rels.tickerIds, industryIds: rels.industryIds, trendIds: rels.trendIds }),
         });
+        if (form.type === 'ideya') {
+          await api(`/articles/${id}/stages`, { method: 'PUT', body: JSON.stringify({ stageIds }) });
+        }
       }
       setDirty(false);
       setAutoState('idle');
@@ -834,6 +842,28 @@ export default function ArticleEditPage() {
           createEndpoint="/trends"
           buildCreateBody={(raw) => ({ name: raw, slug: slugify(raw) || `t${Date.now()}` })}
         />
+
+        {form.type === 'ideya' && dealStages.length > 0 && (
+          <div>
+            <span className="label">Стадия идеи (таймлайн пайплайна)</span>
+            <div className="flex flex-wrap gap-1.5">
+              {dealStages.map((st) => {
+                const on = stageIds.includes(st.id);
+                return (
+                  <button
+                    key={st.id}
+                    type="button"
+                    onClick={() => { setDirty(true); setStageIds(on ? stageIds.filter((x) => x !== st.id) : [st.id]); }}
+                    className={`rounded-full px-3 py-1 text-xs ${on ? 'bg-[#beff00] font-semibold text-black' : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'}`}
+                  >
+                    {st.name}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="mt-1 text-xs text-zinc-600">Статус виден на карточке идеи и в скринере («Торги на бирже» включает график тикера на сайте).</p>
+          </div>
+        )}
       </div>
 
       <div className="flex gap-3">

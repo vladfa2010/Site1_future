@@ -193,7 +193,7 @@ articlesRouter.get('/:type/:slug', optionalAuth, async (req, res) => {
     .innerJoin(tickers, eq(articleTickers.tickerId, tickers.id))
     .where(eq(articleTickers.articleId, article.id));
   const stagesRows = await db
-    .select({ name: dealStages.name })
+    .select({ id: dealStages.id, name: dealStages.name })
     .from(articleDealStages)
     .innerJoin(dealStages, eq(articleDealStages.stageId, dealStages.id))
     .where(eq(articleDealStages.articleId, article.id));
@@ -234,6 +234,7 @@ articlesRouter.get('/:type/:slug', optionalAuth, async (req, res) => {
     meta: { description: meta?.value ?? null },
     relations: { companies: relCompanies, trends: relTrends, tickers: relTickers },
     stages: stagesRows.map((s) => s.name),
+    stageIds: stagesRows.map((s) => s.id),
   });
 });
 

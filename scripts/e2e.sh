@@ -370,6 +370,11 @@ curl -s -o /dev/null -w "%{http_code}" "$B/api/admin/content-master/sessions/$SI
 TN=$(curl -s "$B/api/trends" | jqget "d['trends'][0]['name'][:3]")
 QT=$(TN="$TN" python3 -c "import urllib.parse,os;print(urllib.parse.quote(os.environ['TN']))")
 curl -s "$B/api/trends?q=$QT" | TN="$TN" python3 -c "import json,sys,os; ts=json.load(sys.stdin)['trends']; n=os.environ['TN'].lower(); assert ts and all(n in t['name'].lower() for t in ts), ts; print('ok')" > /dev/null 2>&1 && ok || bad "trends: ?q фильтрует сервером"
+# стадии идеи: detail отдаёт stageIds, PUT /articles/:id/stages заменяет набор (admin)
+STG=$(curl -s "$B/api/deal-stages" | jqget "d['stages'][0]['id']")
+curl -s -X PUT "$B/api/articles/$ART/stages" -H "$A" -H "$J" -d '{"stageIds":['"$STG"']}' | grep -q '"ok":true' && ok || bad "stages: PUT admin"
+curl -s "$B/api/articles/novost/e2e-novost" -H "$A" | python3 -c "import json,sys; d=json.load(sys.stdin); assert $STG in (d.get('stageIds') or []), d.get('stageIds'); print('ok')" > /dev/null 2>&1 && ok || bad "stages: stageIds в detail"
+curl -s -o /dev/null -w "%{http_code}" -X PUT "$B/api/articles/$ART/stages" -H "$UA" -H "$J" -d '{"stageIds":[]}' | grep -q 403 && ok || bad "stages: не-admin 403"
 # ТЗ-11 инварианты: PATCH без status НЕ меняет статус (регресс zod4: default подставлялся в .partial())
 curl -s -X PATCH "$B/api/articles/$ART" -H "$A" -H "$J" -d '{"status":"draft"}' > /dev/null
 curl -s -X PATCH "$B/api/articles/$ART" -H "$A" -H "$J" -d '{"title":"E2E новость v3"}' | grep -q '"status":"draft"' && ok || bad "tz11: PATCH без status сохраняет draft"
