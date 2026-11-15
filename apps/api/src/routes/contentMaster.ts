@@ -122,7 +122,7 @@ async function chatWithSearch(
       body: JSON.stringify({
         model, messages,
         tools: [searchTool],
-        max_tokens: 4096,
+        max_tokens: 8192, // reasoner-модели тратят бюджет на reasoning_content — запас ×2
         temperature: 0.3,
       }),
     });
@@ -161,7 +161,8 @@ async function chatWithSearch(
     headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
       model, messages,
-      max_tokens: 4096, temperature: 0.3,
+      max_tokens: 8192, // reasoner-модели тратят бюджет на reasoning_content — запас ×2
+      temperature: 0.3,
     }),
   });
   const finalData = (await finalRes.json().catch(() => ({}))) as {

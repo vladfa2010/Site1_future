@@ -44,18 +44,41 @@ export async function chatCompletion(
         { role: 'system', content: PERSONA_PROMPTS[persona] },
         { role: 'user', content: prompt },
       ],
-      max_tokens: Math.min(512, Math.ceil(maxChars / 2) + 80),
+      // reasoner-модели (deepseek-flash и т.п.) тратят max_tokens на reasoning_content:
+      // при коротком лимите весь бюджет уходит на «мысли», а content приходит пустым.
+      // Запас ×4 на рассуждения + повторная попытка с увеличенным лимитом ниже.
+      max_tokens: Math.min(4096, Math.ceil(maxChars / 2) + 1600),
       temperature: persona === 'seo' ? 0.3 : 0.4,
     }),
   });
   const data = (await res.json().catch(() => ({}))) as {
-    choices?: { message?: { content?: string; reasoning_content?: string } }[];
+    choices?: { message?: { content?: string; reasoning_content?: string }; finish_reason?: string }[];
     error?: { message?: string };
   };
   // reasoner-модели DeepSeek отдают мысль в reasoning_content, ответ — в content
-  const text = data.choices?.[0]?.message?.content ?? '';
+  let text = data.choices?.[0]?.message?.content ?? '';
+  // длинный ввод: reasoning съел бюджет — повторяем с большим лимитом
+  if (res.ok && !text && data.choices?.[0]?.finish_reason === 'length' && prompt.length > 2000) {
+    const retry = await fetch(`${baseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model,
+        messages: [
+          { role: 'system', content: PERSONA_PROMPTS[persona] },
+          { role: 'user', content: prompt },
+        ],
+        max_tokens: 8192,
+        temperature: persona === 'seo' ? 0.3 : 0.4,
+      }),
+    });
+    const retryData = (await retry.json().catch(() => ({}))) as typeof data;
+    if (retry.ok) text = retryData.choices?.[0]?.message?.content ?? '';
+  }
   if (!res.ok || !text) {
-    throw new Error(`${label} chat API: ${res.status} ${data.error?.message ?? 'пустой ответ'}`);
+    const why = data.error?.message
+      ?? (data.choices?.[0]?.finish_reason === 'length' ? 'лимит токенов исчерпан (reasoning-модель)' : 'пустой ответ');
+    throw new Error(`${label} chat API: ${res.status} ${why}`);
   }
   return text.trim();
 }
