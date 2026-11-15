@@ -39,6 +39,26 @@ let converted = 0;
 let removed = 0;
 let failed = 0;
 
+/** SVG → PNG: sips на macOS, ImageMagick (magick/convert) на Linux. */
+function isENOENT(e) {
+  return e && typeof e === 'object' && 'code' in e && e.code === 'ENOENT';
+}
+function svgToPng(svgAbs, pngAbs) {
+  try {
+    return execFileSync('sips', ['-s', 'format', 'png', svgAbs, '--out', pngAbs], { stdio: 'pipe' });
+  } catch (e) {
+    if (!isENOENT(e)) throw e;
+  }
+  for (const cmd of ['magick', 'convert']) {
+    try {
+      return execFileSync(cmd, [svgAbs, pngAbs], { stdio: 'pipe' });
+    } catch (e) {
+      if (!isENOENT(e)) throw e;
+    }
+  }
+  throw new Error('нет конвертера SVG→PNG (нужны sips или ImageMagick)');
+}
+
 for (const [id, filePath] of referenced) {
   const svgAbs = path.resolve(UPLOADS_DIR, path.basename(filePath));
   const pngAbs = svgAbs.replace(/\.svg$/, '.png');
@@ -49,7 +69,7 @@ for (const [id, filePath] of referenced) {
   }
   try {
     if (APPLY) {
-      execFileSync('sips', ['-s', 'format', 'png', svgAbs, '--out', pngAbs], { stdio: 'pipe' });
+      svgToPng(svgAbs, pngAbs);
       const buf = await import('node:fs/promises').then((fs) => fs.readFile(pngAbs));
       const isPng = buf.length > 8 && buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47;
       if (!isPng) throw new Error('результат не PNG');

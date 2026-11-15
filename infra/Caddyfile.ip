@@ -1,0 +1,153 @@
+# Доменный режим: инвестиционно.рф и admin.инвестиционно.рф — настоящий TLS
+# (Caddy сам получает/продлевает Let's Encrypt, порты 80/443 открыты).
+# Доступ по IP — на самоподписном сертификате (fallback).
+# Админка: https://217-114-10-164.sslip.io:8443 (LE на sslip.io) + временный https://IP:8080 (self-signed).
+{
+  default_sni 217.114.10.164
+  email invest@inside-trade.ru
+}
+
+(security) {
+  encode zstd gzip
+  header {
+    X-Content-Type-Options nosniff
+    X-Frame-Options DENY
+    Referrer-Policy strict-origin-when-cross-origin
+    # CSP (аудит 2026-11-14): JWT в localStorage — любой XSS = кража токена.
+    # Скрипты — только same-origin (сборки Vite без инлайна); стили допускают
+    # инлайн (style-атрибуты React); srcDoc-iframe превью — под frame-src 'self'.
+    Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'"
+    # HSTS (prod, публичный TLS)
+    Strict-Transport-Security "max-age=31536000; includeSubDomains"
+    -Server
+  }
+}
+
+# === Основной сайт: инвестиционно.рф ===
+xn--b1aghca0aeahc1am7c.xn--p1ai {
+  import security
+
+  handle /sitemap.xml {
+      reverse_proxy api:1003
+  }
+  handle /robots.txt {
+      reverse_proxy api:1003
+  }
+
+  @bots {
+      not path /uploads/* /api/*
+      header_regexp User-Agent (?i)(googlebot|google-inspectiontool|bingbot|yandex(bot|accessibility|images|metrika|video)|duckduckbot|slurp|baiduspider|applebot|telegrambot|vkshare|facebookexternalhit|twitterbot|linkedinbot|whatsapp|discordbot|pinterestbot|redditbot|bytespider|seznambot|Mail\.RU_Bot|exabot)
+  }
+  handle @bots {
+      rewrite * /render?path={uri}
+      reverse_proxy api:1003 {
+          header_up X-Bot-Render 1
+          header_up User-Agent {http.request.header.User-Agent}
+      }
+  }
+
+  handle /api/* {
+      reverse_proxy api:1003
+  }
+  handle /uploads/* {
+      reverse_proxy api:1003
+  }
+  handle {
+      reverse_proxy web:80
+  }
+}
+
+# === Админка: admin.инвестиционно.рф (после заведения DNS) ===
+admin.xn--b1aghca0aeahc1am7c.xn--p1ai {
+  import security
+
+  handle /robots.txt {
+      respond 200 {
+          body "User-agent: *
+Disallow: /
+"
+      }
+  }
+
+  handle /api/* {
+      reverse_proxy api:1003
+  }
+  handle /uploads/* {
+      reverse_proxy api:1003
+  }
+  handle {
+      reverse_proxy admin:80
+  }
+}
+
+# === Fallback по IP: самоподписной сертификат ===
+https://217.114.10.164 {
+  tls /certs/cert.pem /certs/key.pem
+  import security
+
+  handle /sitemap.xml {
+      reverse_proxy api:1003
+  }
+  handle /robots.txt {
+      reverse_proxy api:1003
+  }
+
+  handle /api/* {
+      reverse_proxy api:1003
+  }
+  handle /uploads/* {
+      reverse_proxy api:1003
+  }
+  handle {
+      reverse_proxy web:80
+  }
+}
+
+# === Fallback админки по IP:8080 (самоподписной сертификат) ===
+https://:8080 {
+  tls /certs/cert.pem /certs/key.pem
+  import security
+
+  handle /robots.txt {
+      respond 200 {
+          body "User-agent: *
+Disallow: /
+"
+      }
+  }
+
+  handle /api/* {
+      reverse_proxy api:1003
+  }
+  handle /uploads/* {
+      reverse_proxy api:1003
+  }
+  handle {
+      reverse_proxy admin:80
+  }
+}
+
+# === Админка по HTTPS на отдельном порту — имя через sslip.io (бесплатный DNS: IP → имя).
+# Сайт остаётся на домене :443, админка доступна как https://217-114-10-164.sslip.io:8443
+# (сертификат Let's Encrypt выпускается на это имя автоматически).
+https://217-114-10-164.sslip.io:8443 {
+  import security
+
+  handle /robots.txt {
+      respond 200 {
+          body "User-agent: *
+Disallow: /
+"
+      }
+  }
+
+  handle /api/* {
+      reverse_proxy api:1003
+  }
+  handle /uploads/* {
+      reverse_proxy api:1003
+  }
+  handle {
+      reverse_proxy admin:80
+  }
+}
