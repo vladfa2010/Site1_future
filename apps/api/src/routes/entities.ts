@@ -173,7 +173,7 @@ const planSchema = z.object({
   priceMonthly: z.string().optional(), // NUMERIC строкой, точность
   priceYearly: z.string().optional(),
   yearlyDiscount: z.number().int().optional(),
-  features: z.record(z.unknown()).optional(), // {telegram,email,aiSummary,earlyAccess,...}
+  features: z.record(z.string(), z.unknown()).optional(), // {telegram,email,aiSummary,earlyAccess,...}
   isActive: z.boolean().optional(),
   comingSoonLabel: z.string().nullable().optional(),
   sortOrder: z.number().int().optional(),

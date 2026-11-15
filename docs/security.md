@@ -223,13 +223,14 @@ HSTS `max-age=31536000; includeSubDomains` — только в прод-Caddyfil
 
 **Зависимости.** `npm audit`: critical (tar) и high (@mapbox/node-pre-gyp) закрыты
 переходом bcrypt → bcryptjs (чистый JS, тот же формат хэшей $2a$, миграция не нужна);
-drizzle-orm 0.44.7 → 0.45.4 (GHSA-gpj5-g38j-94v9). CORS_ORIGINS парсится с trim.
-Осталось (запланировано): **zod 3→4** (high GHSA-mrhx-c7xc-m3w5, breaking — нужна
-отдельная миграция валидаций), **bcryptjs vs 72-байтный лимит** (zod допускает пароли
-до 100 символов — bcrypt обрезает; ограничить схему до 72 байт или мигрировать на
-scrypt), **root в контейнере** (supervisord/Caddy/API под root; план — непривилегированный
-пользователь + роль БД без SUPERUSER), **JWT без iss/aud**, нет аудит-лога действий
-админов, resetToken валиден 15 мин после смены пароля.
+drizzle-orm 0.44.7 → 0.45.4 (GHSA-gpj5-g38j-94v9); **zod 3.25 → 4.6.7**
+(GHSA-mrhx-c7xc-m3w5 — единственная правка кода: трёхместный `z.record` в
+adminPlans/entities). Все high/critical закрыты; остаются 4 moderate у drizzle-kit/esbuild
+— инструменты сборки, в рантайм не входят (даунгрейд drizzle-kit до 0.18 потеряет
+`drizzle-kit migrate`, не делаем). CORS_ORIGINS парсится с trim.
+Осталось (запланировано): **контейнер без root** (supervisord/Caddy/API под root;
+план — непривилегированный пользователь + роль БД без SUPERUSER), **JWT без iss/aud**,
+нет аудит-лога действий админов, resetToken валиден 15 мин после смены пароля.
 
 ### 2026-11-08 — предыдущий аудит (справочно)
 
