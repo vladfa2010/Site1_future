@@ -113,3 +113,28 @@ Disallow: /
       reverse_proxy admin:80
   }
 }
+
+# Админка по HTTPS на отдельном порту — имя через sslip.io (бесплатный DNS: IP → имя).
+# Сайт остаётся на домене :443, админка доступна как https://217-114-10-164.sslip.io:8443
+# (сертификат Let's Encrypt выпускается на это имя автоматически).
+https://217-114-10-164.sslip.io:8443 {
+  import security
+
+  handle /robots.txt {
+      respond 200 {
+          body "User-agent: *
+Disallow: /
+"
+      }
+  }
+
+  handle /api/* {
+      reverse_proxy api:1003
+  }
+  handle /uploads/* {
+      reverse_proxy api:1003
+  }
+  handle {
+      reverse_proxy admin:80
+  }
+}
