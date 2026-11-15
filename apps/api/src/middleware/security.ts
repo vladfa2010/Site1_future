@@ -67,10 +67,11 @@ export const verifyCodeLimiter = rateLimit({
   message: { error: 'too many attempts, try later' },
 });
 
-/** Регистрация: защита от спама аккаунтами */
+/** Регистрация: защита от спама аккаунтами. Лимит через env — e2e-сьют регистрирует
+ *  ~6 юзеров за прогон, частые прогоны иначе упираются в бакет (10/час). */
 export const registerLimiter = rateLimit({
   windowMs: 3_600_000,
-  limit: 10,
+  limit: Number(process.env.REGISTER_LIMIT ?? 10),
   ...limiterDefaults,
   message: { error: 'too many attempts, try later' },
 });

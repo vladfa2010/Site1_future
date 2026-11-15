@@ -586,3 +586,34 @@ export const pageLoadEvents = pgTable('page_load_events', {
   userId: integer('user_id').references(() => users.id, { onDelete: 'set null' }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
+
+// ---------- ContentMaster: сессии AI-редактора (миграция 0022, ТЗ-13) ----------
+// История рерайтов персистентна: сессия = исходник + набор ходов (user-инструкция / assistant-результат).
+// Привязка к юзеру; сообщения каскадом со сессией.
+export const cmSessions = pgTable(
+  'cm_sessions',
+  {
+    id: serial('id').primaryKey(),
+    userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    title: text('title').notNull().default(''),
+    source: text('source').notNull(), // исходник целиком: текст или http(s)-ссылка
+    mode: text('mode').notNull().default('rewrite'), // rewrite | factcheck
+    search: boolean('search').notNull().default(false),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index('cm_sessions_user_idx').on(t.userId, t.updatedAt)],
+);
+
+export const cmMessages = pgTable(
+  'cm_messages',
+  {
+    id: serial('id').primaryKey(),
+    sessionId: integer('session_id').notNull().references(() => cmSessions.id, { onDelete: 'cascade' }),
+    role: text('role').notNull(), // user | assistant
+    instruction: text('instruction').notNull(), // инструкция автора (нужна и в assistant для контекста)
+    resultJson: text('result_json'), // только assistant: полный JSON результата
+    createdAt: createdAt(),
+  },
+  (t) => [index('cm_messages_session_idx').on(t.sessionId)],
+);

@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../api';
 
-export interface EntityOption { id: number; name: string }
+export interface EntityOption { id: number; name: string; symbol?: string }
+
+/** Подпись опции — защита от данных без name (у тикеров в API name=symbol, но исторические данные могут отличаться). */
+export const optionLabel = (o: EntityOption): string => o.name ?? (o as EntityOption & { symbol?: string }).symbol ?? '';
 
 interface Props {
   label: string;
@@ -50,11 +53,11 @@ export default function EntityCloud({
 
   const q = query.trim().toLowerCase();
   const matches = q
-    ? options.filter((o) => o.name.toLowerCase().includes(q)).slice(0, 8)
+    ? options.filter((o) => optionLabel(o).toLowerCase().includes(q)).slice(0, 8)
     : [];
   // уже привязанные показываем в конце списка подсказок пометкой, но не исключаем —
   // пользователь может хотеть перейти к ним; клик по привязанному снимет привязку (как чип)
-  const exactExists = q && options.some((o) => o.name.toLowerCase() === q);
+  const exactExists = q && options.some((o) => optionLabel(o).toLowerCase() === q);
 
   useEffect(() => {
     const onDoc = (e: MouseEvent) => {
@@ -133,7 +136,7 @@ export default function EntityCloud({
             title="Нажмите, чтобы отвязать"
             className="rounded-full bg-[#beff00]/15 px-2.5 py-1 text-xs text-[#beff00] hover:bg-red-500/15 hover:text-red-400"
           >
-            {renderOption ? renderOption(o) : o.name} ✕
+            {renderOption ? renderOption(o) : optionLabel(o)} ✕
           </button>
         ))}
         {selected.length === 0 && <span className="text-xs text-zinc-600">не привязано</span>}
@@ -165,7 +168,7 @@ export default function EntityCloud({
                   className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm ${i === highlight ? 'bg-zinc-800' : ''}`}
                 >
                   <span className={bound ? 'text-[#beff00]' : 'text-zinc-300'}>
-                    {renderOption ? renderOption(o) : o.name}
+                    {renderOption ? renderOption(o) : optionLabel(o)}
                   </span>
                   <span className="text-xs text-zinc-600">{bound ? 'привязано ✓' : ''}</span>
                 </button>

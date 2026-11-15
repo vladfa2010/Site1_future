@@ -13,6 +13,22 @@ check() { # check <описание> <условие-команда>
 jqget() { python3 -c "import json,sys; d=json.load(sys.stdin); print($1)" 2>/dev/null; }
 
 echo "════════════════════════════════════════"
+# идемпотентность: убитые прогоны оставляют e2e-хвосты (409 на CREATE → async-ошибка
+# без ответа → curl висит навсегда). Чистим ДО старта, а не только в конце.
+psql -d newinvest -q -c "
+DELETE FROM articles WHERE slug LIKE 'e2e%' OR title LIKE 'E2E идея%' OR title LIKE 'E2E просмотры%';
+DELETE FROM companies WHERE slug LIKE 'e2e%';
+DELETE FROM trends WHERE slug LIKE 'e2e%';
+DELETE FROM industries WHERE slug LIKE 'e2e%';
+DELETE FROM tickers WHERE slug LIKE 'e2e%' OR symbol LIKE 'E2E%';
+DELETE FROM stories WHERE slug LIKE 'e2e%';
+DELETE FROM redirects WHERE old_path LIKE '/e2e%';
+DELETE FROM features_registry WHERE id LIKE 'e2e%';
+-- артефакты ВСЕХ прогонов включая убитые (регистр не важен, включая смоук-скрипты security-сессии)
+DELETE FROM password_reset_codes WHERE user_id IN (SELECT id FROM users WHERE email ILIKE '%e2e%test.ru' OR email ILIKE 'block-%' OR email ILIKE 'reset-%' OR email ILIKE 'dbg%' OR email LIKE 'tz43%' OR email LIKE 'brutetest%');
+DELETE FROM users WHERE email ILIKE '%e2e%test.ru' OR email = 'other@test.ru' OR email ILIKE 'block-%' OR email ILIKE 'reset-%' OR email ILIKE 'dbg%' OR email LIKE 'tz43%' OR email LIKE 'brutetest%';
+" 2>/dev/null
+
 echo "  E2E: АВТОРИЗАЦИЯ"
 echo "════════════════════════════════════════"
 T=$(curl -s -X POST $B/api/auth/login -H "$J" -d '{"email":"test@test.ru","password":"test"}' | jqget "d['token']")
@@ -55,7 +71,8 @@ curl -s -X POST $B/api/auth/register -H "$J" -d '{"username":"BlockE2E","email":
 BTK=$(curl -s -X POST $B/api/auth/login -H "$J" -d '{"email":"block-e2e@test.ru","password":"E2ePass123"}' | jqget "d['token']")
 psql -d newinvest -q -c "UPDATE users SET role='admin', is_blocked=TRUE WHERE email='block-e2e@test.ru'" 2>/dev/null
 if [ -n "$BTK" ]; then
-  curl -s -o /dev/null -w "%{http_code}" "$B/api/admin/metrics/overview" -H "Authorization: Bearer $BTK" | grep -q 403 && ok || bad "blocked: requireRole 403 (ТЗ-120)"
+  # security-пакет 2026-11-15: заблокированный → 401 (токен не принимается), раньше было 403 — оба ок
+  curl -s -o /dev/null -w "%{http_code}" "$B/api/admin/metrics/overview" -H "Authorization: Bearer $BTK" | grep -qE "401|403" && ok || bad "blocked: requireRole 401/403 (ТЗ-120)"
 else
   bad "blocked: нет токена для проверки requireRole"
 fi
@@ -96,6 +113,8 @@ TID=$(curl -s "$B/api/trends" | jqget "[t['id'] for t in d['trends'] if t['slug'
 curl -s -X POST "$B/api/industries" -H "$A" -H "$J" -d '{"slug":"e2e-ind","name":"E2E Индустрия"}' | grep -q e2e-ind && ok || bad "industries: создать"
 curl -s -X POST "$B/api/tickers" -H "$A" -H "$J" -d '{"slug":"e2e","symbol":"E2E","companyId":1}' | grep -q E2E && ok || bad "tickers: создать"
 curl -s "$B/api/tickers?q=e2e" -H "$A" | grep -q E2E && ok || bad "tickers: автодополнение"
+# регресс: тикеры обязаны отдавать name (= symbol) — EntityCloud крашился на o.name.toLowerCase() (чёрный экран редактора)
+curl -s "$B/api/tickers?q=AAPL" | python3 -c "import json,sys; ts=json.load(sys.stdin)['tickers']; assert ts and all(t.get('name') for t in ts), ts[:2]; print('ok')" > /dev/null 2>&1 && ok || bad "tickers: name в ответе (регресс EntityCloud)"
 CID=$(curl -s "$B/api/companies/e2e-corp" | jqget "d['company']['id']")
 curl -s -X POST "$B/api/companies/$CID/rounds" -H "$A" -H "$J" -d '{"stage":"seed","amount":"100000","sourceUrl":"https://example.com"}' | grep -q seed && ok || bad "rounds: создать"
 curl -s -o /dev/null -w "%{http_code}" -X POST "$B/api/companies/$CID/rounds" -H "$A" -H "$J" -d '{"stage":"seed"}' | grep -q 400 && ok || bad "rounds: 400 без source_url"
@@ -315,6 +334,35 @@ CM=$(curl -s -m 120 -X POST "$B/api/admin/content-master/rewrite" -H "$A" -H "$J
 echo "$CM" | python3 -c "import json,sys; d=json.load(sys.stdin); assert d.get('title') and '<p>' in (d.get('html') or ''), d; print('ok')" > /dev/null 2>&1 && ok || bad "cm: рерайт отдаёт title+html"
 curl -s -o /dev/null -w "%{http_code}" -X POST "$B/api/admin/content-master/rewrite" -H "$A" -H "$J" -d '{"source":"http://localhost:1003/api/health","instruction":"перепиши"}' | grep -q 400 && ok || bad "cm: SSRF localhost 400"
 curl -s -o /dev/null -w "%{http_code}" -X POST "$B/api/admin/content-master/rewrite" -H "$A" -H "$J" -d '{"source":"коротко","instruction":"перепиши"}' | grep -q 400 && ok || bad "cm: короткий source 400"
+# contentMaster v2 (ТЗ-13): сессии + стриминг + truncated + trends?q
+CMSRC='SpaceX вывела на орбиту тысячу спутников. Компания лидирует на рынке спутникового интернета, конкуренты отстают.'
+CM2=$(curl -s -m 120 -X POST "$B/api/admin/content-master/rewrite" -H "$A" -H "$J" -d "{\"source\":\"$CMSRC\",\"instruction\":\"перепиши коротко\"}")
+SID=$(echo "$CM2" | jqget "d.get('sessionId') or ''")
+[ -n "$SID" ] && [ "$SID" != "None" ] && ok || bad "cm2: sessionId в ответе рерайта"
+echo "$CM2" | grep -q '"usage"' && ok || bad "cm2: usage в ответе"
+# продолжение сессии: второй ход пишет туда же
+curl -s -m 120 -X POST "$B/api/admin/content-master/rewrite" -H "$A" -H "$J" -d "{\"source\":\"$CMSRC\",\"instruction\":\"сделай ещё короче\",\"sessionId\":$SID}" | grep -q "\"sessionId\":$SID" && ok || bad "cm2: повторный ход в ту же сессию"
+# список сессий: своя видна
+curl -s "$B/api/admin/content-master/sessions" -H "$A" | grep -q "\"id\":$SID" && ok || bad "cm2: сессия в списке"
+# детали: 2 хода = 4 сообщения
+curl -s "$B/api/admin/content-master/sessions/$SID" -H "$A" | python3 -c "import json,sys; m=json.load(sys.stdin)['messages']; assert len(m)==4, m; assert m[0]['role']=='user' and m[1]['role']=='assistant'; print('ok')" > /dev/null 2>&1 && ok || bad "cm2: 4 сообщения в сессии"
+curl -s -o /dev/null -w "%{http_code}" "$B/api/admin/content-master/sessions" | grep -q 401 && ok || bad "cm2: sessions anon 401"
+curl -s -o /dev/null -w "%{http_code}" "$B/api/admin/content-master/sessions/$SID" -H "$UA" | grep -q 403 && ok || bad "cm2: чужая сессия reader 403"
+curl -s -o /dev/null -w "%{http_code}" -X POST "$B/api/admin/content-master/rewrite" -H "$A" -H "$J" -d "{\"source\":\"$CMSRC\",\"instruction\":\"перепиши\",\"sessionId\":999999}" | grep -q 404 && ok || bad "cm2: несуществующая сессия 404"
+# стриминг: meta и done в SSE-потоке
+CMSTREAM=$(curl -s -m 120 -N -X POST "$B/api/admin/content-master/rewrite" -H "$A" -H "$J" -H 'Accept: text/event-stream' -d "{\"source\":\"$CMSRC\",\"instruction\":\"перепиши\",\"stream\":true}")
+echo "$CMSTREAM" | grep -q '"type":"meta"' && echo "$CMSTREAM" | grep -q '"type":"done"' && ok || bad "cm2: SSE meta+done"
+# truncated: исходник длиннее 15 000 символов
+BIGSRC=$(python3 -c "print('Спутниковый интернет растёт. ' * 800)")
+curl -s -m 120 -X POST "$B/api/admin/content-master/rewrite" -H "$A" -H "$J" -d "{\"source\":\"$BIGSRC\",\"instruction\":\"перепиши коротко\"}" | grep -q '"truncated":true' && ok || bad "cm2: truncated:true на длинном исходнике"
+# удаление: reader 403, admin 200, повторный GET 404
+curl -s -o /dev/null -w "%{http_code}" -X DELETE "$B/api/admin/content-master/sessions/$SID" -H "$UA" | grep -q 403 && ok || bad "cm2: DELETE чужой сессии 403"
+curl -s -o /dev/null -w "%{http_code}" -X DELETE "$B/api/admin/content-master/sessions/$SID" -H "$A" | grep -q 200 && ok || bad "cm2: DELETE своя 200"
+curl -s -o /dev/null -w "%{http_code}" "$B/api/admin/content-master/sessions/$SID" -H "$A" | grep -q 404 && ok || bad "cm2: GET удалённой 404"
+# trends: серверная фильтрация ?q (ТЗ-13 ф.4.4)
+TN=$(curl -s "$B/api/trends" | jqget "d['trends'][0]['name'][:3]")
+QT=$(TN="$TN" python3 -c "import urllib.parse,os;print(urllib.parse.quote(os.environ['TN']))")
+curl -s "$B/api/trends?q=$QT" | TN="$TN" python3 -c "import json,sys,os; ts=json.load(sys.stdin)['trends']; n=os.environ['TN'].lower(); assert ts and all(n in t['name'].lower() for t in ts), ts; print('ok')" > /dev/null 2>&1 && ok || bad "trends: ?q фильтрует сервером"
 # телеметрия скорости страниц: публичный приём + агрегат в метриках
 curl -s -o /dev/null -w "%{http_code}" -X POST "$B/api/telemetry/page-load" -H "$J" -d '{"path":"/novost/e2e-tele","loadMs":1500}' | grep -q 201 && ok || bad "telemetry: приём 201"
 curl -s -o /dev/null -w "%{http_code}" -X POST "$B/api/telemetry/page-load" -H "$J" -d '{"path":"../etc/passwd","loadMs":1500}' | grep -q 400 && ok || bad "telemetry: путь вне / 400"

@@ -251,6 +251,7 @@ entitiesRouter.get('/tickers', async (req, res) => {
   const rows = await db
     .select({
       id: tickers.id,
+      name: tickers.symbol, // EntityCloud/фильтры ищут по name — у тикеров подпись = символ
       symbol: tickers.symbol,
       slug: tickers.slug,
       exchange: tickers.exchange,
@@ -336,13 +337,17 @@ entitiesRouter.delete('/industries/:id', authRequired, requireRole('admin', 'sup
 
 // ---------- Тренды ----------
 
-entitiesRouter.get('/trends', async (_req, res) => {
+entitiesRouter.get('/trends', async (req, res) => {
+  // ТЗ-13: серверная фильтрация по ?q — админка (ContentMaster) шлёт подстроку
+  // вместо выкачивания всех 100 трендов и фильтрации на клиенте.
+  const q = (req.query.q as string | undefined)?.trim();
   const rows = await db
     .select({ trend: trends, coverUrl: media.filePath })
     .from(trends)
     .leftJoin(media, eq(trends.coverMediaId, media.id))
+    .where(q ? ilike(trends.name, `%${q.slice(0, 60)}%`) : undefined)
     .orderBy(trends.name)
-    .limit(100);
+    .limit(q ? 20 : 100);
   res.json({ trends: rows.map(({ trend, coverUrl }) => ({ ...trend, coverUrl })) });
 });
 

@@ -1,16 +1,19 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router';
-import { api } from '../api';
+import { api, ApiError } from '../api';
 import { sanitizeArticleHtml } from '../lib/sanitize';
 
 /**
  * ContentMaster — AI-редактор для быстрого производства черновиков.
  * Сценарий: вставить текст или ссылку → дать инструкцию → получить рерайт →
  * выбрать тип → раскрываются параметры → «Создать черновик» → редактор.
+ * ТЗ-13: сессии персистентны (история не теряется), ответ стримится (SSE),
+ * в сессии модель видит предыдущие ходы.
  */
 
 interface FactItem { claim: string; status: string; comment: string }
 interface Source { title: string; url: string; snippet: string }
+interface Usage { promptTokens: number; completionTokens: number; totalTokens: number }
 interface RewriteResult {
   title: string;
   html?: string;
@@ -20,6 +23,9 @@ interface RewriteResult {
   summary?: string;
   report?: FactItem[];
   sources?: Source[];
+  sessionId?: number;
+  truncated?: boolean;
+  usage?: Usage | null;
 }
 
 interface ChatMsg {
@@ -27,6 +33,9 @@ interface ChatMsg {
   instruction: string;
   result?: RewriteResult;
 }
+
+interface SessionListItem { id: number; title: string; mode: string; updatedAt: string; messageCount: number }
+interface StoredMessage { id: number; role: string; instruction: string; resultJson: string | null }
 
 interface Opt { id: number; label: string }
 
@@ -57,8 +66,51 @@ function slugify(title: string): string {
     .slice(0, 80) || 'novyj-material';
 }
 
-/** Предпросмотр — только через sanitize-html с allowlist (apps/admin/src/lib/sanitize).
- *  Регулярная «очистка» HTML запрещена: обходится тривиально (аудит 2026-11-14). */
+/** SSE-клиент для /rewrite?stream=true: meta → delta* → done | error.
+ *  fetch + ReadableStream, т.к. EventSource не умеет Authorization-заголовок. */
+async function streamRewrite(
+  body: Record<string, unknown>,
+  onDelta: (text: string) => void,
+): Promise<RewriteResult> {
+  const token = localStorage.getItem('token');
+  const res = await fetch('/api/admin/content-master/rewrite', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({ ...body, stream: true }),
+  });
+  if (!res.ok || !res.body) {
+    const errBody = await res.json().catch(() => ({}));
+    throw new ApiError(res.status, errBody);
+  }
+  const reader = res.body.getReader();
+  const dec = new TextDecoder();
+  let buf = '';
+  let meta: Record<string, unknown> = {};
+  let done: RewriteResult | null = null;
+  for (;;) {
+    const { done: eof, value } = await reader.read();
+    if (eof) break;
+    buf += dec.decode(value, { stream: true });
+    let sep: number;
+    while ((sep = buf.indexOf('\n\n')) >= 0) {
+      const raw = buf.slice(0, sep);
+      buf = buf.slice(sep + 2);
+      const line = raw.split('\n').find((l) => l.startsWith('data: '));
+      if (!line) continue;
+      const evt = JSON.parse(line.slice(6)) as { type?: string; text?: string; message?: string } & RewriteResult;
+      if (evt.type === 'meta') meta = evt as unknown as Record<string, unknown>;
+      else if (evt.type === 'delta') onDelta(evt.text ?? '');
+      else if (evt.type === 'done') done = evt;
+      else if (evt.type === 'error') throw new Error(evt.message ?? 'Ошибка стрима');
+    }
+  }
+  if (!done) throw new Error('Поток закрыт без результата');
+  // meta приходит до done — подтягиваем поля, которых может не быть в done
+  return { ...meta, ...done } as unknown as RewriteResult;
+}
 
 /** Тег-инпут с автодополнением: ввод → дроплист → Enter добавляет. */
 function TagInput({ label, value, onChange, fetchOptions, placeholder }: {
@@ -151,6 +203,12 @@ export default function ContentMasterPage() {
   const [active, setActive] = useState<RewriteResult | null>(null);
   const [mode, setMode] = useState<'rewrite' | 'factcheck'>('rewrite');
   const [search, setSearch] = useState(false);
+  const [streamText, setStreamText] = useState(''); // живой текст стрима (ТЗ-13)
+
+  // сессии (ТЗ-13)
+  const [sessionId, setSessionId] = useState<number | null>(null);
+  const [sessions, setSessions] = useState<SessionListItem[]>([]);
+  const [loadingSession, setLoadingSession] = useState(false);
 
   // параметры черновика
   const [type, setType] = useState<string>('');
@@ -171,34 +229,118 @@ export default function ContentMasterPage() {
   const listRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
-  }, [messages]);
+  }, [messages, streamText]);
 
   const autoSlug = useMemo(() => slugify(title), [title]);
   const effectiveSlug = slugTouched ? slug : autoSlug;
+
+  const refreshSessions = async () => {
+    try {
+      const d = await api<{ sessions: SessionListItem[] }>('/admin/content-master/sessions');
+      setSessions(d.sessions);
+    } catch { /* список сессий — некритично */ }
+  };
+  useEffect(() => { void refreshSessions(); }, []);
+
+  const resetWorkspace = () => {
+    setMessages([]);
+    setSource('');
+    setActive(null);
+    setSessionId(null);
+    setCreated(null);
+    setStreamText('');
+  };
+
+  const applyResult = (res: RewriteResult) => {
+    setActive(res);
+    setTitle(res.title);
+    setExcerpt(res.excerpt);
+    setSlugTouched(false);
+    setSlug('');
+    // источник в черновик: сначала sourceUrl результата, иначе первый найденный (ТЗ-13 ф.4.2)
+    setSourceUrl(res.sourceUrl ?? res.sources?.[0]?.url ?? '');
+    setCreated(null);
+  };
+
+  const loadSession = async (id: number) => {
+    setLoadingSession(true);
+    setError(null);
+    try {
+      const d = await api<{ session: { id: number; title: string; source: string; mode: string; search: boolean }; messages: StoredMessage[] }>(
+        `/admin/content-master/sessions/${id}`,
+      );
+      const restored: ChatMsg[] = [];
+      let lastResult: RewriteResult | null = null;
+      for (const m of d.messages) {
+        if (m.role === 'user') {
+          restored.push({ role: 'user', instruction: m.instruction });
+        } else if (m.resultJson) {
+          try {
+            const result = JSON.parse(m.resultJson) as RewriteResult;
+            restored.push({ role: 'assistant', instruction: m.instruction, result });
+            lastResult = result;
+          } catch { /* битое сообщение пропускаем */ }
+        }
+      }
+      setSessionId(d.session.id);
+      setSource(d.session.source);
+      setMode(d.session.mode === 'factcheck' ? 'factcheck' : 'rewrite');
+      setSearch(d.session.search);
+      setMessages(restored);
+      setCreated(null);
+      setStreamText('');
+      if (lastResult) {
+        setActive(lastResult);
+        setTitle(lastResult.title);
+        setExcerpt(lastResult.excerpt);
+        setSourceUrl(lastResult.sourceUrl ?? lastResult.sources?.[0]?.url ?? '');
+      } else {
+        setActive(null);
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Ошибка загрузки сессии');
+    } finally {
+      setLoadingSession(false);
+    }
+  };
+
+  const deleteSession = async (id: number) => {
+    try {
+      await api(`/admin/content-master/sessions/${id}`, { method: 'DELETE' });
+      if (sessionId === id) resetWorkspace();
+      await refreshSessions();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Ошибка удаления');
+    }
+  };
 
   const send = async () => {
     if (!source.trim() || !instruction.trim() || busy) return;
     setBusy(true);
     setError(null);
+    setStreamText('');
     const userMsg: ChatMsg = { role: 'user', instruction: instruction.trim() };
     setMessages((m) => [...m, userMsg]);
     try {
-      const res = await api<RewriteResult>('/admin/content-master/rewrite', {
-        method: 'POST',
-        body: JSON.stringify({ source: source.trim(), instruction: instruction.trim(), mode, search }),
-      });
+      const res = await streamRewrite(
+        {
+          source: source.trim(),
+          instruction: instruction.trim(),
+          mode,
+          search,
+          ...(sessionId ? { sessionId } : {}),
+        },
+        (t) => setStreamText((prev) => prev + t),
+      );
       setMessages((m) => [...m, { role: 'assistant', instruction: instruction.trim(), result: res }]);
-      setActive(res);
-      setTitle(res.title);
-      setExcerpt(res.excerpt);
-      setSlugTouched(false);
-      setSlug('');
-      setSourceUrl(res.sourceUrl ?? '');
-      setCreated(null);
+      setSessionId(res.sessionId ?? sessionId);
+      applyResult(res);
+      void refreshSessions();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Ошибка');
     } finally {
       setBusy(false);
+      setStreamText('');
     }
   };
 
@@ -239,8 +381,9 @@ export default function ContentMasterPage() {
   };
 
   const fetchTrends = async (q: string): Promise<Opt[]> => {
-    const d = await api<{ trends: { id: number; name: string }[] }>('/trends');
-    return d.trends.filter((t) => t.name.toLowerCase().includes(q.toLowerCase())).map((t) => ({ id: t.id, label: t.name }));
+    // ТЗ-13 ф.4.4: серверная фильтрация вместо выкачивания всех трендов
+    const d = await api<{ trends: { id: number; name: string }[] }>(`/trends${q ? `?q=${encodeURIComponent(q)}` : ''}`);
+    return d.trends.map((t) => ({ id: t.id, label: t.name }));
   };
   const fetchCompanies = async (q: string): Promise<Opt[]> => {
     const d = await api<{ companies: { id: number; name: string }[] }>(`/companies?q=${encodeURIComponent(q)}`);
@@ -262,9 +405,41 @@ export default function ContentMasterPage() {
         )}
       </div>
       <p className="text-sm text-zinc-500">
-        Вставьте текст или ссылку, опишите задачу — AI перепишет материал. Выберите тип, заполните параметры и создайте черновик.
+        Вставьте текст или ссылку, опишите задачу — AI перепишет материал. Ответ приходит по мере генерации.
+        В рамках сессии модель помнит предыдущие ходы — можно просить «сделай короче», «добавь цифры».
       </p>
       {error && <p className="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-400">{error}</p>}
+
+      {/* Сессии (ТЗ-13) */}
+      <div className="card flex flex-wrap items-center gap-2">
+        <span className="label mb-0">Сессии</span>
+        <select
+          className="input min-w-64 flex-1"
+          value={sessionId ?? ''}
+          disabled={loadingSession}
+          onChange={(e) => {
+            const v = e.target.value;
+            if (!v) resetWorkspace();
+            else void loadSession(Number(v));
+          }}
+        >
+          <option value="">— новая сессия —</option>
+          {sessions.map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.title || `Сессия ${s.id}`} · {s.messageCount} сообщ. · {new Date(s.updatedAt).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+            </option>
+          ))}
+        </select>
+        {sessionId && (
+          <button
+            type="button"
+            className="rounded-lg border border-zinc-700 px-3 py-1.5 text-xs text-zinc-400 hover:border-red-500/50 hover:text-red-400"
+            onClick={() => void deleteSession(sessionId)}
+          >
+            удалить сессию
+          </button>
+        )}
+      </div>
 
       {/* Чат */}
       <div ref={listRef} className="card max-h-[420px] space-y-4 overflow-y-auto">
@@ -284,13 +459,18 @@ export default function ContentMasterPage() {
                   <div className="flex shrink-0 gap-2">
                     {m.result.mock && <span className="rounded bg-amber-500/10 px-2 py-0.5 text-xs text-amber-400">mock — нет ключа LLM</span>}
                     <button
-                      onClick={() => { setActive(m.result!); setTitle(m.result!.title); setExcerpt(m.result!.excerpt); setSourceUrl(m.result!.sourceUrl ?? ''); setCreated(null); setMode(m.result!.report ? 'factcheck' : 'rewrite'); }}
+                      onClick={() => { setActive(m.result!); setTitle(m.result!.title); setExcerpt(m.result!.excerpt); setSourceUrl(m.result!.sourceUrl ?? m.result!.sources?.[0]?.url ?? ''); setCreated(null); setMode(m.result!.report ? 'factcheck' : 'rewrite'); }}
                       className={`rounded px-2 py-0.5 text-xs ${active === m.result ? 'bg-[#beff00] text-black' : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'}`}
                     >
                       {active === m.result ? '✓ выбран' : 'взять за основу'}
                     </button>
                   </div>
                 </div>
+                {m.result.truncated && (
+                  <p className="rounded bg-amber-500/10 px-2 py-1 text-xs text-amber-400">
+                    Исходный текст обрезан до 15 000 символов — хвост не передан модели
+                  </p>
+                )}
                 {m.result.excerpt && <p className="text-sm text-zinc-400">{m.result.excerpt}</p>}
                 {m.result.summary && <p className="rounded bg-zinc-800/60 px-3 py-2 text-sm text-zinc-200">{m.result.summary}</p>}
                 {m.result.report && m.result.report.length > 0 && (
@@ -327,11 +507,23 @@ export default function ContentMasterPage() {
                     dangerouslySetInnerHTML={{ __html: sanitizeArticleHtml(m.result.html) }}
                   />
                 )}
+                {m.result.usage && (
+                  <p className="text-xs text-zinc-600">
+                    токенов: {m.result.usage.totalTokens} (вход {m.result.usage.promptTokens} / выход {m.result.usage.completionTokens})
+                  </p>
+                )}
               </div>
             )
           ),
         )}
-        {busy && <p className="text-sm text-zinc-500">AI пишет…</p>}
+        {busy && (
+          <div className="max-w-[92%] space-y-2">
+            <p className="text-sm text-zinc-500">AI пишет…</p>
+            {streamText && (
+              <pre className="max-h-40 overflow-y-auto whitespace-pre-wrap rounded border border-zinc-800 bg-zinc-950 p-3 text-sm text-zinc-300">{streamText}</pre>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Ввод */}
@@ -374,6 +566,7 @@ export default function ContentMasterPage() {
             искать в интернете
           </label>
           {mode === 'factcheck' && <span className="rounded bg-sky-500/10 px-2 py-0.5 text-xs text-sky-400">режим: фактчек</span>}
+          {sessionId && <span className="rounded bg-zinc-800 px-2 py-0.5 text-xs text-zinc-400">сессия #{sessionId}</span>}
         </div>
       </div>
 

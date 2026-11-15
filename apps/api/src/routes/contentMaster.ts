@@ -1,8 +1,15 @@
 /**
  * ContentMaster — AI-редактор для быстрого производства черновиков.
- * POST /api/admin/content-master/rewrite {source, instruction}
+ *
+ * POST /api/admin/content-master/rewrite {source, instruction, mode?, search?, sessionId?, stream?}
  *   source: текст статьи ИЛИ http(s)-ссылка (страница выкачивается и очищается в текст).
- *   Ответ: {title, html, excerpt, mock} — готовая основа черновика.
+ *   sessionId: продолжить сессию — модель получает контекст предыдущих ходов (ТЗ-13).
+ *   stream: true — ответ в SSE (meta → delta* → done/error), стримится финальный раунд LLM.
+ *   Ответ: {title, html, excerpt, sessionId, truncated, usage, sources, mock} — готовая основа черновика.
+ * GET    /api/admin/content-master/sessions      — мои сессии (последние 50)
+ * GET    /api/admin/content-master/sessions/:id  — сессия + сообщения (своя, иначе 403/404)
+ * DELETE /api/admin/content-master/sessions/:id  — удалить свою сессию
+ *
  * Провайдер LLM — выбранный в настройках (Kimi/DeepSeek), без ключа — mock-режим.
  */
 import { Router } from 'express';
@@ -11,6 +18,8 @@ import { rateLimit } from 'express-rate-limit';
 import http from 'node:http';
 import https from 'node:https';
 import dns from 'node:dns/promises';
+import { eq, desc, sql } from 'drizzle-orm';
+import { db, cmSessions, cmMessages } from '@newinvest/db';
 import { authRequired, requireRole } from '../middleware/auth.js';
 import { getKimiSettings, DEEPSEEK_BASE_URL } from '../services/kimiSettings.js';
 
@@ -29,6 +38,66 @@ const rewriteSchema = z.object({
   instruction: z.string().trim().min(3).max(2000),
   mode: z.enum(['rewrite', 'factcheck']).default('rewrite'),
   search: z.boolean().default(false), // поиск в интернете (DeepSeek + DuckDuckGo, агентный цикл)
+  sessionId: z.number().int().positive().optional(), // продолжить сессию (ТЗ-13)
+  stream: z.boolean().default(false), // SSE-ответ (ТЗ-13)
+});
+
+// ---------- Сессии (ТЗ-13): персистентная история чата ----------
+
+interface CmSessionRow { id: number; userId: number; title: string; source: string; mode: string; search: boolean }
+
+/** Сессия текущего юзера: null — нет в БД, 'forbidden' — чужая. */
+async function findSession(id: number, userId: number): Promise<CmSessionRow | 'forbidden' | null> {
+  const [row] = await db.select().from(cmSessions).where(eq(cmSessions.id, id)).limit(1);
+  if (!row) return null;
+  if (row.userId !== userId) return 'forbidden';
+  return row;
+}
+
+contentMasterRouter.get('/sessions', authRequired, requireRole('admin', 'super_admin'), async (req, res) => {
+  // считаем сообщения одним агрегатом (leftJoin + groupBy — один round-trip)
+  const list = await db
+    .select({
+      id: cmSessions.id,
+      title: cmSessions.title,
+      mode: cmSessions.mode,
+      updatedAt: cmSessions.updatedAt,
+      messageCount: sql<number>`count(${cmMessages.id})::int`.as('message_count'),
+    })
+    .from(cmSessions)
+    .leftJoin(cmMessages, eq(cmMessages.sessionId, cmSessions.id))
+    .where(eq(cmSessions.userId, req.user!.id))
+    .groupBy(cmSessions.id)
+    .orderBy(desc(cmSessions.updatedAt))
+    .limit(50);
+  res.json({ sessions: list });
+});
+
+contentMasterRouter.get('/sessions/:id', authRequired, requireRole('admin', 'super_admin'), async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) { res.status(400).json({ error: 'validation' }); return; }
+  const session = await findSession(id, req.user!.id);
+  if (session === null) { res.status(404).json({ error: 'not found' }); return; }
+  if (session === 'forbidden') { res.status(403).json({ error: 'forbidden' }); return; }
+  const messages = await db
+    .select({ id: cmMessages.id, role: cmMessages.role, instruction: cmMessages.instruction, resultJson: cmMessages.resultJson })
+    .from(cmMessages)
+    .where(eq(cmMessages.sessionId, id))
+    .orderBy(cmMessages.id);
+  res.json({
+    session: { id: session.id, title: session.title, source: session.source, mode: session.mode, search: session.search },
+    messages,
+  });
+});
+
+contentMasterRouter.delete('/sessions/:id', authRequired, requireRole('admin', 'super_admin'), async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) { res.status(400).json({ error: 'validation' }); return; }
+  const session = await findSession(id, req.user!.id);
+  if (session === null) { res.status(404).json({ error: 'not found' }); return; }
+  if (session === 'forbidden') { res.status(403).json({ error: 'forbidden' }); return; }
+  await db.delete(cmSessions).where(eq(cmSessions.id, id)); // сообщения каскадом
+  res.json({ ok: true });
 });
 
 // ---------- Поиск: DuckDuckGo (без ключа) — исполняет вызовы web_search модели ----------
@@ -104,38 +173,134 @@ const SEARCH_TOOL_KIMI = {
   function: { name: '$web_search' },
 };
 
-/** Агентный цикл: модель просит web_search → мы исполняем через DDG → модель отвечает с источниками. */
+interface ChatUsage { promptTokens: number; completionTokens: number; totalTokens: number }
+const ZERO_USAGE: ChatUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
+
+interface StreamHandlers {
+  onDelta?: (text: string) => void;
+  signal?: AbortSignal;
+}
+
+interface ChatRoundResult {
+  content: string;
+  toolCalls: { id: string; function: { arguments: string } }[];
+  usage: ChatUsage;
+}
+
+/** Один раунд chat/completions. stream: дельты контента уходят в onDelta по мере прихода;
+ *  tool_call-раунды собираются молча (контента нет). Возвращает собранный контент и usage. */
+async function chatRound(
+  base: string, key: string, model: string, messages: Record<string, unknown>[],
+  tools: unknown[] | undefined, stream: boolean, h: StreamHandlers,
+): Promise<ChatRoundResult> {
+  const body: Record<string, unknown> = {
+    model, messages,
+    max_tokens: 8192, // reasoner-модели тратят бюджет на reasoning_content — запас ×2
+    temperature: 0.3,
+    ...(tools ? { tools } : {}),
+    ...(stream ? { stream: true, stream_options: { include_usage: true } } : {}),
+  };
+  const res = await fetch(`${base}/chat/completions`, {
+    method: 'POST',
+    signal: h.signal ?? AbortSignal.timeout(120_000),
+    headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!stream) {
+    const data = (await res.json().catch(() => ({}))) as {
+      choices?: { message?: { content?: string; tool_calls?: { id: string; function: { arguments: string } }[] } }[];
+      usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
+      error?: { message?: string };
+    };
+    const msg = data.choices?.[0]?.message;
+    if (!res.ok || !msg) throw new Error(`chat API: ${res.status} ${data.error?.message ?? 'пустой ответ'}`);
+    return {
+      content: msg.content ?? '',
+      toolCalls: msg.tool_calls ?? [],
+      usage: {
+        promptTokens: data.usage?.prompt_tokens ?? 0,
+        completionTokens: data.usage?.completion_tokens ?? 0,
+        totalTokens: data.usage?.total_tokens ?? 0,
+      },
+    };
+  }
+  if (!res.ok || !res.body) {
+    const data = (await res.json().catch(() => ({}))) as { error?: { message?: string } };
+    throw new Error(`chat API: ${res.status} ${data.error?.message ?? 'пустой ответ'}`);
+  }
+  let content = '';
+  const toolCalls: { id: string; function: { arguments: string } }[] = [];
+  let usage: ChatUsage = { ...ZERO_USAGE };
+  for await (const payload of readSse(res)) {
+    const chunk = JSON.parse(payload) as {
+      choices?: { delta?: { content?: string; tool_calls?: { index?: number; id?: string; function?: { arguments?: string } }[] }; finish_reason?: string }[];
+      usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
+    };
+    const delta = chunk.choices?.[0]?.delta;
+    if (delta?.content) { content += delta.content; h.onDelta?.(delta.content); }
+    for (const tc of delta?.tool_calls ?? []) {
+      const slot = toolCalls[tc.index ?? 0] ?? (toolCalls[tc.index ?? 0] = { id: '', function: { arguments: '' } });
+      if (tc.id) slot.id = tc.id;
+      if (tc.function?.arguments) slot.function.arguments += tc.function.arguments;
+    }
+    if (chunk.usage) {
+      usage = {
+        promptTokens: chunk.usage.prompt_tokens ?? 0,
+        completionTokens: chunk.usage.completion_tokens ?? 0,
+        totalTokens: chunk.usage.total_tokens ?? 0,
+      };
+    }
+  }
+  return { content, toolCalls: toolCalls.filter((c) => c.id), usage };
+}
+
+/** Разбор SSE-тела ответа провайдера: генерация по data:-строкам, конец — [DONE]. */
+async function* readSse(res: Response): AsyncGenerator<string> {
+  const reader = res.body!.getReader();
+  const dec = new TextDecoder();
+  let buf = '';
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      let sep: number;
+      while ((sep = buf.indexOf('\n\n')) >= 0) {
+        const raw = buf.slice(0, sep);
+        buf = buf.slice(sep + 2);
+        const line = raw.split('\n').find((l) => l.startsWith('data: '));
+        if (!line) continue;
+        const payload = line.slice(6).trim();
+        if (payload === '[DONE]') return;
+        yield payload;
+      }
+    }
+  } finally {
+    reader.cancel().catch(() => { /* соединение уже закрыто */ });
+  }
+}
+
+/** Агентный цикл: модель просит web_search → мы исполняем через DDG → модель отвечает с источниками.
+ *  Стримится контент того раунда, где модель даёт финальный ответ (ТЗ-13). */
 async function chatWithSearch(
-  base: string, key: string, model: string, system: string, user: string, label: string,
+  base: string, key: string, model: string, system: string, user: string,
   searchTool: typeof SEARCH_TOOL_DEEPSEEK | typeof SEARCH_TOOL_KIMI,
   executeSearch: (query: string) => Promise<SearchHit[]>,
-): Promise<{ content: string; sources: SearchHit[] }> {
+  h: StreamHandlers,
+): Promise<{ content: string; sources: SearchHit[]; usage: ChatUsage }> {
   const messages: Record<string, unknown>[] = [
     { role: 'system', content: system },
     { role: 'user', content: user },
   ];
   const sources: SearchHit[] = [];
+  let usage: ChatUsage = { ...ZERO_USAGE };
   for (let round = 0; round < 3; round++) {
-    const res = await fetch(`${base}/chat/completions`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model, messages,
-        tools: [searchTool],
-        max_tokens: 8192, // reasoner-модели тратят бюджет на reasoning_content — запас ×2
-        temperature: 0.3,
-      }),
-    });
-    const data = (await res.json().catch(() => ({}))) as {
-      choices?: { message?: { content?: string; tool_calls?: { id: string; function: { arguments: string } }[] }; finish_reason?: string }[];
-      error?: { message?: string };
-    };
-    const msg = data.choices?.[0]?.message;
-    if (!res.ok || !msg) throw new Error(`${label} chat API: ${res.status} ${data.error?.message ?? 'пустой ответ'}`);
-    const calls = msg.tool_calls ?? [];
-    if (calls.length === 0) return { content: msg.content ?? '', sources };
-    messages.push({ role: 'assistant', content: msg.content ?? '', tool_calls: calls });
-    for (const c of calls) {
+    const isLastRound = round === 2;
+    const r = await chatRound(base, key, model, messages, [searchTool], isLastRound && Boolean(h.onDelta), h);
+    usage = r.usage;
+    if (r.toolCalls.length === 0) return { content: r.content, sources, usage };
+    messages.push({ role: 'assistant', content: r.content, tool_calls: r.toolCalls });
+    for (const c of r.toolCalls) {
       await sleep(350); // не ддосим DDG пачкой запросов — иначе челлендж на IP
       let query = '';
       try { query = (JSON.parse(c.function.arguments) as { query?: string }).query ?? ''; } catch { /* ignore */ }
@@ -145,7 +310,7 @@ async function chatWithSearch(
       }
       try {
         const hits = await executeSearch(query);
-        hits.forEach((h) => { if (!sources.some((s) => s.url === h.url)) sources.push(h); });
+        hits.forEach((hit) => { if (!sources.some((s) => s.url === hit.url)) sources.push(hit); });
         messages.push({ role: 'tool', tool_call_id: c.id, content: JSON.stringify({ results: hits }) });
       } catch (e) {
         const msg = e instanceof Error ? e.message : 'search failed';
@@ -156,24 +321,9 @@ async function chatWithSearch(
   }
   // раунды кончились (поиск стабильно недоступен) — финальный ответ без tools:
   // модель честно ответит на основе своих знаний с пометкой о недоступности поиска
-  const finalRes = await fetch(`${base}/chat/completions`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model, messages,
-      max_tokens: 8192, // reasoner-модели тратят бюджет на reasoning_content — запас ×2
-      temperature: 0.3,
-    }),
-  });
-  const finalData = (await finalRes.json().catch(() => ({}))) as {
-    choices?: { message?: { content?: string } }[];
-    error?: { message?: string };
-  };
-  const finalText = finalData.choices?.[0]?.message?.content;
-  if (!finalRes.ok || !finalText) {
-    throw new Error(`${label} chat API: ${finalRes.status} ${finalData.error?.message ?? 'пустой ответ'}`);
-  }
-  return { content: finalText, sources };
+  const final = await chatRound(base, key, model, messages, undefined, Boolean(h.onDelta), h);
+  usage = final.usage;
+  return { content: final.content, sources, usage };
 }
 
 const REWRITER_SYSTEM = `Ты редактор инвестиционного медиа «Инвестиционно.рф». Переписываешь материалы по инструкции автора: меняешь стиль, структуру, глубину изложения — сохраняя факты и числа исходного текста, не добавляя выдуманных данных.
@@ -329,35 +479,14 @@ function parseRewrite(raw: string): { title: string; html: string; excerpt: stri
   return { title: title.slice(0, 200), html, excerpt: typeof d.excerpt === 'string' ? d.excerpt.trim().slice(0, 500) : '' };
 }
 
-
-/** Рерайт с запасом max_tokens (512 в textGen для рерайта мало). */
+/** Рерайт одним проходом (без поиска). Стримится при onDelta. */
 async function rewriteWithLlm(
-  baseUrl: string, apiKey: string, model: string, prompt: string, label: string,
-  system: string = REWRITER_SYSTEM,
-): Promise<string> {
-  const res = await fetch(`${baseUrl}/chat/completions`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model,
-      messages: [
-        { role: 'system', content: system },
-        { role: 'user', content: prompt },
-      ],
-      max_tokens: 8192,
-      temperature: 0.5,
-      // гарантируем JSON на выходе (DeepSeek/Moonshot поддерживают response_format);
-      // иначе рассуждающие модели (deepseek-v4-pro) иногда возвращают текст вне схемы
-      response_format: { type: 'json_object' },
-    }),
-  });
-  const data = (await res.json().catch(() => ({}))) as {
-    choices?: { message?: { content?: string } }[];
-    error?: { message?: string };
-  };
-  const text = data.choices?.[0]?.message?.content ?? '';
-  if (!res.ok || !text) throw new Error(`${label} chat API: ${res.status} ${data.error?.message ?? 'пустой ответ'}`);
-  return text;
+  baseUrl: string, apiKey: string, model: string, system: string, user: string, h: StreamHandlers,
+): Promise<{ content: string; usage: ChatUsage }> {
+  const r = await chatRound(baseUrl, apiKey, model,
+    [{ role: 'system', content: system }, { role: 'user', content: user }],
+    undefined, Boolean(h.onDelta), h);
+  return { content: r.content, usage: r.usage };
 }
 
 /** Разбор JSON фактчека из ответа модели. */
@@ -375,6 +504,71 @@ function parseFactcheck(raw: string): { report: { claim: string; status: string;
   return { report, summary: typeof d.summary === 'string' ? d.summary.slice(0, 500) : '' };
 }
 
+// ---------- Контекст итеративного чата (ТЗ-13) ----------
+
+const CONTEXT_TURNS = 8; // последние ходы (пара user+assistant), что влезает в бюджет модели
+const CONTEXT_ASSISTANT_MAX = 1500; // символов на представление одного ответа в контексте
+
+/** Компактное текстовое представление результата для контекста следующих ходов. */
+function resultToContext(resultJson: string): string {
+  try {
+    const d = JSON.parse(resultJson) as { title?: string; html?: string; report?: { claim: string; status: string; comment: string }[]; summary?: string };
+    if (Array.isArray(d.report)) {
+      const lines = d.report.map((r) => `${r.claim} — ${r.status}${r.comment ? ` — ${r.comment}` : ''}`);
+      if (d.summary) lines.push(`Итог: ${d.summary}`);
+      return lines.join('\n').slice(0, CONTEXT_ASSISTANT_MAX);
+    }
+    const text = htmlToText(d.html ?? '').slice(0, CONTEXT_ASSISTANT_MAX);
+    return `Заголовок: ${d.title ?? ''}\n\n${text}`;
+  } catch {
+    return '';
+  }
+}
+
+/** Прошлые ходы сессии → сообщения для LLM (только для sessionId-запросов). */
+async function buildSessionContext(sessionId: number): Promise<Record<string, unknown>[]> {
+  const rows = await db
+    .select({ role: cmMessages.role, instruction: cmMessages.instruction, resultJson: cmMessages.resultJson })
+    .from(cmMessages)
+    .where(eq(cmMessages.sessionId, sessionId))
+    .orderBy(desc(cmMessages.id))
+    .limit(CONTEXT_TURNS * 2);
+  const out: Record<string, unknown>[] = [];
+  for (const row of rows.reverse()) {
+    if (row.role === 'user') {
+      out.push({ role: 'user', content: row.instruction });
+    } else if (row.resultJson) {
+      const compact = resultToContext(row.resultJson);
+      if (compact) out.push({ role: 'assistant', content: compact });
+    }
+  }
+  return out;
+}
+
+/** Сохранить ход (user+assistant) в сессию, обновить title/updated_at. */
+async function persistTurn(sessionId: number, instruction: string, resultPayload: Record<string, unknown>, title?: string): Promise<void> {
+  await db.insert(cmMessages).values({ sessionId, role: 'user', instruction });
+  await db.insert(cmMessages).values({ sessionId, role: 'assistant', instruction, resultJson: JSON.stringify(resultPayload) });
+  await db.update(cmSessions)
+    .set({ updatedAt: new Date(), ...(title ? { title: title.slice(0, 200) } : {}) })
+    .where(eq(cmSessions.id, sessionId));
+}
+
+/** Заголовок новой сессии до первого ответа: hostname ссылки или начало текста. */
+function sessionTitleFrom(source: string): string {
+  if (URL_RE.test(source)) {
+    try { return new URL(source).hostname; } catch { /* fallthrough */ }
+  }
+  return source.replace(/\s+/g, ' ').trim().slice(0, 80);
+}
+
+// ---------- Сам эндпоинт ----------
+
+interface RewriteOutcome {
+  payload: Record<string, unknown>; // то, что уходит клиенту (без stream-обёртки)
+  persistTitle?: string;
+}
+
 contentMasterRouter.post(
   '/rewrite',
   authRequired,
@@ -386,6 +580,20 @@ contentMasterRouter.post(
       res.status(400).json({ error: 'validation', details: parsed.error.flatten() });
       return;
     }
+    const wantStream = parsed.data.stream || req.headers.accept === 'text/event-stream';
+    // SSE-заголовки ставим ДО любых await, иначе первый write уйдёт как обычный ответ
+    if (wantStream) {
+      res.writeHead(200, {
+        'Content-Type': 'text/event-stream; charset=utf-8',
+        'Cache-Control': 'no-cache, no-transform',
+        Connection: 'keep-alive',
+        'X-Accel-Buffering': 'no', // не буферизовать за прокси
+      });
+    }
+    const sse = (obj: unknown) => { if (wantStream) res.write(`data: ${JSON.stringify(obj)}\n\n`); };
+    const abort = new AbortController();
+    res.on('close', () => abort.abort()); // клиент ушёл — гасим запрос к LLM
+
     try {
       let text: string;
       let sourceUrl: string | null = null;
@@ -393,17 +601,54 @@ contentMasterRouter.post(
         sourceUrl = parsed.data.source;
         text = await fetchUrlText(parsed.data.source);
         if (text.length < 50) {
-          res.status(422).json({ error: 'Не удалось извлечь текст со страницы' });
+          const e = new Error('Не удалось извлечь текст со страницы');
+          if (wantStream) { sse({ type: 'error', message: e.message }); res.end(); } else { res.status(422).json({ error: e.message }); }
           return;
         }
       } else {
         text = parsed.data.source;
       }
+      const truncated = text.length > 15_000;
+
+      // --- сессия: продолжение или создание ---
+      let sessionId: number;
+      let history: Record<string, unknown>[] = [];
+      if (parsed.data.sessionId) {
+        const session = await findSession(parsed.data.sessionId, req.user!.id);
+        if (session === null) {
+          const e = new Error('session not found');
+          if (wantStream) { sse({ type: 'error', message: e.message }); res.end(); } else { res.status(404).json({ error: e.message }); }
+          return;
+        }
+        if (session === 'forbidden') {
+          const e = new Error('forbidden');
+          if (wantStream) { sse({ type: 'error', message: e.message }); res.end(); } else { res.status(403).json({ error: e.message }); }
+          return;
+        }
+        sessionId = session.id;
+        history = await buildSessionContext(sessionId);
+      } else {
+        const [row] = await db.insert(cmSessions).values({
+          userId: req.user!.id,
+          title: sessionTitleFrom(parsed.data.source),
+          source: parsed.data.source.slice(0, 50_000),
+          mode: parsed.data.mode,
+          search: parsed.data.search,
+        }).returning({ id: cmSessions.id });
+        sessionId = row.id;
+      }
 
       const s = await getKimiSettings();
       const key = s.provider === 'deepseek' ? s.deepseekApiKey : s.apiKey;
+      const meta = { type: 'meta', sessionId, mode: parsed.data.mode, sourceUrl, truncated };
+      sse(meta);
+
       if (!key) {
-        res.json({ ...mockRewrite(text), mock: true, sourceUrl });
+        // mock-режим: мгновенный ответ, стримить нечего
+        const mock = mockRewrite(text);
+        const payload: Record<string, unknown> = { ...mock, mock: true, sourceUrl, sessionId, truncated, usage: null };
+        await persistTurn(sessionId, parsed.data.instruction, payload, mock.title);
+        if (wantStream) { sse({ type: 'done', ...payload }); res.end(); } else res.json(payload);
         return;
       }
       const isDeepseek = s.provider === 'deepseek';
@@ -411,34 +656,55 @@ contentMasterRouter.post(
       const userPrompt = `Инструкция автора:\n${parsed.data.instruction}\n\n=== ИСХОДНЫЙ ТЕКСТ ===\n${text.slice(0, 15_000)}`;
       const model = isDeepseek ? s.deepseekModel : s.textModel;
       const base = isDeepseek ? DEEPSEEK_BASE_URL : s.baseUrl;
-      const label = isDeepseek ? 'DeepSeek' : 'Kimi';
+      const h: StreamHandlers = wantStream ? { onDelta: (t) => sse({ type: 'delta', text: t }), signal: abort.signal } : {};
 
+      let outcome: RewriteOutcome;
       if (parsed.data.search) {
         // агентный цикл: модель сама решает, что искать; мы исполняем через DuckDuckGo
         const system = parsed.data.mode === 'factcheck' ? FACTCHECK_SYSTEM : `${REWRITER_SYSTEM}\nЕсли в материале есть факты, которые стоит проверить или уточнить — используй web_search. В html и excerpt указывай ссылки на источники (<a href="…">).`;
         const searchTool = isDeepseek ? SEARCH_TOOL_DEEPSEEK : SEARCH_TOOL_KIMI;
         // DeepSeek ищет нативным Search API (тот же ключ), Kimi — DuckDuckGo (fallback)
         const executeSearch = isDeepseek ? (q: string) => deepseekSearch(q, key) : ddgSearch;
-        const { content, sources } = await chatWithSearch(base, key, model, system, userPrompt, label, searchTool, executeSearch);
+        const { content, sources, usage } = await chatWithSearch(base, key, model, system, userPrompt, searchTool, executeSearch, h);
         if (parsed.data.mode === 'factcheck') {
-          res.json({ ...parseFactcheck(content), sources, mock: false, sourceUrl });
+          outcome = { payload: { ...parseFactcheck(content), sources, mock: false, sourceUrl, sessionId, truncated, usage }, persistTitle: 'Фактчек' };
         } else {
-          res.json({ ...parseRewrite(content), sources, mock: false, sourceUrl });
+          const r = parseRewrite(content);
+          outcome = { payload: { ...r, sources, mock: false, sourceUrl, sessionId, truncated, usage }, persistTitle: r.title };
         }
-        return;
+      } else if (parsed.data.mode === 'factcheck') {
+        const { content, usage } = await rewriteWithLlm(base, key, model, FACTCHECK_SYSTEM, userPrompt, h);
+        outcome = { payload: { ...parseFactcheck(content), sources: [], mock: false, sourceUrl, sessionId, truncated, usage }, persistTitle: 'Фактчек' };
+      } else {
+        const systemWithContext = history.length
+          ? `${REWRITER_SYSTEM}\nПеред текущей инструкцией — предыдущие ходы работы над этим материалом (твои ответы сокращены). Опирайся на них, не повторяйся.`
+          : REWRITER_SYSTEM;
+        const messages: Record<string, unknown>[] = [
+          { role: 'system', content: systemWithContext },
+          ...history,
+          { role: 'user', content: userPrompt },
+        ];
+        const r = await chatRound(base, key, model, messages, undefined, Boolean(h.onDelta), h);
+        const parsedResult = parseRewrite(r.content);
+        outcome = { payload: { ...parsedResult, sources: [], mock: false, sourceUrl, sessionId, truncated, usage: r.usage }, persistTitle: parsedResult.title };
       }
-      if (parsed.data.mode === 'factcheck') {
-        const raw = await rewriteWithLlm(base, key, model, userPrompt, label, FACTCHECK_SYSTEM);
-        res.json({ ...parseFactcheck(raw), sources: [], mock: false, sourceUrl });
-        return;
+
+      await persistTurn(sessionId, parsed.data.instruction, outcome.payload, outcome.persistTitle);
+      if (wantStream) {
+        sse({ type: 'done', ...outcome.payload });
+        res.end();
+      } else {
+        res.json(outcome.payload);
       }
-      const raw = await rewriteWithLlm(base, key, model, userPrompt, label);
-      res.json({ ...parseRewrite(raw), sources: [], mock: false, sourceUrl });
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'unknown';
       const status = /Запрещённый адрес|Только http|тип контента/i.test(msg) ? 400 : /извлечь текст/i.test(msg) ? 422 : 502;
-      res.status(status).json({ error: 'rewrite failed', message: msg });
+      if (wantStream) {
+        sse({ type: 'error', message: msg });
+        res.end();
+      } else {
+        res.status(status).json({ error: 'rewrite failed', message: msg });
+      }
     }
   },
 );
-

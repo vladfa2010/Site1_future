@@ -301,7 +301,12 @@ articlesRouter.patch('/:id', authRequired, requireRole('author', 'admin', 'super
     res.status(403).json({ error: 'authors can edit only their own unpublished articles' });
     return;
   }
-  const { metaDescription, viewsBaseOffset, viewsAutoBump, ...updates } = parsed.data;
+  // zod 3→4 (2026-11-15): .partial() больше не гасит .default() — parse подставляет
+  // status='draft' даже когда поле НЕ прислано, и любой PATCH уводил published-статью
+  // в черновики (баг найден e2e). PATCH-семантика: обновляем ТОЛЬКО присланные поля.
+  const sent = new Set(Object.keys(req.body ?? {}));
+  const data = Object.fromEntries(Object.entries(parsed.data).filter(([k]) => sent.has(k))) as typeof parsed.data;
+  const { metaDescription, viewsBaseOffset, viewsAutoBump, ...updates } = data;
   if (!admin) delete updates.status; // автор не меняет статус
   // ТЗ-03 R2: поля докрутки — только admin/super_admin; не-админу молча игнорируются
   // (403 нет — поведение как у status, значение не изменяется)
@@ -349,7 +354,7 @@ articlesRouter.patch('/:id', authRequired, requireRole('author', 'admin', 'super
     return;
   }
 
-  const [row] = await db.update(articles).set(updates).where(eq(articles.id, id)).returning();
+  const [row] = await db.update(articles).set(updates as Partial<typeof articles.$inferInsert>).where(eq(articles.id, id)).returning();
   if (metaDescription) {
     await saveMetaDescription(id, metaDescription);
   }
