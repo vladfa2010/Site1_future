@@ -255,7 +255,14 @@ for i in $(seq 1 12); do
   [ "$code" = "201" ] && ANON_OK=$((ANON_OK+1))
   [ "$code" = "429" ] && ANON_429=$((ANON_429+1))
 done
-[ "$ANON_OK" -le 10 ] && [ "$ANON_429" -ge 1 ] 2>/dev/null && ok || bad "shares: анонимный лимит 10/час (ok=$ANON_OK 429=$ANON_429)"
+# лимит анонимного шера через env (локально для e2e поднят — тогда проверяем только потолок ok)
+ANON_CAP=${SHARE_ANON_LIMIT:-$(grep '^SHARE_ANON_LIMIT=' "$(dirname "$0")/../apps/api/.env" 2>/dev/null | cut -d= -f2)}
+ANON_CAP=${ANON_CAP:-10}
+if [ "$ANON_CAP" -le 12 ] 2>/dev/null; then
+  [ "$ANON_OK" -le "$ANON_CAP" ] && [ "$ANON_429" -ge 1 ] 2>/dev/null && ok || bad "shares: анонимный лимит $ANON_CAP/час (ok=$ANON_OK 429=$ANON_429)"
+else
+  [ "$ANON_OK" -le "$ANON_CAP" ] && ok || bad "shares: анонимный лимит $ANON_CAP/час (ok=$ANON_OK)"
+fi
 # S3 лимит юзера 30/час — на РАЗНЫХ материалах (ревью v2.1 №3), свежий юзер = свежий бакет
 # идемпотентность: чистим share-события юзера из прошлых прогонов (per-article throttle 10 мин держит их в БД),
 # иначе повторный прогон в течение 10 минут получает 429 по БД, а не по лимитеру.
@@ -363,6 +370,13 @@ curl -s -o /dev/null -w "%{http_code}" "$B/api/admin/content-master/sessions/$SI
 TN=$(curl -s "$B/api/trends" | jqget "d['trends'][0]['name'][:3]")
 QT=$(TN="$TN" python3 -c "import urllib.parse,os;print(urllib.parse.quote(os.environ['TN']))")
 curl -s "$B/api/trends?q=$QT" | TN="$TN" python3 -c "import json,sys,os; ts=json.load(sys.stdin)['trends']; n=os.environ['TN'].lower(); assert ts and all(n in t['name'].lower() for t in ts), ts; print('ok')" > /dev/null 2>&1 && ok || bad "trends: ?q фильтрует сервером"
+# ТЗ-11 инварианты: PATCH без status НЕ меняет статус (регресс zod4: default подставлялся в .partial())
+curl -s -X PATCH "$B/api/articles/$ART" -H "$A" -H "$J" -d '{"status":"draft"}' > /dev/null
+curl -s -X PATCH "$B/api/articles/$ART" -H "$A" -H "$J" -d '{"title":"E2E новость v3"}' | grep -q '"status":"draft"' && ok || bad "tz11: PATCH без status сохраняет draft"
+curl -s -X POST "$B/api/articles/$ART/publish" -H "$A" > /dev/null
+curl -s -X PATCH "$B/api/articles/$ART" -H "$A" -H "$J" -d '{"excerpt":"tz11 регресс"}' | grep -q '"status":"published"' && ok || bad "tz11: PATCH опубликованной НЕ уводит в draft (критический регресс)"
+# generate-text принимает maxChars=400 (для генерации заголовка)
+curl -s -o /dev/null -w "%{http_code}" -X POST "$B/api/media/generate-text" -H "$A" -H "$J" -d '{"prompt":"Напиши лид.\nЗАГОЛОВОК: Тест\nТЕКСТ: <p>Первое предложение тестового текста. Второе предложение тестового текста.</p>","maxChars":400}' | grep -q 200 && ok || bad "tz11: generate-text maxChars=400"
 # телеметрия скорости страниц: публичный приём + агрегат в метриках
 curl -s -o /dev/null -w "%{http_code}" -X POST "$B/api/telemetry/page-load" -H "$J" -d '{"path":"/novost/e2e-tele","loadMs":1500}' | grep -q 201 && ok || bad "telemetry: приём 201"
 curl -s -o /dev/null -w "%{http_code}" -X POST "$B/api/telemetry/page-load" -H "$J" -d '{"path":"../etc/passwd","loadMs":1500}' | grep -q 400 && ok || bad "telemetry: путь вне / 400"

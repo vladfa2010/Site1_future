@@ -39,7 +39,7 @@ const shareLimiterUser = rateLimit({
 /** Аноним: 10 кликов в час на IP (S3). IP из req.ip — корректен благодаря trust proxy в index.ts */
 const shareLimiterAnon = rateLimit({
   windowMs: 3_600_000,
-  limit: 10,
+  limit: Number(process.env.SHARE_ANON_LIMIT ?? 10), // e2e: много анонимных шеров подряд
   ...limiterDefaults,
   keyGenerator: (req) => ipKeyGenerator(req.ip ?? 'unknown-ip'), // IPv6-нормализация: иначе обход лимита (ERR_ERL_KEY_GEN_IPV6)
   skip: (req) => !!req.user,

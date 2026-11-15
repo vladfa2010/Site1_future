@@ -58,6 +58,13 @@ export default function ArticleEditPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // ТЗ-11: ИИ-заголовок — 3 варианта на выбор
+  const [titleBusy, setTitleBusy] = useState(false);
+  const [titleVariants, setTitleVariants] = useState<string[] | null>(null);
+  // ТЗ-11: автосохранение черновика раз в минуту
+  const [dirty, setDirty] = useState(false);
+  const [autoState, setAutoState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [autoSavedAt, setAutoSavedAt] = useState<string | null>(null);
   // ТЗ-03: настройки счётчиков просмотров (докрутка) — только admin/super_admin
   const [viewsBaseOffset, setViewsBaseOffset] = useState('0');
   const [bumpEnabled, setBumpEnabled] = useState(false);
@@ -101,8 +108,10 @@ export default function ArticleEditPage() {
     })();
   }, [urlType, slug]);
 
-  const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
+  const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+    setDirty(true);
     setForm((f) => ({ ...f, [k]: e.target.value }));
+  };
 
   // ---- Автогенерация slug из заголовка (транслит, стиль донора) ----
   const [autoSlug, setAutoSlug] = useState<string | null>(null);
@@ -125,6 +134,7 @@ export default function ArticleEditPage() {
 
   const onTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const title = e.target.value;
+    setDirty(true);
     setForm((f) => {
       // перезаписываем slug только если он пуст или равен последнему автогенерированному
       const next = { ...f, title };
@@ -175,6 +185,23 @@ export default function ArticleEditPage() {
         const created = await api<{ article: { id: number } }>('/articles', { method: 'POST', body: JSON.stringify(payload) });
         id = created.article.id;
         setArticleId(id);
+        // новой статье можно было задать просмотры до первого сейва — досылаем сразу после создания
+        if (canEditViews && (Number(viewsBaseOffset) > 0 || bumpEnabled)) {
+          await api(`/articles/${id}`, {
+            method: 'PATCH',
+            body: JSON.stringify({
+              viewsBaseOffset: Number(viewsBaseOffset) || 0,
+              viewsAutoBump: bumpEnabled
+                ? {
+                    enabled: true,
+                    everyHours: Math.min(168, Math.max(1, Number(bumpEveryHours) || 24)),
+                    min: Math.max(0, Number(bumpMin) || 0),
+                    max: Math.max(0, Number(bumpMax) || 0),
+                  }
+                : null,
+            }),
+          });
+        }
       } else if (id) {
         await api(`/articles/${id}`, { method: 'PATCH', body: JSON.stringify(payload) });
       }
@@ -184,6 +211,8 @@ export default function ArticleEditPage() {
           body: JSON.stringify({ companyIds: rels.companyIds, tickerIds: rels.tickerIds, industryIds: rels.industryIds, trendIds: rels.trendIds }),
         });
       }
+      setDirty(false);
+      setAutoState('idle');
       setNotice('Сохранено ✓');
       if (isNew && id) navigate(`/articles/${form.type}/${form.slug}/edit`, { replace: true });
     } catch (e) {
@@ -245,6 +274,50 @@ export default function ArticleEditPage() {
       setError(e instanceof Error ? e.message : 'Ошибка генерации');
     } finally {
       setExcerptBusy(false);
+    }
+  };
+
+  // ---- ТЗ-11: генерация заголовка — промпт читает ВСЕ поля, модель даёт 3 варианта ----
+  const genTitle = async () => {
+    setTitleBusy(true);
+    setError(null);
+    setTitleVariants(null);
+    try {
+      const entityNames = [
+        ...rels.companyIds.map((id) => dicts.companies.find((c) => c.id === id)?.name).filter(Boolean),
+        ...rels.tickerIds.map((id) => dicts.tickers.find((t) => t.id === id)?.symbol).filter(Boolean),
+        ...rels.trendIds.map((id) => dicts.trends.find((t) => t.id === id)?.name).filter(Boolean),
+      ].join(', ');
+      const plain = stripHtml(form.contentHtml);
+      if (plain.length < 50) {
+        setError('Сначала заполните текст статьи — генерация читает его целиком');
+        return;
+      }
+      const prompt = [
+        'Предложи 3 варианта заголовка для статьи инвестиционного медиа.',
+        `ТЕКУЩИЙ ЗАГОЛОВОК (можно улучшить, не копировать): ${form.title}`,
+        form.thesis ? `ТЕЗИС: ${form.thesis}` : '',
+        form.excerpt ? `ЛИД: ${form.excerpt}` : '',
+        entityNames ? `УПОМИНАЮТСЯ: ${entityNames}` : '',
+        `ТИП МАТЕРИАЛА: ${{ novost: 'новость', ideya: 'инвестиционная идея', analitika: 'аналитика', sobytie: 'событие', interesnoe: 'интересный разбор' }[form.type] ?? form.type}`,
+        'ТРЕБОВАНИЯ: каждый вариант до 100 символов; конкретика (цифры, имена, тикеры) вместо общих слов; без кликбейта; ответь ТОЛЬКО тремя строками — по одному варианту на строку, без нумерации и кавычек.',
+        `ТЕКСТ: ${plain.slice(0, 6000)}`,
+      ].filter(Boolean).join('\n');
+      const res = await api<{ text: string; mock: boolean }>('/media/generate-text', {
+        method: 'POST',
+        body: JSON.stringify({ prompt, maxChars: 400 }),
+      });
+      const variants = res.text
+        .split(/\n/)
+        .map((t) => t.replace(/^\s*[-–—\d.)]+\s*|^["«]+|["»]+\s*$/g, '').trim())
+        .filter((t) => t.length > 5)
+        .slice(0, 3);
+      setTitleVariants(variants.length > 0 ? variants : [res.text.trim()]);
+      if (res.mock) setNotice('Заголовок собран из текста (mock — без ключа LLM)');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Ошибка генерации');
+    } finally {
+      setTitleBusy(false);
     }
   };
 
@@ -321,7 +394,8 @@ export default function ArticleEditPage() {
 
   // Загрузка обложки из файла (multipart — в обход JSON-клиента)
   const uploadCover = async (file: File) => {
-    if (!articleId) return;
+    // новая (не сохранённая) статья тоже может: media-строка создаётся сразу,
+    // а coverMediaId уедет в payload при первом сейве
     setUploadBusy(true);
     setError(null);
     try {
@@ -335,6 +409,7 @@ export default function ArticleEditPage() {
       const body = await res.json();
       if (!res.ok) throw new Error(body.message ?? JSON.stringify(body));
       setCoverMediaId(body.media.id);
+      setDirty(true); // обложка применится при ближайшем сохранении
       setCoverPreview(`${window.location.origin}${body.url}`);
       setGenMock(false);
       setNotice('Обложка загружена ✓');
@@ -362,6 +437,56 @@ export default function ArticleEditPage() {
     });
     setNotice(add.length ? `Подставлено: ${add.join(', ')}` : 'Новых подсказок нет');
   };
+
+  // ---- ТЗ-11: автосохранение черновика раз в минуту ----
+  const autosave = async () => {
+    if (!dirty || busy) return;
+    if (!form.title.trim() && !stripHtml(form.contentHtml).trim()) return; // пустое не плодим
+    setAutoState('saving');
+    try {
+      let id = articleId;
+      const payload: Record<string, unknown> = {
+        ...form,
+        slug: form.slug || autoSlug || slugify(form.title) || 'novyj-material',
+        videoUrl: form.videoUrl || undefined,
+        coverMediaId,
+        accessTariffId: form.accessLevel === 'tariff' && form.accessTariffId ? Number(form.accessTariffId) : undefined,
+        // автосохранение никогда не публикует: новое — только draft, опубликованное — статус не трогаем
+        status: isNew || form.status !== 'published' ? 'draft' : undefined,
+      };
+      if (isNew) {
+        const created = await api<{ article: { id: number } }>('/articles', { method: 'POST', body: JSON.stringify(payload) });
+        id = created.article.id;
+        setArticleId(id);
+        window.history.replaceState(null, '', `/articles/${payload.type}/${payload.slug}/edit`);
+        setNotice('Черновик создан автосохранением — продолжайте писать ✓');
+      } else if (id) {
+        await api(`/articles/${id}`, { method: 'PATCH', body: JSON.stringify(payload) });
+      }
+      setDirty(false);
+      setAutoState('saved');
+      setAutoSavedAt(new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }));
+    } catch {
+      setAutoState('error'); // dirty остаётся — повторим на следующем тике
+    }
+  };
+  const autosaveRef = useRef(autosave);
+  autosaveRef.current = autosave;
+  useEffect(() => {
+    const iv = setInterval(() => void autosaveRef.current(), 60_000);
+    return () => clearInterval(iv);
+  }, []);
+  // последний рубеж: подтверждение ухода с несохранёнными правками
+  useEffect(() => {
+    const h = (e: BeforeUnloadEvent) => {
+      if (dirty) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', h);
+    return () => window.removeEventListener('beforeunload', h);
+  }, [dirty]);
 
   return (
     <div className="space-y-4">
@@ -410,8 +535,33 @@ export default function ArticleEditPage() {
 
       <div className="card space-y-4">
         <div>
-          <label className="label">Заголовок</label>
+          <div className="flex items-end justify-between">
+            <label className="label">Заголовок</label>
+            <button
+              type="button"
+              className="btn-secondary px-2 py-0.5 text-xs"
+              onClick={() => void genTitle()}
+              disabled={titleBusy}
+              title="3 варианта заголовка на основе текста статьи"
+            >
+              {titleBusy ? 'Генерируем…' : '✨ Заголовок'}
+            </button>
+          </div>
           <input className="input" value={form.title} onChange={onTitleChange} required />
+          {titleVariants && (
+            <div className="mt-2 space-y-1.5">
+              {titleVariants.map((v, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => { onTitleChange({ target: { value: v } } as React.ChangeEvent<HTMLInputElement>); setTitleVariants(null); setNotice('Заголовок применён ✓'); }}
+                  className="block w-full rounded-lg border border-zinc-700 px-3 py-2 text-left text-sm hover:border-[#beff00]/60 hover:bg-zinc-800"
+                >
+                  {v}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
         <div>
           <label className="label">Тезис идеи (для type=ideya)</label>
@@ -657,6 +807,13 @@ export default function ArticleEditPage() {
         {!isNew && form.status !== 'published' && <button className="btn-secondary" onClick={() => void publish()}>Опубликовать</button>}
         {!isNew && form.status === 'published' && <button className="btn-secondary" onClick={() => void unpublish()}>Вернуть в черновик</button>}
         <button type="button" className="btn-secondary" onClick={() => setPreviewOpen(true)}>👁 Превью</button>
+        <span className="ml-auto self-center text-xs text-zinc-500">
+          {autoState === 'saving' && 'Автосохранение…'}
+          {autoState === 'saved' && <span className="text-green-400">Черновик сохранён в {autoSavedAt}</span>}
+          {autoState === 'error' && <span className="text-red-400">Автосохранение не удалось — попробуем через минуту</span>}
+          {autoState === 'idle' && dirty && 'Есть несохранённые правки'}
+          {autoState === 'idle' && !dirty && 'Автосохранение: вкл'}
+        </span>
       </div>
 
       {previewOpen && (
