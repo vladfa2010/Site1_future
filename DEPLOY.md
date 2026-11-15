@@ -176,6 +176,15 @@ docker compose -f infra/docker-compose.yml -f infra/docker-compose.local.yml dow
 4. `docker compose -f infra/docker-compose.yml up -d --build`
 5. HTTPS-версии: https://инвестиционно.рф и https://admin.инвестиционно.рф
 
+**После перехода контейнера на non-root (USER node, uid 1000):** если генерация
+обложек падает с `EACCES: permission denied, open '/app/uploads/...'` — папке uploads
+на хосте нужен владелец 1000:1000:
+```bash
+docker compose -f infra/docker-compose.yml stop api
+chown -R 1000:1000 /var/lib/docker/volumes/<проект>_uploads/_data
+docker compose -f infra/docker-compose.yml start api
+```
+
 Отличия прод-композа от локального: TLS в `infra/Caddyfile`, секреты из `.env`,
 `CORS_ORIGINS` указывает на https-домены.
 
