@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { Link } from 'react-router';
 import { api } from '../api';
 import SearchInput, { filterRows } from '../components/SearchInput';
+import ConfirmDelete from '../components/ConfirmDelete';
 
 interface Company { id: number; slug: string; name: string; oneLiner: string | null; country: string | null; isPublic: boolean }
 
@@ -69,7 +70,16 @@ export default function CompaniesPage() {
                 <td className="td text-zinc-500">{c.slug}</td>
                 <td className="td text-zinc-500">{c.country ?? '—'}</td>
                 <td className="td">{c.isPublic ? '✅' : '—'}</td>
-                <td className="td"><Link to={`/companies/${c.slug}/edit`} className="text-orange-600 hover:underline">ред.</Link></td>
+                <td className="td">
+                  <span className="flex gap-3">
+                    <Link to={`/companies/${c.slug}/edit`} className="text-orange-600 hover:underline">ред.</Link>
+                    <ConfirmDelete
+                      label={`компанию «${c.name}»`}
+                      onDelete={() => api(`/companies/${c.id}`, { method: 'DELETE' })}
+                      onDeleted={() => void load().catch(() => setError('Ошибка загрузки'))}
+                    />
+                  </span>
+                </td>
               </tr>
             ))}
           </tbody>

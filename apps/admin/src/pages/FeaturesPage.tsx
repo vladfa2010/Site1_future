@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { api } from '../api';
+import ConfirmDelete from '../components/ConfirmDelete';
 
 /**
  * Реестр фич — порт FeaturesSubTab PULSE:
@@ -148,6 +149,11 @@ export default function FeaturesPage() {
                 <td className="td">
                   <div className="flex justify-end gap-2">
                     <button onClick={() => startEdit(f)} className="text-blue-400 hover:underline">ред.</button>
+                    <ConfirmDelete
+                      label={`фичу «${f.label}»`}
+                      onDelete={() => api(`/admin/features/${encodeURIComponent(f.id)}`, { method: 'DELETE' })}
+                      onDeleted={() => void load()}
+                    />
                     {f.isActive
                       ? <button onClick={() => setConfirmOff(f)} className="text-red-400 hover:underline">off</button>
                       : <button onClick={() => void toggle(f, true)} className="text-green-400 hover:underline">on</button>}

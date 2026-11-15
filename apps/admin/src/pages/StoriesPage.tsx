@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { Link } from 'react-router';
 import { api } from '../api';
 import SearchInput, { filterRows } from '../components/SearchInput';
+import ConfirmDelete from '../components/ConfirmDelete';
 
 interface Story { id: number; slug: string; name: string; status: string }
 
@@ -68,7 +69,16 @@ export default function StoriesPage() {
                 <td className="td font-medium">{s.name}</td>
                 <td className="td text-zinc-500">/syuzhet/{s.slug}</td>
                 <td className="td">{s.status === 'active' ? 'активен' : 'закрыт'}</td>
-                <td className="td"><Link to={`/stories/${s.id}/edit`} className="text-orange-400 hover:underline">ред.</Link></td>
+                <td className="td">
+                  <span className="flex gap-3">
+                    <Link to={`/stories/${s.id}/edit`} className="text-orange-400 hover:underline">ред.</Link>
+                    <ConfirmDelete
+                      label={`сюжет «${s.name}»`}
+                      onDelete={() => api(`/stories/${s.id}`, { method: 'DELETE' })}
+                      onDeleted={() => void load().catch(() => setError('Ошибка загрузки'))}
+                    />
+                  </span>
+                </td>
               </tr>
             ))}
           </tbody>

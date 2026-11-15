@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { api } from '../api';
 import SearchInput, { filterRows } from '../components/SearchInput';
+import ConfirmDelete from '../components/ConfirmDelete';
 
 interface Ticker { id: number; slug: string; symbol: string; exchange: string | null; companyName: string | null }
 interface CompanyOpt { id: number; name: string }
@@ -73,7 +74,7 @@ export default function TickersPage() {
       <div className="card overflow-x-auto p-0">
         <table className="w-full">
           <thead className="border-b border-zinc-800">
-            <tr><th className="th">Символ</th><th className="th">Компания</th><th className="th">Биржа</th><th className="th">URL на сайте</th></tr>
+            <tr><th className="th">Символ</th><th className="th">Компания</th><th className="th">Биржа</th><th className="th">URL на сайте</th><th className="th" /></tr>
           </thead>
           <tbody>
             {filtered.map((t) => (
@@ -82,6 +83,13 @@ export default function TickersPage() {
                 <td className="td">{t.companyName ?? <span className="text-zinc-600">— не привязан</span>}</td>
                 <td className="td text-zinc-500">{t.exchange ?? '—'}</td>
                 <td className="td text-zinc-500">/tiker/{t.slug}</td>
+                <td className="td">
+                  <ConfirmDelete
+                    label={`тикер ${t.symbol}`}
+                    onDelete={() => api(`/tickers/${t.id}`, { method: 'DELETE' })}
+                    onDeleted={() => void load().catch(() => setError('Ошибка загрузки'))}
+                  />
+                </td>
               </tr>
             ))}
           </tbody>

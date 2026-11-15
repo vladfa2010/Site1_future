@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { api } from '../api';
 import SearchInput from '../components/SearchInput';
+import ConfirmDelete from '../components/ConfirmDelete';
 
 const TYPE_LABELS: Record<string, string> = {
   novost: 'Новость', ideya: 'Идея', sobytie: 'Событие', analitika: 'Аналитика', interesnoe: 'Интересное', video: 'Видео',
@@ -105,7 +106,16 @@ export default function ArticlesPage() {
                   </span>
                 </td>
                 <td className="td whitespace-nowrap text-zinc-500">{r.publishedAt?.slice(0, 10) ?? '—'}</td>
-                <td className="td"><Link to={`/articles/${r.type}/${r.slug}/edit`} className="text-orange-400 hover:underline">ред.</Link></td>
+                <td className="td">
+                  <span className="flex gap-3">
+                    <Link to={`/articles/${r.type}/${r.slug}/edit`} className="text-orange-400 hover:underline">ред.</Link>
+                    <ConfirmDelete
+                      label={`${TYPE_LABELS[r.type] ?? 'материал'} «${r.title}»`}
+                      onDelete={() => api(`/articles/${r.id}`, { method: 'DELETE' })}
+                      onDeleted={() => void load()}
+                    />
+                  </span>
+                </td>
               </tr>
             ))}
           </tbody>

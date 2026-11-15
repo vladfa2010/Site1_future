@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { Link } from 'react-router';
 import { api } from '../api';
 import SearchInput, { filterRows } from '../components/SearchInput';
+import ConfirmDelete from '../components/ConfirmDelete';
 
 interface Trend { id: number; slug: string; name: string; status: string }
 
@@ -69,7 +70,16 @@ export default function TrendsPage() {
                 <td className="td text-zinc-500">{t.slug}</td>
                 <td className="td">{t.status === 'active' ? 'активен' : 'закрыт'}</td>
                 <td className="td text-zinc-500">в редакторе</td>
-                <td className="td"><Link to={`/trends/${t.id}/edit`} className="text-orange-600 hover:underline">ред.</Link></td>
+                <td className="td">
+                  <span className="flex gap-3">
+                    <Link to={`/trends/${t.id}/edit`} className="text-orange-600 hover:underline">ред.</Link>
+                    <ConfirmDelete
+                      label={`тренд «${t.name}»`}
+                      onDelete={() => api(`/trends/${t.id}`, { method: 'DELETE' })}
+                      onDeleted={() => void load().catch(() => setError('Ошибка загрузки'))}
+                    />
+                  </span>
+                </td>
               </tr>
             ))}
           </tbody>

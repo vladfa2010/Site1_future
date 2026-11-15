@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { api } from '../api';
 import SearchInput, { filterRows } from '../components/SearchInput';
+import ConfirmDelete from '../components/ConfirmDelete';
 
 interface Industry { id: number; slug: string; name: string; description: string | null }
 
@@ -54,7 +55,7 @@ export default function IndustriesPage() {
       <div className="card overflow-x-auto p-0">
         <table className="w-full">
           <thead className="border-b border-zinc-800">
-            <tr><th className="th">Название</th><th className="th">Slug</th><th className="th">URL на сайте</th></tr>
+            <tr><th className="th">Название</th><th className="th">Slug</th><th className="th">URL на сайте</th><th className="th" /></tr>
           </thead>
           <tbody>
             {filtered.map((i) => (
@@ -62,6 +63,13 @@ export default function IndustriesPage() {
                 <td className="td font-medium">{i.name}</td>
                 <td className="td text-zinc-500">{i.slug}</td>
                 <td className="td text-zinc-500">/industriya/{i.slug}</td>
+                <td className="td">
+                  <ConfirmDelete
+                    label={`отрасль «${i.name}»`}
+                    onDelete={() => api(`/industries/${i.id}`, { method: 'DELETE' })}
+                    onDeleted={() => void load().catch(() => setError('Ошибка загрузки'))}
+                  />
+                </td>
               </tr>
             ))}
           </tbody>

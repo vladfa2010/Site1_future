@@ -4,13 +4,13 @@
  * сохраняет в uploadDir, создаёт media-запись, при articleId ставит обложку статье.
  */
 import { Router } from 'express';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import multer from 'multer';
 import { z } from 'zod';
 import { desc, eq } from 'drizzle-orm';
-import { db, media, articles } from '@newinvest/db';
+import { db, media, articles, companies, trends, industries } from '@newinvest/db';
 import { authRequired, requireRole } from '../middleware/auth.js';
 import { generateImage } from '../services/mediaGen.js';
 import { generateText } from '../services/textGen.js';
@@ -25,6 +25,31 @@ export const mediaRouter = Router();
 mediaRouter.get('/media', authRequired, requireRole('admin', 'super_admin'), async (_req, res) => {
   const rows = await db.select().from(media).orderBy(desc(media.createdAt)).limit(200);
   res.json({ media: rows });
+});
+
+// DELETE /api/media/:id — только admin/super_admin.
+// Ссылки на файл (обложки статей/компаний/трендов/отраслей) — FK БЕЗ cascade:
+// обнуляем, иначе удаление упадёт. Файл с диска стираем после транзакции.
+mediaRouter.delete('/media/:id', authRequired, requireRole('admin', 'super_admin'), async (req, res) => {
+  const id = Number(req.params.id);
+  const [existing] = await db.select().from(media).where(eq(media.id, id)).limit(1);
+  if (!existing) {
+    res.status(404).json({ error: 'not found' });
+    return;
+  }
+  await db.transaction(async (tx) => {
+    await tx.update(articles).set({ coverMediaId: null }).where(eq(articles.coverMediaId, id));
+    await tx.update(companies).set({ logoMediaId: null }).where(eq(companies.logoMediaId, id));
+    await tx.update(companies).set({ coverMediaId: null }).where(eq(companies.coverMediaId, id));
+    await tx.update(trends).set({ coverMediaId: null }).where(eq(trends.coverMediaId, id));
+    await tx.update(industries).set({ coverMediaId: null }).where(eq(industries.coverMediaId, id));
+    await tx.delete(media).where(eq(media.id, id));
+  });
+  // физический файл — только если он наш (в uploadDir), basename отсекает ../
+  if (existing.filePath.startsWith('/uploads/')) {
+    await unlink(path.join(path.resolve(config.uploadDir), path.basename(existing.filePath))).catch(() => {});
+  }
+  res.json({ ok: true });
 });
 
 // загрузка файла (картинка) — multer в память, валидация типа, запись в uploadDir

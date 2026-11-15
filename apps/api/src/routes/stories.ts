@@ -4,7 +4,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { and, asc, eq, sql } from 'drizzle-orm';
-import { db, stories, articles, articleStories } from '@newinvest/db';
+import { db, stories, articles, articleStories, favorites, metaFields } from '@newinvest/db';
 import { authRequired, requireRole } from '../middleware/auth.js';
 import { virtualViewsSql } from '../services/viewsBump.js';
 
@@ -73,6 +73,25 @@ storiesRouter.patch('/stories/:id', authRequired, requireRole('admin', 'super_ad
     return;
   }
   res.json({ story: row });
+});
+
+// DELETE /api/stories/:id — только admin/super_admin.
+// Состав сюжета (article_stories) удаляется каскадом; вручную чистим favorites и
+// meta_fields — там связь ownerType/entityType + id без FK (сироты не мешают удалению,
+// но остаются мусором).
+storiesRouter.delete('/stories/:id', authRequired, requireRole('admin', 'super_admin'), async (req, res) => {
+  const id = Number(req.params.id);
+  const [existing] = await db.select({ id: stories.id }).from(stories).where(eq(stories.id, id)).limit(1);
+  if (!existing) {
+    res.status(404).json({ error: 'not found' });
+    return;
+  }
+  await db.transaction(async (tx) => {
+    await tx.delete(favorites).where(and(eq(favorites.entityType, 'story'), eq(favorites.entityId, id)));
+    await tx.delete(metaFields).where(and(eq(metaFields.ownerType, 'story'), eq(metaFields.ownerId, id)));
+    await tx.delete(stories).where(eq(stories.id, id));
+  });
+  res.json({ ok: true });
 });
 
 // GET /api/stories/:id/articles — состав (admin)

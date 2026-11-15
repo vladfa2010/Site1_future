@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../api';
 import SearchInput, { filterRows } from '../components/SearchInput';
+import ConfirmDelete from '../components/ConfirmDelete';
 
 interface MediaItem { id: number; filePath: string; alt: string | null; sourceUrl: string | null; createdAt: string }
 
@@ -73,6 +74,13 @@ export default function MediaPage() {
             <figcaption className="absolute inset-x-0 bottom-0 truncate rounded-b-lg bg-zinc-950/80 px-2 py-1 text-[10px] text-zinc-400 opacity-0 transition-opacity group-hover:opacity-100">
               #{m.id} · {m.sourceUrl ?? ''}
             </figcaption>
+            <span className="absolute right-1 top-1 rounded bg-zinc-950/80 px-1.5 py-0.5 text-xs">
+              <ConfirmDelete
+                label={`файл #${m.id}`}
+                onDelete={() => api(`/media/${m.id}`, { method: 'DELETE' })}
+                onDeleted={() => void load().catch(() => setError('Ошибка загрузки'))}
+              />
+            </span>
           </figure>
         ))}
       </div>

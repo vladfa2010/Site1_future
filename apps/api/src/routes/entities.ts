@@ -18,6 +18,9 @@ import {
   fundingRounds,
   media,
   tariffPlans,
+  favorites,
+  subscriptions,
+  metaFields,
 } from '@newinvest/db';
 import { authRequired, optionalAuth, requireRole } from '../middleware/auth.js';
 import { virtualViewsSql } from '../services/viewsBump.js';
@@ -129,6 +132,27 @@ entitiesRouter.patch('/companies/:id', authRequired, requireRole('admin', 'super
     }
   }
   res.json({ company });
+});
+
+// DELETE /api/companies/:id — только admin/super_admin.
+// Каскадом удалятся: company_industries, company_trends, funding_rounds, article_companies.
+// tickers.company_id — FK БЕЗ cascade: обнуляем вручную, иначе удаление упадёт.
+// favorites/subscriptions/meta_fields — связь через entityType/ownerType + id без FK: чистим вручную.
+entitiesRouter.delete('/companies/:id', authRequired, requireRole('admin', 'super_admin'), async (req, res) => {
+  const id = Number(req.params.id);
+  const [existing] = await db.select({ id: companies.id }).from(companies).where(eq(companies.id, id)).limit(1);
+  if (!existing) {
+    res.status(404).json({ error: 'not found' });
+    return;
+  }
+  await db.transaction(async (tx) => {
+    await tx.update(tickers).set({ companyId: null }).where(eq(tickers.companyId, id));
+    await tx.delete(favorites).where(and(eq(favorites.entityType, 'company'), eq(favorites.entityId, id)));
+    await tx.delete(subscriptions).where(and(eq(subscriptions.entityType, 'company'), eq(subscriptions.entityId, id)));
+    await tx.delete(metaFields).where(and(eq(metaFields.ownerType, 'company'), eq(metaFields.ownerId, id)));
+    await tx.delete(companies).where(eq(companies.id, id));
+  });
+  res.json({ ok: true });
 });
 
 // POST /api/companies/:id/rounds — раунд финансирования (admin).
@@ -264,6 +288,22 @@ entitiesRouter.post('/tickers', authRequired, requireRole('admin', 'super_admin'
   res.status(201).json({ ticker });
 });
 
+// DELETE /api/tickers/:id — только admin/super_admin.
+// article_tickers удаляются каскадом; subscriptions (entityType='ticker') — без FK, чистим вручную.
+entitiesRouter.delete('/tickers/:id', authRequired, requireRole('admin', 'super_admin'), async (req, res) => {
+  const id = Number(req.params.id);
+  const [existing] = await db.select({ id: tickers.id }).from(tickers).where(eq(tickers.id, id)).limit(1);
+  if (!existing) {
+    res.status(404).json({ error: 'not found' });
+    return;
+  }
+  await db.transaction(async (tx) => {
+    await tx.delete(subscriptions).where(and(eq(subscriptions.entityType, 'ticker'), eq(subscriptions.entityId, id)));
+    await tx.delete(tickers).where(eq(tickers.id, id));
+  });
+  res.json({ ok: true });
+});
+
 // ---------- Индустрии ----------
 
 entitiesRouter.get('/industries', async (_req, res) => {
@@ -279,6 +319,19 @@ entitiesRouter.post('/industries', authRequired, requireRole('admin', 'super_adm
   }
   const [row] = await db.insert(industries).values(parsed.data).returning();
   res.status(201).json({ industry: row });
+});
+
+// DELETE /api/industries/:id — только admin/super_admin.
+// company_industries, trend_industries, article_industries удаляются каскадом.
+entitiesRouter.delete('/industries/:id', authRequired, requireRole('admin', 'super_admin'), async (req, res) => {
+  const id = Number(req.params.id);
+  const [existing] = await db.select({ id: industries.id }).from(industries).where(eq(industries.id, id)).limit(1);
+  if (!existing) {
+    res.status(404).json({ error: 'not found' });
+    return;
+  }
+  await db.delete(industries).where(eq(industries.id, id));
+  res.json({ ok: true });
 });
 
 // ---------- Тренды ----------
@@ -357,4 +410,23 @@ entitiesRouter.patch('/trends/:id', authRequired, requireRole('admin', 'super_ad
     return;
   }
   res.json({ trend: row });
+});
+
+// DELETE /api/trends/:id — только admin/super_admin.
+// Каскадом удалятся: article_trends, trend_industries, company_trends.
+// favorites/subscriptions/meta_fields — без FK (entityType/ownerType + id), чистим вручную.
+entitiesRouter.delete('/trends/:id', authRequired, requireRole('admin', 'super_admin'), async (req, res) => {
+  const id = Number(req.params.id);
+  const [existing] = await db.select({ id: trends.id }).from(trends).where(eq(trends.id, id)).limit(1);
+  if (!existing) {
+    res.status(404).json({ error: 'not found' });
+    return;
+  }
+  await db.transaction(async (tx) => {
+    await tx.delete(favorites).where(and(eq(favorites.entityType, 'trend'), eq(favorites.entityId, id)));
+    await tx.delete(subscriptions).where(and(eq(subscriptions.entityType, 'trend'), eq(subscriptions.entityId, id)));
+    await tx.delete(metaFields).where(and(eq(metaFields.ownerType, 'trend'), eq(metaFields.ownerId, id)));
+    await tx.delete(trends).where(eq(trends.id, id));
+  });
+  res.json({ ok: true });
 });

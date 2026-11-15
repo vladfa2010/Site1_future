@@ -8,7 +8,7 @@ import { and, eq, isNotNull, sql, type SQL } from 'drizzle-orm';
 import {
   db, articles, ARTICLE_TYPES, type ArticleType,
   companies, trends, articleCompanies, articleTrends, media,
-  metaFields, articleViews, users,
+  metaFields, articleViews, users, stories,
   tickers, articleTickers, dealStages, articleDealStages,
   articleLikes,
   calcReadingTime,
@@ -34,7 +34,7 @@ const createSchema = z.object({
   contentHtml: z.string().min(1),
   excerpt: z.string().optional(),
   thesis: z.string().optional(), // тезис идеи
-  coverMediaId: z.number().int().optional(),
+  coverMediaId: z.number().int().nullable().optional(), // null — снять обложку (PATCH)
   metaDescription: z.string().max(300).optional(), // SEO (meta_fields)
   accessLevel: z.enum(['public', 'auth', 'tariff']).optional(), // пейволл
   accessTariffId: z.number().int().optional(),
@@ -409,4 +409,29 @@ articlesRouter.post('/:id/publish', authRequired, requireRole(...ADMIN_ROLES), a
   }
   if (existing) invalidateArticleSeo(existing.type, existing.slug); // ТЗ-10: рендер/sitemap сразу актуальны
   res.json({ article: row });
+});
+
+// DELETE /api/articles/:id — только admin/super_admin.
+// Связи каскадом (ON DELETE CASCADE): привязки к компаниям/трендам/тикерам/сюжетам/стадиям,
+// просмотры, лайки, шеры, закладки, эмбеддинги. Вручную: meta_fields (FK нет) и
+// primary_article_id сюжетов (plain integer, FK нет — иначе останется висячий id).
+articlesRouter.delete('/:id', authRequired, requireRole(...ADMIN_ROLES), async (req, res) => {
+  const id = Number(req.params.id);
+  const [existing] = await db
+    .select({ id: articles.id, type: articles.type, slug: articles.slug, status: articles.status })
+    .from(articles)
+    .where(eq(articles.id, id))
+    .limit(1);
+  if (!existing) {
+    res.status(404).json({ error: 'not found' });
+    return;
+  }
+  await db.transaction(async (tx) => {
+    await tx.delete(metaFields)
+      .where(and(eq(metaFields.ownerType, 'article'), eq(metaFields.ownerId, id)));
+    await tx.update(stories).set({ primaryArticleId: null }).where(eq(stories.primaryArticleId, id));
+    await tx.delete(articles).where(eq(articles.id, id));
+  });
+  invalidateArticleSeo(existing.type, existing.slug);
+  res.json({ ok: true });
 });

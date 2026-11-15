@@ -155,7 +155,8 @@ export default function ArticleEditPage() {
         ...form,
         // пустая строка videoUrl не шлём — сервер валидирует её как URL и отдаёт 400
         videoUrl: form.videoUrl || undefined,
-        coverMediaId: coverMediaId ?? undefined,
+        // null шлём осознанно — сервер снимает обложку (coverMediaId nullable в patch-схеме)
+        coverMediaId,
         accessTariffId: form.accessLevel === 'tariff' && form.accessTariffId ? Number(form.accessTariffId) : undefined,
       };
       // ТЗ-03: настройки докрутки — только существующей статье и только админу (сервер всё равно 403/игнор)
@@ -506,7 +507,19 @@ export default function ArticleEditPage() {
         {coverPreview && (
           <div className="flex items-start gap-4">
             <img src={coverPreview} alt="Обложка" className="h-48 w-36 rounded-lg border border-zinc-800 object-cover" />
-            {genMock && <span className="rounded-full bg-amber-500/10 px-2 py-1 text-xs text-amber-400">mock — без ключа Kimi</span>}
+            <span className="flex flex-col items-start gap-2">
+              {genMock && <span className="rounded-full bg-amber-500/10 px-2 py-1 text-xs text-amber-400">mock — без ключа Kimi</span>}
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => {
+                  setCoverMediaId(null);
+                  setCoverPreview(null); // снимется при сохранении (coverMediaId: null → PATCH)
+                }}
+              >
+                ✕ Убрать обложку
+              </button>
+            </span>
           </div>
         )}
         {genOpen && (

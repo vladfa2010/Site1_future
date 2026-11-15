@@ -96,3 +96,17 @@ featuresRouter.put('/admin/features/:id', authRequired, requireRole(...ADMIN_ROL
   invalidate();
   res.json({ feature: { ...row, isActive: row.isActive, integrationStatus: row.integrationStatus } });
 });
+
+// DELETE /api/admin/features/:id — только admin/super_admin.
+// Внешних ссылок на фичи нет (чекбоксы тарифов — по id в JSON), удаление безопасно.
+featuresRouter.delete('/admin/features/:id', authRequired, requireRole(...ADMIN_ROLES), async (req, res) => {
+  const [row] = await db.delete(featuresRegistry)
+    .where(eq(featuresRegistry.id, req.params.id))
+    .returning({ id: featuresRegistry.id });
+  if (!row) {
+    res.status(404).json({ error: 'not found' });
+    return;
+  }
+  invalidate();
+  res.json({ ok: true });
+});
