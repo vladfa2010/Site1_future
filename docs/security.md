@@ -71,6 +71,7 @@ HS256 против alg-confusion) → сверка с БД (роль/тариф/
 | Дефолтный пароль супер-админа (`admin123`) | Seed отказывается стартовать в production с дефолтом; обход через `NODE_ENV=development` убран | `seed.ts`, `api.sh` |
 | Выгрузка персональных данных (email) | Роут за `authRequired + requireRole(ADMIN_ROLES)`; права из БД | `routes/admin.ts` |
 | Стенд с дефолтными креденшелами, открытый в LAN/интернет | Секреты обязательны (`${VAR:?}` + fail fast в сиде); порты биндятся на `127.0.0.1` по умолчанию (`BIND_ADDR`), LAN-бинд — осознанное действие с сильными секретами | `docker-compose.all.yml`, `DEPLOY.md` |
+| Компрометация процесса = root в контейнере + SUPERUSER в БД | API/Caddy под `user=app` (setcap для 80/443), API ходит в БД ролью `newinvest_app` без SUPERUSER; супер-роль — только фаза миграций (api.sh), из env сервера удаляется | `api.sh`, `supervisord.conf`, `Dockerfile.all/api` |
 | SSO-токен админа в URL (`?auth=`) → логи Caddy, история, Referer | SSO через `postMessage` с пиннингом origin в обе стороны и ack-рукопожатием; поддержка `?auth=` удалена | `web: CabinetPage.tsx`, `admin: main.tsx`, `auth.tsx` |
 | Перебор 6-значного кода восстановления | Счётчик попыток на код (5 промахов → инвалидация), `timingSafeEqual`, лимитер `verifyCodeLimiter` (20/15 мин/IP) | `routes/auth.ts`, `middleware/security.ts`, миграция 0020 |
 | Email-бомбинг через forgot-password | Код не пересоздаётся, пока жив (пересылка того же), троттлинг 1 письмо/мин на email, лимитер `forgotPasswordLimiter` (10/15 мин/IP) | `routes/auth.ts`, `middleware/security.ts` |
@@ -242,7 +243,15 @@ redirects.create/delete, notifications.send; просмотр `GET /api/admin/au
 **4.4 (2026-11-15, локально):** вычистка SVG из /uploads — `scripts/clean-svg-covers.mjs`
 (dry-run по умолчанию, `--apply`): 2 привязанных к статьям SVG конвертированы в PNG
 через sips с обновлением `media.file_path`, 88 сирот удалены (файл + строка media);
-SVG в media не осталось. На стенде скрипт прогнать после деплоя.
+SVG в media не осталось. На стенде скрипт прогнать после деплоя: `npx tsx scripts/clean-svg-covers.mjs --apply`.
+**ТЗ 3 (2026-11-15, код внедрён — на стенде после maintenance-окна): контейнер без
+root.** API и Caddy под `user=app` (Caddy — с `cap_net_bind_service`), API работает
+с БД ролью `newinvest_app` (NOSUPERUSER NOCREATEDB NOCREATEROLE, пароль
+`APP_DB_PASSWORD` из `infra/.env`); супер-роль — только фаза миграций в `api.sh`,
+перед `exec` сервера из env удаляется. Проверка SQL-фазы на локальной БД: блок
+идемпотентен, SELECT/INSERT/UPDATE/DELETE проходят, `CREATE TABLE` под ролью —
+отказ. PKI Caddy переехала на `/home/app/.local/share/caddy` — на существующем
+стенде одноразовое копирование в volume (чек-лист: `docs/draft-task3-rootless.md`).
 
 ### 2026-11-08 — предыдущий аудит (справочно)
 

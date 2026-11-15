@@ -1,13 +1,14 @@
 #!/bin/sh
-# Ожидание PostgreSQL, создание БД (если нет), миграции, сид админа, запуск API.
-# Подключение — через TCP под супер-ролью $POSTGRES_USER (роль создана в initdb/pg.sh).
+# Ожидание PostgreSQL, создание БД/роли (idempotent), миграции, сид админа, запуск API.
+# Подключение фазы миграций — супер-роль $POSTGRES_USER (роль создана при initdb);
+# запуск сервера — роль newinvest_app без SUPERUSER (аудит 2026-11-15, ТЗ 3).
+# Пароль newinvest_app фиксированный из infra/.env (APP_DB_PASSWORD): без него
+# контейнер не стартует (fail fast, принцип «нет дефолтных секретов»).
 set -e
 
 PSQL="psql -h 127.0.0.1 -p 5432 -U $POSTGRES_USER"
 export PGPASSWORD="$POSTGRES_PASSWORD"
-# Подключение API/миграций (дризл читает DATABASE_URL) — собирается из POSTGRES_*,
-# секрет не запекается в образ (аудит 2026-11-14)
-export DATABASE_URL="postgres://$POSTGRES_USER:$POSTGRES_PASSWORD@127.0.0.1:5432/$POSTGRES_DB"
+MIGRATE_URL="postgres://$POSTGRES_USER:$POSTGRES_PASSWORD@127.0.0.1:5432/$POSTGRES_DB"
 
 echo "[api] жду PostgreSQL..."
 until $PSQL -d postgres -c "SELECT 1" >/dev/null 2>&1; do sleep 1; done
@@ -17,21 +18,40 @@ echo "[api] PostgreSQL готов"
 $PSQL -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname='$POSTGRES_DB'" | grep -q 1 \
   || createdb -h 127.0.0.1 -U "$POSTGRES_USER" -O "$POSTGRES_USER" "$POSTGRES_DB"
 
-# Расширение vector нужно миграции 0000
+# Расширение vector нужно миграции 0000 — только фаза миграций, рантайму не нужно
 $PSQL -d "$POSTGRES_DB" -c "CREATE EXTENSION IF NOT EXISTS vector"
 
-# Миграции (idempotent)
+# Рантайм-роль без SUPERUSER + DML-привилегии (idempotent, выполняется при каждом старте)
+: "${APP_DB_PASSWORD:?Задайте APP_DB_PASSWORD в infra/.env (сильный пароль, отличный от POSTGRES_PASSWORD)}"
+$PSQL -d "$POSTGRES_DB" <<SQL
+DO \$\$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'newinvest_app') THEN
+    CREATE ROLE newinvest_app LOGIN PASSWORD '$APP_DB_PASSWORD' NOSUPERUSER NOCREATEDB NOCREATEROLE;
+  ELSE
+    ALTER ROLE newinvest_app WITH LOGIN PASSWORD '$APP_DB_PASSWORD' NOSUPERUSER NOCREATEDB NOCREATEROLE;
+  END IF;
+END
+\$\$;
+GRANT CONNECT ON DATABASE "$POSTGRES_DB" TO newinvest_app;
+GRANT USAGE ON SCHEMA public TO newinvest_app;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO newinvest_app;
+GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO newinvest_app;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO newinvest_app;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE ON SEQUENCES TO newinvest_app;
+SQL
+
+# Миграции (idempotent) — супер-роль: drizzle-kit migrate выполняет DDL
 echo "[api] миграции..."
-(cd /app/packages/db && npx drizzle-kit migrate)
+(cd /app/packages/db && DATABASE_URL="$MIGRATE_URL" npx drizzle-kit migrate)
 
 # Сид супер-админа (idempotent). БЕЗ подмены NODE_ENV: в production seed сам
-# откажется от дефолтного ADMIN_PASSWORD (аудит 2026-11-14 — раньше здесь стоял
-# NODE_ENV=development, глушивший эту проверку). Ошибку не глотаем: иначе при
-# незаданном пароле супер-админ молча не создался бы, а при дефолтном — создался
-# с опубликованным в репо паролем admin123.
+# откажется от дефолтного ADMIN_PASSWORD (аудит 2026-11-14), ошибку не глотаем.
 echo "[api] сид админа..."
-npm run seed -w @newinvest/api
+DATABASE_URL="$MIGRATE_URL" npm run seed -w @newinvest/api
 
-echo "[api] старт сервера :4000"
+echo "[api] старт сервера :4000 (роль newinvest_app, без SUPERUSER)"
 cd /app
+export DATABASE_URL="postgres://newinvest_app:$APP_DB_PASSWORD@127.0.0.1:5432/$POSTGRES_DB"
+unset PGPASSWORD   # супер-пароль рантайму не нужен и в env сервера не попадает
 exec npx tsx apps/api/src/index.ts

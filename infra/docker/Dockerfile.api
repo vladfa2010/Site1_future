@@ -15,6 +15,11 @@ ENV NODE_ENV=production
 COPY packages/db packages/db
 COPY apps/api apps/api
 
+# API под непривилегированным пользователем node (аудит 2026-11-15, ТЗ 3);
+# uploads — единственное, куда процессу нужна запись; node_modules — под кэш tsx
+RUN mkdir -p /app/uploads && chown -R node:node /app/uploads /app/node_modules
+USER node
+
 EXPOSE 1003
 # расширение vector нужно миграции 0000 (в самой миграции CREATE EXTENSION только с 0012)
 # миграции идемпотентны; затем сервер

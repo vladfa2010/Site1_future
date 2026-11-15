@@ -23,8 +23,12 @@ services:
       # Переиспользуем данные из прежнего многоконтейнерного стека
       - pgdata:/var/lib/postgresql/data
       - uploads:/app/uploads
-      # PKI Caddy (корневой CA) — иначе при пересборке меняется корень и ломается доверие
-      - caddy_data:/root/.local/share/caddy
+      # PKI Caddy (корневой CA) — иначе при пересборке меняется корень и ломается доверие.
+      # ⚠️ ТЗ 3 (2026-11-15): Caddy работает под user=app → PKI переехала из
+      # /root/.local/share/caddy; на существующем стенде содержимое старого пути
+      # скопировать одноразово (чек-лист в docs/draft-task3-rootless.md), иначе
+      # корень CA сменится и сертификат придётся установить заново.
+      - caddy_data:/home/app/.local/share/caddy
     # Лимиты на весь контейнер: 1 CPU, 3 ГБ ОЗУ
     cpus: '1.0'
     mem_limit: 3g
@@ -38,6 +42,9 @@ services:
       ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@local}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Задайте ADMIN_PASSWORD в infra/.env (сильный пароль супер-админа)}
       JWT_SECRET: ${JWT_SECRET:?Задайте JWT_SECRET в infra/.env (не короче 32 символов)}
+      # Рантайм-роль БД без SUPERUSER (ТЗ 3): сервер API работает только с ней;
+      # супер-роль — только фаза миграций на старте (api.sh). Отличный от POSTGRES_PASSWORD.
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:?Задайте APP_DB_PASSWORD в infra/.env}
       PORT: 4000
       CORS_ORIGINS: https://xn--b1aghca0aeahc1am7c.xn--p1ai,https://admin.xn--b1aghca0aeahc1am7c.xn--p1ai
       PUBLIC_SITE_URL: https://xn--b1aghca0aeahc1am7c.xn--p1ai

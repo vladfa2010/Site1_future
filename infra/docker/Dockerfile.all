@@ -38,6 +38,16 @@ RUN curl -fsSL https://nodejs.org/dist/v20.20.2/node-v20.20.2-linux-x64.tar.xz \
 RUN curl -fsSL "https://caddyserver.com/api/download?os=linux&arch=amd64" -o /usr/local/bin/caddy \
   && chmod +x /usr/local/bin/caddy && caddy version
 
+# Caddy под user=app должен слушать 80/443 — capability на бинарнике (ТЗ 3, 2026-11-15)
+# + пользователь ОС для api/caddy и домашний каталог (PKI Caddy живёт в XDG_DATA_HOME)
+RUN apt-get update && apt-get install -y --no-install-recommends libcap2-bin \
+  && setcap 'cap_net_bind_service=+ep' /usr/local/bin/caddy \
+  && rm -rf /var/lib/apt/lists/*
+RUN useradd --system --create-home --shell /usr/sbin/nologin app \
+  && mkdir -p /home/app/.local/share \
+  && chown -R app:app /home/app
+ENV XDG_DATA_HOME=/home/app/.local/share
+
 # Приложение (исходники + node_modules + собранные фронты из этапа 1)
 WORKDIR /app
 COPY --from=build /app /app
@@ -64,6 +74,8 @@ ENV PGDATA=/var/lib/postgresql/data \
     UPLOAD_DIR=/app/uploads
 
 VOLUME ["/var/lib/postgresql/data", "/app/uploads"]
+# uploads принадлежит app (volume при первом создании унаследует владельца)
+RUN mkdir -p /app/uploads && chown -R app:app /app/uploads
 EXPOSE 80
 
 CMD ["supervisord", "-n", "-c", "/etc/supervisor/conf.d/all.conf"]
