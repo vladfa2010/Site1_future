@@ -215,6 +215,9 @@ export default function ContentMasterPage() {
   // параметры черновика
   const [type, setType] = useState<string>('');
   const [contentHtml, setContentHtml] = useState(''); // тело черновика — редактируется прямо здесь
+  // предложенные AI связи (автоизвлечение после ответа)
+  const [suggested, setSuggested] = useState<{ trends: Opt[]; companies: Opt[]; unknown: string[]; mock: boolean } | null>(null);
+  const [sugBusy, setSugBusy] = useState(false);
   const [title, setTitle] = useState('');
   const [slug, setSlug] = useState('');
   const [slugTouched, setSlugTouched] = useState(false);
@@ -260,11 +263,40 @@ export default function ContentMasterPage() {
     setTitle(res.title ?? '');
     setExcerpt(res.excerpt ?? '');
     setContentHtml(res.html ?? (res.summary ? `<p>${res.summary}</p>` : '')); // фактчек без html — итог в тело
+    void extractEntities(res.html ?? source); // связи предлагаем автоматически
     setSlugTouched(false);
     setSlug('');
     // источник в черновик: сначала sourceUrl результата, иначе первый найденный (ТЗ-13 ф.4.2)
     setSourceUrl(res.sourceUrl ?? res.sources?.[0]?.url ?? '');
     setCreated(null);
+  };
+
+  const extractEntities = async (text: string) => {
+    if (text.trim().length < 50) { setSuggested(null); return; }
+    setSugBusy(true);
+    try {
+      const r = await api<{ trends: Opt[]; companies: Opt[]; unknown: string[]; mock: boolean }>('/admin/content-master/extract', {
+        method: 'POST',
+        body: JSON.stringify({ text: text.slice(0, 20_000) }),
+      });
+      setSuggested(r);
+    } catch {
+      setSuggested(null); // извлечение — удобство, не критично: молча пропускаем
+    } finally {
+      setSugBusy(false);
+    }
+  };
+
+  const createUnknownCompany = async (name: string) => {
+    try {
+      const res = await api<{ company: { id: number; name: string } }>('/companies', {
+        method: 'POST',
+        body: JSON.stringify({ name, slug: slugify(name) || `c${Date.now()}` }),
+      });
+      const opt: Opt = { id: res.company.id, label: res.company.name };
+      setCompanies((prev) => (prev.some((c) => c.id === opt.id) ? prev : [...prev, opt]));
+      setSuggested((prev) => prev ? { ...prev, unknown: prev.unknown.filter((u) => u !== name) } : prev);
+    } catch { /* компания с таким именем может уже существовать — подскажет ошибка при следующем извлечении */ }
   };
 
   const loadSession = async (id: number) => {
@@ -633,6 +665,49 @@ export default function ContentMasterPage() {
               </div>
             )}
             <div className="sm:col-span-2">
+              {(suggested || sugBusy) && (
+                <div className="sm:col-span-2 rounded-lg border border-zinc-800 bg-zinc-900/40 p-3">
+                  <div className="mb-2 flex items-center justify-between">
+                    <span className="label mb-0">Связи из текста (AI) — нажмите, чтобы добавить</span>
+                    {sugBusy && <span className="text-xs text-zinc-500">анализ…</span>}
+                  </div>
+                  {suggested && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {suggested.trends.map((t) => {
+                        const on = trends.some((x) => x.id === t.id);
+                        return (
+                          <button key={`t${t.id}`} type="button"
+                            onClick={() => setTrends(on ? trends.filter((x) => x.id !== t.id) : [...trends, t])}
+                            className={`rounded-full px-2.5 py-1 text-xs ${on ? 'bg-[#beff00] font-semibold text-black' : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'}`}>
+                            {t.label}
+                          </button>
+                        );
+                      })}
+                      {suggested.companies.map((c) => {
+                        const on = companies.some((x) => x.id === c.id);
+                        return (
+                          <button key={`c${c.id}`} type="button"
+                            onClick={() => setCompanies(on ? companies.filter((x) => x.id !== c.id) : [...companies, c])}
+                            className={`rounded-full px-2.5 py-1 text-xs ${on ? 'bg-[#beff00] font-semibold text-black' : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'}`}>
+                            {c.label}
+                          </button>
+                        );
+                      })}
+                      {suggested.unknown.map((u) => (
+                        <button key={`u${u}`} type="button" onClick={() => void createUnknownCompany(u)}
+                          className="rounded-full border border-dashed border-[#beff00]/50 px-2.5 py-1 text-xs text-[#beff00] hover:bg-[#beff00]/10"
+                          title="Создать компанию в справочнике и привязать">
+                          + {u}
+                        </button>
+                      ))}
+                      {suggested.mock && <span className="self-center text-xs text-amber-400">(mock — без ключа LLM)</span>}
+                      {suggested.trends.length + suggested.companies.length + suggested.unknown.length === 0 && (
+                        <span className="text-xs text-zinc-600">сущности не найдены</span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
               <TagInput label="Тренды" value={trends} onChange={setTrends} fetchOptions={fetchTrends} placeholder="начните вводить тренд…" />
             </div>
             <div className="sm:col-span-2">

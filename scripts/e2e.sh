@@ -375,6 +375,10 @@ STG=$(curl -s "$B/api/deal-stages" | jqget "d['stages'][0]['id']")
 curl -s -X PUT "$B/api/articles/$ART/stages" -H "$A" -H "$J" -d '{"stageIds":['"$STG"']}' | grep -q '"ok":true' && ok || bad "stages: PUT admin"
 curl -s "$B/api/articles/novost/e2e-novost" -H "$A" | python3 -c "import json,sys; d=json.load(sys.stdin); assert $STG in (d.get('stageIds') or []), d.get('stageIds'); print('ok')" > /dev/null 2>&1 && ok || bad "stages: stageIds в detail"
 curl -s -o /dev/null -w "%{http_code}" -X PUT "$B/api/articles/$ART/stages" -H "$UA" -H "$J" -d '{"stageIds":[]}' | grep -q 403 && ok || bad "stages: не-admin 403"
+# извлечение связей для чипсов черновика: анон 401, валидация, структура ответа
+curl -s -o /dev/null -w "%{http_code}" -X POST "$B/api/admin/content-master/extract" -H "$J" -d '{"text":"ASUS представила робота Gallop, конкурент Figure и Tesla Optimus в сегменте гуманоидов."}' | grep -q 401 && ok || bad "extract: anon 401"
+curl -s -o /dev/null -w "%{http_code}" -X POST "$B/api/admin/content-master/extract" -H "$A" -H "$J" -d '{"text":"коротко"}' | grep -q 400 && ok || bad "extract: короткий текст 400"
+curl -s -m 90 -X POST "$B/api/admin/content-master/extract" -H "$A" -H "$J" -d '{"text":"SpaceX Маска вывела спутники Starlink, Tesla строит Optimus, Figure на складах."}' | python3 -c "import json,sys; d=json.load(sys.stdin); assert isinstance(d.get('companies'), list) and isinstance(d.get('trends'), list) and isinstance(d.get('unknown'), list), d; print('ok')" > /dev/null 2>&1 && ok || bad "extract: структура ответа"
 # ТЗ-11 инварианты: PATCH без status НЕ меняет статус (регресс zod4: default подставлялся в .partial())
 curl -s -X PATCH "$B/api/articles/$ART" -H "$A" -H "$J" -d '{"status":"draft"}' > /dev/null
 curl -s -X PATCH "$B/api/articles/$ART" -H "$A" -H "$J" -d '{"title":"E2E новость v3"}' | grep -q '"status":"draft"' && ok || bad "tz11: PATCH без status сохраняет draft"

@@ -19,7 +19,7 @@ import http from 'node:http';
 import https from 'node:https';
 import dns from 'node:dns/promises';
 import { eq, desc, sql } from 'drizzle-orm';
-import { db, cmSessions, cmMessages } from '@newinvest/db';
+import { db, cmSessions, cmMessages, companies, trends } from '@newinvest/db';
 import { authRequired, requireRole } from '../middleware/auth.js';
 import { getKimiSettings, DEEPSEEK_BASE_URL } from '../services/kimiSettings.js';
 
@@ -745,5 +745,72 @@ contentMasterRouter.post(
         res.status(status).json({ error: 'rewrite failed', message: msg });
       }
     }
+  },
+);
+
+// ---------- Извлечение связей из текста (ТЗ: чипсы-предложки в черновике) ----------
+
+const EXTRACT_SYSTEM = `Ты аналитик инвестиционного медиа. По тексту статьи определяешь связанные сущности из КАТАЛОГА и компании вне каталога.
+Отвечаешь СТРОГО одним JSON-объектом: {"companyIds": [числа], "trendIds": [числа], "unknown": ["названия компаний вне каталога"]}.
+Правила: бери ТОЛЬКО id из каталога ниже; упоминание может быть косвенным (основатель, продукт, тикер); "unknown" — компании, которых нет в каталоге, но они существенны для текста (не более 3, короткие официальные названия). Ничего не выдумывай.`;
+
+contentMasterRouter.post(
+  '/extract',
+  authRequired,
+  requireRole('admin', 'super_admin'),
+  async (req, res) => {
+    const parsed = z.object({ text: z.string().trim().min(50).max(20_000) }).safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: 'validation', details: parsed.error.flatten() });
+      return;
+    }
+    const [companyRows, trendRows] = await Promise.all([
+      db.select({ id: companies.id, name: companies.name }).from(companies).orderBy(companies.name).limit(300),
+      db.select({ id: trends.id, name: trends.name }).from(trends).orderBy(trends.name).limit(100),
+    ]);
+    const s = await getKimiSettings();
+    const key = s.provider === 'deepseek' ? s.deepseekApiKey : s.apiKey;
+
+    if (!key) {
+      // mock: наивное вхождение подстроки
+      const low = parsed.data.text.toLowerCase();
+      res.json({
+        companies: companyRows.filter((c) => low.includes(c.name.toLowerCase())).slice(0, 8),
+        trends: trendRows.filter((t) => low.includes(t.name.toLowerCase())).slice(0, 5),
+        unknown: [],
+        mock: true,
+      });
+      return;
+    }
+
+    const catalog = [
+      'КАТАЛОГ КОМПАНИЙ (id — название):',
+      ...companyRows.map((c) => `${c.id} — ${c.name}`),
+      'КАТАЛОГ ТРЕНДОВ (id — название):',
+      ...trendRows.map((t) => `${t.id} — ${t.name}`),
+    ].join('\n');
+    const { content: raw } = await rewriteWithLlm(
+      s.provider === 'deepseek' ? DEEPSEEK_BASE_URL : s.baseUrl,
+      key,
+      s.provider === 'deepseek' ? s.deepseekModel : s.textModel,
+      `${EXTRACT_SYSTEM}\n\n${catalog}`,
+      `ТЕКСТ:\n${parsed.data.text.slice(0, 12_000)}`,
+      {},
+    );
+    const m = raw.match(/\{[\s\S]*\}/);
+    if (!m) {
+      res.status(502).json({ error: 'extract failed', message: 'Модель не вернула JSON' });
+      return;
+    }
+    const d = JSON.parse(m[0]) as { companyIds?: unknown; trendIds?: unknown; unknown?: unknown };
+    const companyIds = new Set(Array.isArray(d.companyIds) ? d.companyIds.filter((x): x is number => Number.isInteger(x)) : []);
+    const trendIds = new Set(Array.isArray(d.trendIds) ? d.trendIds.filter((x): x is number => Number.isInteger(x)) : []);
+    const unknown = (Array.isArray(d.unknown) ? d.unknown : []).map(String).filter(Boolean).slice(0, 3);
+    res.json({
+      companies: companyRows.filter((c) => companyIds.has(c.id)),
+      trends: trendRows.filter((t) => trendIds.has(t.id)),
+      unknown,
+      mock: false,
+    });
   },
 );
