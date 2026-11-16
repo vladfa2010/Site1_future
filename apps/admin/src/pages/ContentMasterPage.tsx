@@ -327,7 +327,7 @@ export default function ContentMasterPage() {
       }
       setSessionId(d.session.id);
       setSource(d.session.source);
-      setMode(d.session.mode === 'factcheck' ? 'factcheck' : 'rewrite');
+      setMode('rewrite'); // сессия — это работа над статьёй: новый ход всегда пишет текст; фактчек — по тоглу/пресету
       setSearch(d.session.search);
       setMessages(restored);
       setCreated(null);
