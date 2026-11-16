@@ -392,7 +392,10 @@ export default function ContentMasterPage() {
   };
 
   const createDraft = async () => {
-    if (!active || !type || !title.trim() || creating) return;
+    if (!active || creating) return;
+    // валидация с понятной ошибкой вместо молча-серой кнопки
+    if (!type) { setError('Выберите тип контента — без него черновик не создать'); return; }
+    if (!title.trim()) { setError('Заголовок пуст — задайте его вручную или сгенерируйте'); return; }
     setCreating(true);
     setError(null);
     try {
@@ -734,7 +737,7 @@ export default function ContentMasterPage() {
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <button className="btn" onClick={() => void createDraft()} disabled={creating || !type || !title.trim()}>
+            <button className="btn" onClick={() => void createDraft()} disabled={creating}>
               {creating ? 'Создаём…' : 'Создать черновик'}
             </button>
             {created && <Link to={`/articles/${created.type}/${created.slug}/edit`} className="text-sm text-[#beff00] hover:underline">Открыть в редакторе →</Link>}
