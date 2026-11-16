@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { api, ApiError } from '../api';
+import { RichTextEditor } from '../components/RichTextEditor';
 import { sanitizeArticleHtml } from '../lib/sanitize';
 
 /**
@@ -213,6 +214,7 @@ export default function ContentMasterPage() {
 
   // параметры черновика
   const [type, setType] = useState<string>('');
+  const [contentHtml, setContentHtml] = useState(''); // тело черновика — редактируется прямо здесь
   const [title, setTitle] = useState('');
   const [slug, setSlug] = useState('');
   const [slugTouched, setSlugTouched] = useState(false);
@@ -257,6 +259,7 @@ export default function ContentMasterPage() {
     // factcheck-ответ не содержит title — иначе undefined уходит в slugify → краш рендера
     setTitle(res.title ?? '');
     setExcerpt(res.excerpt ?? '');
+    setContentHtml(res.html ?? (res.summary ? `<p>${res.summary}</p>` : '')); // фактчек без html — итог в тело
     setSlugTouched(false);
     setSlug('');
     // источник в черновик: сначала sourceUrl результата, иначе первый найденный (ТЗ-13 ф.4.2)
@@ -295,6 +298,7 @@ export default function ContentMasterPage() {
         setActive(lastResult);
         setTitle(lastResult.title ?? ''); // factcheck-сессии без title — иначе slugify краш
         setExcerpt(lastResult.excerpt ?? '');
+        setContentHtml(lastResult.html ?? (lastResult.summary ? `<p>${lastResult.summary}</p>` : ''));
         setSourceUrl(lastResult.sourceUrl ?? lastResult.sources?.[0]?.url ?? '');
       } else {
         setActive(null);
@@ -357,7 +361,7 @@ export default function ContentMasterPage() {
           type,
           slug: effectiveSlug,
           title: title.trim(),
-          contentHtml: active.html ?? `<p>${active.summary ?? ''}</p>`,
+          contentHtml: contentHtml || `<p>${active.summary ?? ''}</p>`, // тело могли править руками в панели
           excerpt: excerpt.trim() || undefined,
           thesis: thesis.trim() || undefined,
           sourceUrl: sourceUrl.trim() || undefined,
@@ -461,7 +465,7 @@ export default function ContentMasterPage() {
                   <div className="flex shrink-0 gap-2">
                     {m.result.mock && <span className="rounded bg-amber-500/10 px-2 py-0.5 text-xs text-amber-400">mock — нет ключа LLM</span>}
                     <button
-                      onClick={() => { setActive(m.result!); setTitle(m.result!.title ?? ''); setExcerpt(m.result!.excerpt ?? ''); setSourceUrl(m.result!.sourceUrl ?? m.result!.sources?.[0]?.url ?? ''); setCreated(null); setMode(m.result!.report ? 'factcheck' : 'rewrite'); }}
+                      onClick={() => { setActive(m.result!); setTitle(m.result!.title ?? ''); setExcerpt(m.result!.excerpt ?? ''); setContentHtml(m.result!.html ?? (m.result!.summary ? `<p>${m.result!.summary}</p>` : '')); setSourceUrl(m.result!.sourceUrl ?? m.result!.sources?.[0]?.url ?? ''); setCreated(null); setMode(m.result!.report ? 'factcheck' : 'rewrite'); }}
                       className={`rounded px-2 py-0.5 text-xs ${active === m.result ? 'bg-[#beff00] text-black' : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'}`}
                     >
                       {active === m.result ? '✓ выбран' : 'взять за основу'}
@@ -607,6 +611,10 @@ export default function ContentMasterPage() {
             <div>
               <label className="label">Источник (URL)</label>
               <input className="input w-full font-mono" value={sourceUrl} onChange={(e) => setSourceUrl(e.target.value)} placeholder="https://…" />
+            </div>
+            <div className="sm:col-span-2">
+              <label className="label">Контент (то, что пойдёт в статью — можно править прямо здесь)</label>
+              <RichTextEditor value={contentHtml} onChange={setContentHtml} />
             </div>
             <div className="sm:col-span-2">
               <label className="label">Лид (excerpt)</label>
