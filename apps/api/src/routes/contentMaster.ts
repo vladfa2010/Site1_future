@@ -183,7 +183,7 @@ interface StreamHandlers {
 
 interface ChatRoundResult {
   content: string;
-  toolCalls: { id: string; function: { name: string; arguments: string } }[];
+  toolCalls: { id: string; type: 'function'; function: { name: string; arguments: string } }[];
   usage: ChatUsage;
 }
 
@@ -208,7 +208,7 @@ async function chatRound(
   });
   if (!stream) {
     const data = (await res.json().catch(() => ({}))) as {
-      choices?: { message?: { content?: string; tool_calls?: { id: string; function: { name: string; arguments: string } }[] } }[];
+      choices?: { message?: { content?: string; tool_calls?: { id: string; type: 'function'; function: { name: string; arguments: string } }[] } }[];
       usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
       error?: { message?: string };
     };
@@ -229,7 +229,7 @@ async function chatRound(
     throw new Error(`chat API: ${res.status} ${data.error?.message ?? 'пустой ответ'}`);
   }
   let content = '';
-  const toolCalls: { id: string; function: { name: string; arguments: string } }[] = [];
+  const toolCalls: { id: string; type: 'function'; function: { name: string; arguments: string } }[] = [];
   let usage: ChatUsage = { ...ZERO_USAGE };
   for await (const payload of readSse(res)) {
     const chunk = JSON.parse(payload) as {
@@ -239,7 +239,7 @@ async function chatRound(
     const delta = chunk.choices?.[0]?.delta;
     if (delta?.content) { content += delta.content; h.onDelta?.(delta.content); }
     for (const tc of delta?.tool_calls ?? []) {
-      const slot = toolCalls[tc.index ?? 0] ?? (toolCalls[tc.index ?? 0] = { id: '', function: { name: '', arguments: '' } });
+      const slot = toolCalls[tc.index ?? 0] ?? (toolCalls[tc.index ?? 0] = { id: '', type: 'function', function: { name: '', arguments: '' } });
       if (tc.id) slot.id = tc.id;
       if (tc.function?.name) slot.function.name += tc.function.name;
       if (tc.function?.arguments) slot.function.arguments += tc.function.arguments;
