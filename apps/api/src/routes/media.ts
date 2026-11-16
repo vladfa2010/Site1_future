@@ -17,6 +17,7 @@ import { generateText } from '../services/textGen.js';
 import { getKimiSettings } from '../services/kimiSettings.js';
 import { config } from '../config.js';
 import { sniffImageFormat } from '../utils/imageSniff.js';
+import { optimizeImage } from '../utils/imageOptimize.js';
 
 export const mediaRouter = Router();
 
@@ -55,7 +56,7 @@ mediaRouter.delete('/media/:id', authRequired, requireRole('admin', 'super_admin
 // загрузка файла (картинка) — multer в память, валидация типа, запись в uploadDir
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 5 * 1024 * 1024 },
+  limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
     // Только растровые: SVG с клиента — stored-XSS вектор (<script> внутри)
     const ok = ['image/jpeg', 'image/png', 'image/webp'].includes(file.mimetype);
@@ -65,7 +66,7 @@ const upload = multer({
 
 mediaRouter.post('/media/upload', authRequired, requireRole('admin', 'super_admin'), upload.single('file'), async (req, res) => {
   if (!req.file) {
-    res.status(400).json({ error: 'file required (jpeg, png, webp, до 5 МБ)' });
+    res.status(400).json({ error: 'file required (jpeg, png, webp, до 10 МБ)' });
     return;
   }
   // магические байты: mimetype от клиента подделывается — проверяем сигнатуру файла
@@ -76,12 +77,13 @@ mediaRouter.post('/media/upload', authRequired, requireRole('admin', 'super_admi
   }
   const dir = path.resolve(config.uploadDir);
   await mkdir(dir, { recursive: true });
-  const ext = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' }[req.file.mimetype as string] ?? 'bin';
-  const name = `${Date.now()}-${createHash('sha1').update(req.file.buffer).digest('hex').slice(0, 10)}.${ext}`;
-  await writeFile(path.join(dir, name), req.file.buffer);
+  // пережатие: до 1600px по ширине + WebP q80 — иначе многомегабайтные оригиналы убивают скорость
+  const optimized = await optimizeImage(req.file.buffer, sniffed);
+  const name = `${Date.now()}-${createHash('sha1').update(optimized.buffer).digest('hex').slice(0, 10)}.${optimized.ext}`;
+  await writeFile(path.join(dir, name), optimized.buffer);
   const url = `/uploads/${name}`;
   const [row] = await db.insert(media).values({ filePath: url, alt: req.body.alt ?? null, sourceUrl: 'upload' }).returning();
-  res.status(201).json({ media: row, url });
+  res.status(201).json({ media: row, url, optimized: { from: optimized.originalBytes, to: optimized.optimizedBytes } });
 });
 
 const generateSchema = z.object({
@@ -102,8 +104,10 @@ mediaRouter.post('/media/generate', authRequired, requireRole('admin', 'super_ad
     const img = await generateImage(prompt);
     const dir = path.resolve(config.uploadDir);
     await mkdir(dir, { recursive: true });
-    const name = `${Date.now()}-${createHash('sha1').update(prompt).digest('hex').slice(0, 10)}.${img.ext}`;
-    await writeFile(path.join(dir, name), img.buffer);
+    // пережимаем и сгенерированное: PNG 1024² ~1–2 МБ → WebP обычно 100–300 КБ
+    const optimized = await optimizeImage(img.buffer, img.ext);
+    const name = `${Date.now()}-${createHash('sha1').update(prompt).digest('hex').slice(0, 10)}.${optimized.ext}`;
+    await writeFile(path.join(dir, name), optimized.buffer);
 
     const url = `/uploads/${name}`;
     const [row] = await db
