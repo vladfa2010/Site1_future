@@ -295,8 +295,8 @@ async function chatWithSearch(
   ];
   const sources: SearchHit[] = [];
   let usage: ChatUsage = { ...ZERO_USAGE };
-  for (let round = 0; round < 3; round++) {
-    const isLastRound = round === 2;
+  for (let round = 0; round < 5; round++) {
+    const isLastRound = round === 4;
     const r = await chatRound(base, key, model, messages, [searchTool], isLastRound && Boolean(h.onDelta), h);
     usage = r.usage;
     // DeepSeek v4 иногда отдаёт нативный DSML вместо tool_calls: <｜｜DSML｜｜ invoke ...> —
@@ -331,11 +331,29 @@ async function chatWithSearch(
       }
     }
   }
-  // раунды кончились (поиск стабильно недоступен) — финальный ответ без tools:
-  // модель честно ответит на основе своих знаний с пометкой о недоступности поиска
-  const final = await chatRound(base, key, model, messages, undefined, Boolean(h.onDelta), h);
-  usage = final.usage;
-  return { content: final.content, sources, usage };
+  // раунды кончились — финальный ответ без tools (модель ответит из знаний, честно пометив недоступность поиска).
+  // Но если она ТАК И НЕ завершила поиск (DSML снова) — исполняем последние вызовы и даём ещё один шот.
+  for (let shot = 0; shot < 2; shot++) {
+    const final = await chatRound(base, key, model, messages, undefined, Boolean(h.onDelta), h);
+    usage = final.usage;
+    if (!final.content.includes('DSML')) return { content: final.content, sources, usage };
+    const qs = [...final.content.matchAll(/parameter name="query"[^>]*>([^<｜]+)/g)].map((m) => m[1].trim()).filter(Boolean);
+    if (qs.length === 0) return { content: final.content, sources, usage };
+    console.log(`[content-master] пост-цикл: исполняем ${qs.length} DSML-вызовов, шот ${shot}`);
+    const calls = qs.map((q, i) => ({ id: `post_${shot}_${i}`, type: 'function' as const, function: { name: 'web_search', arguments: JSON.stringify({ query: q }) } }));
+    messages.push({ role: 'assistant', content: null, tool_calls: calls });
+    for (const c of calls) {
+      await sleep(350);
+      let hits: SearchHit[] = [];
+      try {
+        hits = await executeSearch(JSON.parse(c.function.arguments).query ?? '');
+        hits.forEach((hit) => { if (!sources.some((s2) => s2.url === hit.url)) sources.push(hit); });
+      } catch { /* ошибка поиска — модель получит пустые результаты и ответит из знаний */ }
+      messages.push({ role: 'tool', tool_call_id: c.id, name: 'web_search', content: JSON.stringify({ results: hits }) });
+    }
+  }
+  const last = await chatRound(base, key, model, messages, undefined, Boolean(h.onDelta), h);
+  return { content: last.content, sources, usage: last.usage };
 }
 
 const REWRITER_SYSTEM = `Ты редактор инвестиционного медиа «Инвестиционно.рф». Переписываешь материалы по инструкции автора: меняешь стиль, структуру, глубину изложения — сохраняя факты и числа исходного текста, не добавляя выдуманных данных.
