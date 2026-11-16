@@ -72,8 +72,29 @@ export default function MediaPage() {
           <figure key={m.id} className="group relative">
             <img src={src(m)} alt={m.alt ?? ''} loading="lazy" className="aspect-square w-full rounded-lg border border-zinc-800 object-cover" />
             <figcaption className="absolute inset-x-0 bottom-0 truncate rounded-b-lg bg-zinc-950/80 px-2 py-1 text-[10px] text-zinc-400 opacity-0 transition-opacity group-hover:opacity-100">
-              #{m.id} · {m.sourceUrl ?? ''}
+              #{m.id} · {m.alt || m.sourceUrl || ''}
             </figcaption>
+            <span className="absolute left-1 top-1 rounded bg-zinc-950/80 px-1.5 py-0.5 text-xs">
+              <button
+                type="button"
+                title="Переименовать (alt-текст)"
+                className="text-zinc-400 transition-colors hover:text-amber-400"
+                onClick={async () => {
+                  const alt = window.prompt('Подпись картинки (alt)', m.alt ?? '');
+                  if (alt === null) return;
+                  setError(null);
+                  try {
+                    await api(`/media/${m.id}`, { method: 'PATCH', body: JSON.stringify({ alt }) });
+                    setNotice(`Файл #${m.id} переименован ✓`);
+                    await load();
+                  } catch (e) {
+                    setError(e instanceof Error ? e.message : 'Ошибка сохранения');
+                  }
+                }}
+              >
+                ✎
+              </button>
+            </span>
             <span className="absolute right-1 top-1 rounded bg-zinc-950/80 px-1.5 py-0.5 text-xs">
               <ConfirmDelete
                 label={`файл #${m.id}`}

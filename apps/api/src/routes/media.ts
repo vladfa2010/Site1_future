@@ -149,3 +149,19 @@ mediaRouter.post('/media/generate-text', authRequired, requireRole('admin', 'sup
     res.status(502).json({ error: 'generation failed', message: e instanceof Error ? e.message : 'unknown' });
   }
 });
+
+// PATCH /api/media/:id — переименование (alt — подпись/название картинки)
+mediaRouter.patch('/media/:id', authRequired, requireRole('admin', 'super_admin'), async (req, res) => {
+  const id = Number(req.params.id);
+  const parsed = z.object({ alt: z.string().trim().max(200) }).safeParse(req.body);
+  if (!Number.isInteger(id) || !parsed.success) {
+    res.status(400).json({ error: 'validation' });
+    return;
+  }
+  const [row] = await db.update(media).set({ alt: parsed.data.alt }).where(eq(media.id, id)).returning();
+  if (!row) {
+    res.status(404).json({ error: 'not found' });
+    return;
+  }
+  res.json({ media: row });
+});
