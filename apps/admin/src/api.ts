@@ -16,6 +16,14 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
     },
   });
   const body = await res.json().catch(() => ({}));
+  if (res.status === 401 && localStorage.getItem('token')) {
+    // Токен протух (у админов TTL 12ч) или инвалидирован — не показываем сырую
+    // ошибку, а отправляем на логин, как при старте без токена.
+    localStorage.removeItem('token');
+    if (!window.location.pathname.startsWith('/login')) {
+      window.location.href = '/login';
+    }
+  }
   if (!res.ok) throw new ApiError(res.status, body);
   return body as T;
 }

@@ -29,6 +29,11 @@ export default function MediaPage() {
         body: fd,
       });
       const body = await res.json();
+      if (res.status === 401 && localStorage.getItem('token')) {
+        localStorage.removeItem('token');
+        window.location.href = '/login';
+        return;
+      }
       if (!res.ok) throw new Error(JSON.stringify(body));
       setNotice('Загружено ✓');
       await load();
