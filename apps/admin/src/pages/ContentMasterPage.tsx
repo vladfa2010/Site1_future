@@ -293,8 +293,8 @@ export default function ContentMasterPage() {
       setStreamText('');
       if (lastResult) {
         setActive(lastResult);
-        setTitle(lastResult.title);
-        setExcerpt(lastResult.excerpt);
+        setTitle(lastResult.title ?? ''); // factcheck-сессии без title — иначе slugify краш
+        setExcerpt(lastResult.excerpt ?? '');
         setSourceUrl(lastResult.sourceUrl ?? lastResult.sources?.[0]?.url ?? '');
       } else {
         setActive(null);
