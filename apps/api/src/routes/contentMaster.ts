@@ -299,8 +299,19 @@ async function chatWithSearch(
     const isLastRound = round === 2;
     const r = await chatRound(base, key, model, messages, [searchTool], isLastRound && Boolean(h.onDelta), h);
     usage = r.usage;
-    if (r.toolCalls.length === 0) return { content: r.content, sources, usage };
-    messages.push({ role: 'assistant', content: r.content, tool_calls: r.toolCalls });
+    // DeepSeek v4 иногда отдаёт нативный DSML вместо tool_calls: <｜｜DSML｜｜ invoke ...> —
+    // распознаём вызовы сами, иначе агентный цикл обрывается «Модель не вернула JSON»
+    let calls = r.toolCalls;
+    if (calls.length === 0 && r.content.includes('DSML')) {
+      const dsmlQueries = [...r.content.matchAll(/parameter name="query"[^>]*>([^<｜]+)/g)].map((m) => m[1].trim()).filter(Boolean);
+      if (dsmlQueries.length > 0) {
+        console.log(`[content-master] DSML-fallback: ${dsmlQueries.length} вызовов из текста`);
+        calls = dsmlQueries.map((q, i) => ({ id: `dsml_${round}_${i}`, type: 'function' as const, function: { name: 'web_search', arguments: JSON.stringify({ query: q }) } }));
+        messages.push({ role: 'assistant', content: null, tool_calls: calls });
+      }
+    }
+    if (calls.length === 0) return { content: r.content, sources, usage };
+    if (calls === r.toolCalls) messages.push({ role: 'assistant', content: r.content || null, tool_calls: calls });
     for (const c of r.toolCalls) {
       await sleep(350); // не ддосим DDG пачкой запросов — иначе челлендж на IP
       let query = '';
