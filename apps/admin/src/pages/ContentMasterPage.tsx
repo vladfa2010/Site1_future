@@ -373,6 +373,9 @@ export default function ContentMasterPage() {
       setMessages((m) => [...m, { role: 'assistant', instruction: instruction.trim(), result: res }]);
       setSessionId(res.sessionId ?? sessionId);
       applyResult(res);
+      // фактчек получен → следующий ход почти всегда «напиши статью»: переключаем режим,
+      // иначе модель продолжит отвечать списком утверждений вместо текста
+      if (mode === 'factcheck') setMode('rewrite');
       void refreshSessions();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Ошибка');
@@ -603,7 +606,14 @@ export default function ContentMasterPage() {
             <input type="checkbox" checked={search} onChange={(e) => setSearch(e.target.checked)} />
             искать в интернете
           </label>
-          {mode === 'factcheck' && <span className="rounded bg-sky-500/10 px-2 py-0.5 text-xs text-sky-400">режим: фактчек</span>}
+          <button
+            type="button"
+            onClick={() => setMode(mode === 'factcheck' ? 'rewrite' : 'factcheck')}
+            title="Переключить: фактчек — список проверенных утверждений, рерайт — готовый текст"
+            className={`rounded px-2 py-0.5 text-xs ${mode === 'factcheck' ? 'bg-sky-500/10 text-sky-400' : 'bg-zinc-800 text-zinc-400 hover:text-zinc-200'}`}
+          >
+            режим: {mode === 'factcheck' ? 'фактчек' : 'рерайт'} ⇄
+          </button>
           {sessionId && <span className="rounded bg-zinc-800 px-2 py-0.5 text-xs text-zinc-400">сессия #{sessionId}</span>}
         </div>
       </div>
