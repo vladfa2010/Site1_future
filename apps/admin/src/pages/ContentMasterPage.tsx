@@ -338,8 +338,11 @@ export default function ContentMasterPage() {
         setExcerpt(lastResult.excerpt ?? '');
         setContentHtml(lastResult.html ?? (lastResult.summary ? `<p>${lastResult.summary}</p>` : ''));
         setSourceUrl(lastResult.sourceUrl ?? lastResult.sources?.[0]?.url ?? '');
+        // чипсы в сессии не хранятся — предлагаем заново по тексту, чтобы не вбивать руками
+        void extractEntities(lastResult.html ?? d.session.source);
       } else {
         setActive(null);
+        setSuggested(null);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Ошибка загрузки сессии');
