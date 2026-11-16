@@ -56,6 +56,7 @@ const RU_TO_LAT: Record<string, string> = {
 
 /** Заголовок → slug (кириллица транслитом, как везде на платформе). */
 function slugify(title: string): string {
+  if (!title) return '';
   return title
     .toLowerCase()
     .split('')
@@ -253,8 +254,9 @@ export default function ContentMasterPage() {
 
   const applyResult = (res: RewriteResult) => {
     setActive(res);
-    setTitle(res.title);
-    setExcerpt(res.excerpt);
+    // factcheck-ответ не содержит title — иначе undefined уходит в slugify → краш рендера
+    setTitle(res.title ?? '');
+    setExcerpt(res.excerpt ?? '');
     setSlugTouched(false);
     setSlug('');
     // источник в черновик: сначала sourceUrl результата, иначе первый найденный (ТЗ-13 ф.4.2)
@@ -459,7 +461,7 @@ export default function ContentMasterPage() {
                   <div className="flex shrink-0 gap-2">
                     {m.result.mock && <span className="rounded bg-amber-500/10 px-2 py-0.5 text-xs text-amber-400">mock — нет ключа LLM</span>}
                     <button
-                      onClick={() => { setActive(m.result!); setTitle(m.result!.title); setExcerpt(m.result!.excerpt); setSourceUrl(m.result!.sourceUrl ?? m.result!.sources?.[0]?.url ?? ''); setCreated(null); setMode(m.result!.report ? 'factcheck' : 'rewrite'); }}
+                      onClick={() => { setActive(m.result!); setTitle(m.result!.title ?? ''); setExcerpt(m.result!.excerpt ?? ''); setSourceUrl(m.result!.sourceUrl ?? m.result!.sources?.[0]?.url ?? ''); setCreated(null); setMode(m.result!.report ? 'factcheck' : 'rewrite'); }}
                       className={`rounded px-2 py-0.5 text-xs ${active === m.result ? 'bg-[#beff00] text-black' : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'}`}
                     >
                       {active === m.result ? '✓ выбран' : 'взять за основу'}
