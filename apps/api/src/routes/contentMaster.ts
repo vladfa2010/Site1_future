@@ -183,6 +183,7 @@ interface StreamHandlers {
 
 interface ChatRoundResult {
   content: string;
+  reasoningContent?: string; // thinking-модели DeepSeek требуют вернуть reasoning_content в историю (400 иначе)
   toolCalls: { id: string; type: 'function'; function: { name: string; arguments: string } }[];
   usage: ChatUsage;
 }
@@ -208,7 +209,7 @@ async function chatRound(
   });
   if (!stream) {
     const data = (await res.json().catch(() => ({}))) as {
-      choices?: { message?: { content?: string; tool_calls?: { id: string; type: 'function'; function: { name: string; arguments: string } }[] } }[];
+      choices?: { message?: { content?: string; reasoning_content?: string; tool_calls?: { id: string; type: 'function'; function: { name: string; arguments: string } }[] } }[];
       usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
       error?: { message?: string };
     };
@@ -216,6 +217,7 @@ async function chatRound(
     if (!res.ok || !msg) throw new Error(`chat API: ${res.status} ${data.error?.message ?? 'пустой ответ'}`);
     return {
       content: msg.content ?? '',
+      reasoningContent: msg.reasoning_content ?? undefined,
       toolCalls: msg.tool_calls ?? [],
       usage: {
         promptTokens: data.usage?.prompt_tokens ?? 0,
@@ -307,11 +309,17 @@ async function chatWithSearch(
       if (dsmlQueries.length > 0) {
         console.log(`[content-master] DSML-fallback: ${dsmlQueries.length} вызовов из текста`);
         calls = dsmlQueries.map((q, i) => ({ id: `dsml_${round}_${i}`, type: 'function' as const, function: { name: 'web_search', arguments: JSON.stringify({ query: q }) } }));
-        messages.push({ role: 'assistant', content: null, tool_calls: calls });
+        const asstDsml: Record<string, unknown> = { role: 'assistant', content: null, tool_calls: calls };
+        if (r.reasoningContent) asstDsml.reasoning_content = r.reasoningContent;
+        messages.push(asstDsml);
       }
     }
     if (calls.length === 0) return { content: r.content, sources, usage };
-    if (calls === r.toolCalls) messages.push({ role: 'assistant', content: r.content || null, tool_calls: calls });
+    if (calls === r.toolCalls) {
+      const asst: Record<string, unknown> = { role: 'assistant', content: r.content || null, tool_calls: calls };
+      if (r.reasoningContent) asst.reasoning_content = r.reasoningContent;
+      messages.push(asst);
+    }
     for (const c of r.toolCalls) {
       await sleep(350); // не ддосим DDG пачкой запросов — иначе челлендж на IP
       let query = '';
@@ -341,7 +349,8 @@ async function chatWithSearch(
     if (qs.length === 0) return { content: final.content, sources, usage };
     console.log(`[content-master] пост-цикл: исполняем ${qs.length} DSML-вызовов, шот ${shot}`);
     const calls = qs.map((q, i) => ({ id: `post_${shot}_${i}`, type: 'function' as const, function: { name: 'web_search', arguments: JSON.stringify({ query: q }) } }));
-    messages.push({ role: 'assistant', content: null, tool_calls: calls });
+    const asstPost: Record<string, unknown> = { role: 'assistant', content: null, tool_calls: calls };
+    messages.push(asstPost);
     for (const c of calls) {
       await sleep(350);
       let hits: SearchHit[] = [];
