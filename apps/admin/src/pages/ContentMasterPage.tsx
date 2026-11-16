@@ -275,11 +275,17 @@ export default function ContentMasterPage() {
     if (text.trim().length < 50) { setSuggested(null); return; }
     setSugBusy(true);
     try {
-      const r = await api<{ trends: Opt[]; companies: Opt[]; unknown: string[]; mock: boolean }>('/admin/content-master/extract', {
-        method: 'POST',
-        body: JSON.stringify({ text: text.slice(0, 20_000) }),
+      const r = await api<{ trends: { id: number; name: string }[]; companies: { id: number; name: string }[]; unknown: string[]; mock: boolean }>(
+        '/admin/content-master/extract',
+        { method: 'POST', body: JSON.stringify({ text: text.slice(0, 20_000) }) },
+      );
+      // сервер отдаёт name, чипсы/теги живут на label — маппим здесь
+      setSuggested({
+        trends: r.trends.map((t) => ({ id: t.id, label: t.name })),
+        companies: r.companies.map((c) => ({ id: c.id, label: c.name })),
+        unknown: r.unknown,
+        mock: r.mock,
       });
-      setSuggested(r);
     } catch {
       setSuggested(null); // извлечение — удобство, не критично: молча пропускаем
     } finally {
