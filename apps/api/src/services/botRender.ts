@@ -16,7 +16,7 @@
  * - JSON-LD — одним JSON.stringify + защита '</script'/U+2028/29 (serializeJsonLd).
  * - Кэш в памяти процесса, TTL 15 мин; инвалидация при публикации/правке.
  */
-import { and, desc, eq, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import {
   db, articles, media, users, metaFields, companies, trends, stories, redirects,
   ARTICLE_TYPES, type ArticleType,
@@ -483,6 +483,34 @@ async function buildFeedPage(type: ArticleType, origin: string): Promise<PageDat
   };
 }
 
+/** Подборка всех трендов (/trends) — зеркало TrendIndexPage (2026-11-18). */
+async function buildTrendsIndexPage(origin: string): Promise<PageData> {
+  const rows = await db
+    .select({ slug: trends.slug, name: trends.name })
+    .from(trends)
+    .orderBy(asc(trends.name))
+    .limit(200);
+  const links = rows.map((t) => `<li><a href="${safeHref(`/trend/${t.slug}`)}">${escapeHtml(t.name)}</a></li>`);
+  const crumbs: BreadcrumbCrumb[] = [{ label: 'Главная', to: '/' }, { label: 'Тренды' }];
+  const description = 'Подборка трендов: великие идеи, инновации и новые сектора экономики.';
+  const body = [
+    crumbNav(crumbs),
+    '<h1>Тренды</h1>',
+    `<p>${escapeHtml(description)}</p>`,
+    links.length > 0 ? `<ul>${links.join('\n      ')}</ul>` : '<p>Тренды скоро появятся.</p>',
+  ].join('\n    ');
+  return {
+    title: 'Тренды',
+    description,
+    ogType: 'website',
+    canonicalPath: '/trends',
+    image: null,
+    h1: 'Тренды',
+    body,
+    jsonLd: [breadcrumbJsonLd(crumbs, origin)],
+  };
+}
+
 async function buildHomePage(origin: string): Promise<PageData> {
   const links = await recentArticleLinks(undefined, FEED_LINKS);
   const crumbs: BreadcrumbCrumb[] = [{ label: 'Главная', to: '/' }];
@@ -553,6 +581,8 @@ async function buildPage(path: string, origin: string): Promise<PageData | null>
     if (slug.length > 200) return null;
     return buildArticlePage(type, slug, origin);
   }
+
+  if (path === '/trends') return buildTrendsIndexPage(origin);
 
   m = path.match(/^\/([a-z]+)$/);
   if (m && (ARTICLE_TYPES as readonly string[]).includes(m[1]!)) {

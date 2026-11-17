@@ -60,6 +60,8 @@ async function buildSitemap(origin: string): Promise<string> {
   for (const t of ARTICLE_TYPES) {
     entries.push({ loc: `${base}/${t}`, changefreq: 'daily', priority: '0.7' });
   }
+  // подборка трендов (2026-11-18)
+  entries.push({ loc: `${base}/trends`, changefreq: 'weekly', priority: '0.7' });
   for (const p of ['o-nas', 'zachem', 'smysl', 'missiya', 'portfolio', 'pricing', 'propose', 'privacy', 'terms']) {
     entries.push({ loc: `${base}/${p}`, changefreq: 'monthly', priority: '0.4' });
   }
