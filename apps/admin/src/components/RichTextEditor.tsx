@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Image from '@tiptap/extension-image';
@@ -9,8 +9,14 @@ import type { Editor } from '@tiptap/react';
  * TipTap-редактор контента статьи (решение раздела 6.2).
  * Работает с HTML (content_html): открывает мигрированный контент и LLM-HTML,
  * сохраняет обратно HTML. Санитизация — на рендере сайта (web/lib/sanitize).
+ *
+ * Двусторонняя связка: печатает пользователь → onChange(getHTML) в родителя;
+ * меняет value родитель (новый результат AI, другая статья) → подставляем в редактор.
+ * Без этого контент обновлялся только когда редактор был пуст (isEmpty) —
+ * в ContentMaster после фактчека статья не подменяла в редакторе старый текст.
  */
 export function RichTextEditor({ value, onChange }: { value: string; onChange: (html: string) => void }) {
+  const lastApplied = useRef<string | null>(null);
   const editor = useEditor({
     extensions: [
       StarterKit.configure({ heading: { levels: [2, 3, 4] } }),
@@ -21,7 +27,10 @@ export function RichTextEditor({ value, onChange }: { value: string; onChange: (
       TableCell,
     ],
     content: value,
-    onUpdate: ({ editor }) => onChange(editor.getHTML()),
+    onUpdate: ({ editor }) => {
+      lastApplied.current = editor.getHTML(); // печать пользователя — не затирать из effect
+      onChange(editor.getHTML());
+    },
     editorProps: {
       attributes: {
         class: 'prose-invert min-h-[320px] max-w-none px-4 py-3 text-sm leading-relaxed focus:outline-none [&_h2]:mt-4 [&_h2]:text-lg [&_h2]:font-bold [&_h3]:mt-3 [&_h3]:font-bold [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_blockquote]:border-l-2 [&_blockquote]:border-zinc-600 [&_blockquote]:pl-3 [&_blockquote]:italic [&_a]:text-orange-400 [&_img]:max-w-full [&_img]:rounded-lg [&_td]:border [&_td]:border-zinc-700 [&_td]:px-2 [&_td]:py-1 [&_th]:border [&_th]:border-zinc-700 [&_th]:px-2 [&_th]:py-1',
@@ -29,11 +38,14 @@ export function RichTextEditor({ value, onChange }: { value: string; onChange: (
     },
   });
 
-  // при загрузке статьи подставляем контент
+  // внешнее изменение value (результат AI, загрузка другой статьи) → подставляем в редактор;
+  // emitUpdate не включаем, чтобы не зациклить onChange → value → effect
   useEffect(() => {
-    if (editor && value && editor.isEmpty) {
-      editor.commands.setContent(value);
-    }
+    if (!editor) return;
+    if (value === lastApplied.current) return; // уже в редакторе (печать/прошлая подстановка)
+    if (value === editor.getHTML()) { lastApplied.current = value; return; }
+    editor.commands.setContent(value, false);
+    lastApplied.current = value;
   }, [editor, value]);
 
   if (!editor) return <div className="input min-h-[320px] animate-pulse" />;
