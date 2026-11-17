@@ -142,9 +142,18 @@ export default function ArticlePage() {
         </span>
       </div>
 
-      {/* meta-строка «тип · N мин чтения · 👁 просмотры» сразу после заголовка (ТЗ-09, ТЗ-03) */}
+      {/* meta-строка «тип · дата · автор · N мин чтения · 👁 просмотры» сразу после заголовка (ТЗ-09, ТЗ-03) */}
       <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-zinc-600">
         <span className="uppercase tracking-wide">{TYPE_LABELS[article.type] ?? article.type}</span>
+        {/* дата публикации: для новостей критична, для остальных типов тоже информативна */}
+        {article.publishedAt && (
+          <>
+            <span aria-hidden="true">·</span>
+            <time dateTime={article.publishedAt}>
+              {new Date(article.publishedAt).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })}
+            </time>
+          </>
+        )}
         {/* ТЗ-05: имя автора со ссылкой на страницу; без автора строка не рендерится */}
         {data.author && (
           <>
