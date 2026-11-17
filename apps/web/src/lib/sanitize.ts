@@ -6,10 +6,17 @@
 import sanitizeHtml from 'sanitize-html';
 
 const OPTIONS: sanitizeHtml.IOptions = {
-  allowedTags: ['p', 'h2', 'h3', 'h4', 'ul', 'ol', 'li', 'strong', 'em', 'b', 'i', 'a', 'img', 'blockquote', 'br', 'figure', 'figcaption', 'hr'],
+  allowedTags: ['p', 'h2', 'h3', 'h4', 'ul', 'ol', 'li', 'strong', 'em', 'b', 'i', 'a', 'img', 'blockquote', 'br', 'figure', 'figcaption', 'hr',
+    // таблицы (TipTap table в редакторе; без них sanitize съедал разметку, оставляя слипшийся текст)
+    'table', 'thead', 'tbody', 'tfoot', 'tr', 'th', 'td', 'colgroup', 'col',
+    // код/преформатированное — встречается в аналитике и LLM-HTML
+    'code', 'pre'],
   allowedAttributes: {
     a: ['href', 'target'],
     img: ['src', 'alt'],
+    th: ['colspan', 'rowspan'],
+    td: ['colspan', 'rowspan'],
+    col: ['span'],
   },
   allowedSchemes: ['http', 'https'],
   // внешние ссылки — только с noopener

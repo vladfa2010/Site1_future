@@ -11,10 +11,15 @@
 import sanitizeHtml from 'sanitize-html';
 
 const OPTIONS: sanitizeHtml.IOptions = {
-  allowedTags: ['p', 'h2', 'h3', 'h4', 'ul', 'ol', 'li', 'strong', 'em', 'b', 'i', 'a', 'img', 'blockquote', 'br', 'figure', 'figcaption', 'hr'],
+  allowedTags: ['p', 'h2', 'h3', 'h4', 'ul', 'ol', 'li', 'strong', 'em', 'b', 'i', 'a', 'img', 'blockquote', 'br', 'figure', 'figcaption', 'hr',
+    // таблицы (TipTap table в редакторе) + код — идентично сайтовому allowlist
+    'table', 'thead', 'tbody', 'tfoot', 'tr', 'th', 'td', 'colgroup', 'col', 'code', 'pre'],
   allowedAttributes: {
     a: ['href', 'target'],
     img: ['src', 'alt'],
+    th: ['colspan', 'rowspan'],
+    td: ['colspan', 'rowspan'],
+    col: ['span'],
   },
   allowedSchemes: ['http', 'https'],
   // внешние ссылки — только с noopener
