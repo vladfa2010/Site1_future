@@ -1,6 +1,6 @@
 import { useParams, Link } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { api } from '../api';
 import { EntityChips } from '../components/EntityChips';
 import { AutoLoadNext } from '../components/AutoLoadNext';
@@ -83,12 +83,15 @@ export default function ArticlePage() {
     queryFn: () => api.article(type, slug),
   });
 
+  const [coverBroken, setCoverBroken] = useState(false);
   // ТЗ-06: единый менеджер document.title — строго до ранних return'ов (хуки).
   // Заголовок ПОЛНЫЙ, без обрезки; на unmount — сброс на SITE_TITLE (аддендум v2.1 №7).
   useEffect(() => {
     if (data) setArticleTitle(data.article.title);
   }, [data]);
   useEffect(() => () => resetPageTitle(), []);
+  // при переходе на другую статью (без unmount) сбрасываем флаг битой обложки
+  useEffect(() => setCoverBroken(false), [type, slug]);
 
   if (isLoading) return <p className="text-zinc-400">Загрузка…</p>;
   // пейволл: 403 от API → экран «войдите / оформите тариф»
@@ -167,6 +170,20 @@ export default function ArticlePage() {
           </>
         )}
       </div>
+
+      {/* Хиро-обложка статьи (ТЗ-15): после meta-строки, до тезиса/чипсов.
+          Внешние/битые картинки прячем по onError — не показываем битый img */}
+      {data.coverUrl && !coverBroken && (
+        <figure className="mt-4 overflow-hidden rounded-xl border border-[#2a2a2a]">
+          <img
+            src={data.coverUrl}
+            alt={article.title}
+            loading="lazy"
+            className="max-h-[420px] w-full object-cover"
+            onError={() => setCoverBroken(true)}
+          />
+        </figure>
+      )}
 
       {/* тезис идеи — только если внесён (4.3) */}
       {article.thesis && (
