@@ -212,6 +212,9 @@ export const articles = pgTable(
     // ТЗ-04: агрегаты лайков/шеров (источник истины — article_likes / article_share_events)
     likesCount: integer('likes_count').notNull().default(0),
     sharesCount: integer('shares_count').notNull().default(0),
+    // стартовая «докрутка» лайков/репостов (как viewsBaseOffset): API читает сумму с колонкой
+    likesBaseOffset: integer('likes_base_offset').notNull().default(0),
+    sharesBaseOffset: integer('shares_base_offset').notNull().default(0),
     coverMediaId: integer('cover_media_id').references(() => media.id),
     authorId: integer('author_id').references(() => users.id, { onDelete: 'set null' }), // удаление аккаунта не трогает контент
     status: text('status').notNull().default('draft'), // draft | pending | published

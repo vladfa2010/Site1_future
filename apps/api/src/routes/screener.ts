@@ -8,7 +8,7 @@ import { and, eq, sql, type SQL } from 'drizzle-orm';
 import { db, articles, dealPhases, dealStages, media } from '@newinvest/db';
 import { optionalAuth, ADMIN_ROLES } from '../middleware/auth.js';
 import { accessCondition } from './articles.js';
-import { virtualViewsSql } from '../services/viewsBump.js';
+import { virtualViewsSql, virtualLikesSql, virtualSharesSql } from '../services/viewsBump.js';
 
 export const screenerRouter = Router();
 
@@ -62,8 +62,8 @@ screenerRouter.get('/screener', optionalAuth, async (req, res) => {
       coverUrl: media.filePath,
       readingTime: articles.readingTime,
       viewsCount: virtualViewsSql, // ТЗ-03: счётчик на карточках идей
-      likesCount: articles.likesCount, // ТЗ-04: счётчики вовлечения в скринере (liked нет — публичный список)
-      sharesCount: articles.sharesCount,
+      likesCount: virtualLikesSql, // ТЗ-04: счётчики вовлечения в скринере (liked нет — публичный список)
+      sharesCount: virtualSharesSql,
       phases: badges('article_deal_phases', 'deal_phases', 'phase_id'),
       stages: badges('article_deal_stages', 'deal_stages', 'stage_id'),
       industries: badges('article_industries', 'industries', 'industry_id'),

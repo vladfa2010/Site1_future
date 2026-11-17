@@ -15,7 +15,7 @@ import {
 } from '@newinvest/db';
 import { uniqueSlug, plainTextToHtml } from '../utils/slug.js';
 import { optionalAuth, authRequired, requireRole, ADMIN_ROLES } from '../middleware/auth.js';
-import { virtualViewsSql } from '../services/viewsBump.js';
+import { virtualViewsSql, virtualLikesSql, virtualSharesSql } from '../services/viewsBump.js';
 import { invalidateRenderCache } from '../services/botRender.js';
 import { invalidateSitemapCache } from '../routes/seo.js';
 
@@ -47,6 +47,9 @@ const patchSchema = createSchema.partial().extend({
   // ТЗ-03: докрутка счётчиков — только через PATCH и только admin (в createSchema НЕ добавлять,
   // иначе автор сможет задать seed при POST — правка ревью v2.1 №4)
   viewsBaseOffset: z.number().int().min(0).max(1000000).optional(),
+  // стартовая докрутка лайков/репостов (2026-11-17) — та же модель: только PATCH, только admin
+  likesBaseOffset: z.number().int().min(0).max(1000000).optional(),
+  sharesBaseOffset: z.number().int().min(0).max(1000000).optional(),
   viewsAutoBump: z
     .object({
       enabled: z.boolean(),
@@ -142,9 +145,10 @@ articlesRouter.get('/', optionalAuth, async (req, res) => {  const type = req.qu
       videoUrl: articles.videoUrl,
       readingTime: articles.readingTime,
       viewsCount: virtualViewsSql, // ТЗ-03: виртуальный счётчик (реальные + seed + докрутка)
-      // ТЗ-04: счётчики вовлечения видны всем (L5); liked — через один leftJoin для залогиненного
-      likesCount: articles.likesCount,
-      sharesCount: articles.sharesCount,
+      // ТЗ-04: счётчики вовлечения видны всем (L5); liked — через один leftJoin для залогиненного.
+      // 2026-11-17: виртуальные суммы (реальные + стартовая докрутка, как у просмотров ТЗ-03)
+      likesCount: virtualLikesSql,
+      sharesCount: virtualSharesSql,
       liked: req.user
         ? isNotNull(articleLikes.userId)
         : sql<boolean>`false`,
@@ -245,8 +249,8 @@ articlesRouter.get('/:type/:slug', optionalAuth, async (req, res) => {
     author, // ТЗ-05: один источник для строки «Автор:» и author box'а
     viewsCount: row.viewsCount, // ТЗ-03 R1.2: виртуальный счётчик отдельным полем в корне
     coverUrl: row.coverUrl,
-    likesCount: article.likesCount, // ТЗ-04: счётчики + liked отдельными полями в корне
-    sharesCount: article.sharesCount,
+    likesCount: article.likesCount + article.likesBaseOffset, // ТЗ-04 + докрутка (2026-11-17)
+    sharesCount: article.sharesCount + article.sharesBaseOffset,
     liked,
     meta: { description: meta?.value ?? null },
     relations: { companies: relCompanies, trends: relTrends, tickers: relTickers },
@@ -325,7 +329,11 @@ articlesRouter.patch('/:id', authRequired, requireRole('author', 'admin', 'super
   const sent = new Set(Object.keys(req.body ?? {}));
   const data = Object.fromEntries(Object.entries(parsed.data).filter(([k]) => sent.has(k))) as typeof parsed.data;
   const { metaDescription, viewsBaseOffset, viewsAutoBump, ...updates } = data;
-  if (!admin) delete updates.status; // автор не меняет статус
+  if (!admin) {
+    delete updates.status; // автор не меняет статус
+    delete updates.likesBaseOffset; // и не крутит счётчики (2026-11-17)
+    delete updates.sharesBaseOffset;
+  }
   // ТЗ-03 R2: поля докрутки — только admin/super_admin; не-админу молча игнорируются
   // (403 нет — поведение как у status, значение не изменяется)
   if (admin) {

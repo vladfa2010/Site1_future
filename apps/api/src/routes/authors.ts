@@ -10,7 +10,7 @@ import { and, eq, isNotNull, sql } from 'drizzle-orm';
 import { db, articles, users, media, articleLikes } from '@newinvest/db';
 import { optionalAuth } from '../middleware/auth.js';
 import { accessCondition, isAdmin } from './articles.js';
-import { virtualViewsSql } from '../services/viewsBump.js';
+import { virtualViewsSql, virtualLikesSql, virtualSharesSql } from '../services/viewsBump.js';
 
 export const authorsRouter = Router();
 
@@ -58,8 +58,8 @@ authorsRouter.get('/:id', optionalAuth, async (req, res) => {
       videoUrl: articles.videoUrl,
       readingTime: articles.readingTime,
       viewsCount: virtualViewsSql,
-      likesCount: articles.likesCount,
-      sharesCount: articles.sharesCount,
+      likesCount: virtualLikesSql,
+      sharesCount: virtualSharesSql,
       liked: req.user
         ? isNotNull(articleLikes.userId)
         : sql<boolean>`false`,

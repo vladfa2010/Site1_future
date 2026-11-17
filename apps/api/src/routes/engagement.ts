@@ -101,8 +101,8 @@ engagementRouter.put('/articles/:id/like', authRequired, async (req, res) => {
     if (inserted.length > 0) {
       await syncLikesCount(tx, id);
     }
-    const [row] = await tx.select({ likesCount: articles.likesCount }).from(articles).where(eq(articles.id, id));
-    return { liked: true, likesCount: row?.likesCount ?? 0 };
+    const [row] = await tx.select({ c: articles.likesCount, o: articles.likesBaseOffset }).from(articles).where(eq(articles.id, id));
+    return { liked: true, likesCount: (row?.c ?? 0) + (row?.o ?? 0) };
   });
   res.json({ ok: true, ...result });
 });
@@ -123,8 +123,8 @@ engagementRouter.delete('/articles/:id/like', authRequired, async (req, res) => 
     if (deleted.length > 0) {
       await syncLikesCount(tx, id);
     }
-    const [row] = await tx.select({ likesCount: articles.likesCount }).from(articles).where(eq(articles.id, id));
-    return { liked: false, likesCount: row?.likesCount ?? 0 };
+    const [row] = await tx.select({ c: articles.likesCount, o: articles.likesBaseOffset }).from(articles).where(eq(articles.id, id));
+    return { liked: false, likesCount: (row?.c ?? 0) + (row?.o ?? 0) };
   });
   res.json({ ok: true, ...result });
 });
@@ -173,8 +173,8 @@ engagementRouter.post(
     const sharesCount = await db.transaction(async (tx) => {
       await tx.insert(articleShareEvents).values({ articleId: id, userId, channel });
       await syncSharesCount(tx, id);
-      const [row] = await tx.select({ sharesCount: articles.sharesCount }).from(articles).where(eq(articles.id, id));
-      return row?.sharesCount ?? 0;
+      const [row] = await tx.select({ c: articles.sharesCount, o: articles.sharesBaseOffset }).from(articles).where(eq(articles.id, id));
+      return (row?.c ?? 0) + (row?.o ?? 0);
     });
     res.status(201).json({ ok: true, sharesCount });
   },

@@ -242,6 +242,9 @@ export default function ContentMasterPage() {
   const [coverPreview, setCoverPreview] = useState<string | null>(null);
   const [genPrompt, setGenPrompt] = useState('');
   const [coverMock, setCoverMock] = useState(false);
+  // стартовая докрутка лайков/репостов (2026-11-17) — PATCH-ом после создания черновика
+  const [likesBaseOffset, setLikesBaseOffset] = useState('0');
+  const [sharesBaseOffset, setSharesBaseOffset] = useState('0');
 
   const listRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -272,6 +275,8 @@ export default function ContentMasterPage() {
     setCoverPreview(null);
     setGenPrompt('');
     setAiNotice(null);
+    setLikesBaseOffset('0');
+    setSharesBaseOffset('0');
   };
 
   const applyResult = (res: RewriteResult) => {
@@ -528,6 +533,8 @@ export default function ContentMasterPage() {
       setCoverPreview(null);
       setGenPrompt('');
       setAiNotice(null);
+      setLikesBaseOffset('0');
+      setSharesBaseOffset('0');
       if (lastResult) {
         setActive(lastResult);
         setTitle(lastResult.title ?? ''); // factcheck-сессии без title — иначе slugify краш
@@ -623,6 +630,16 @@ export default function ContentMasterPage() {
           tickerIds: tickers.map((t) => t.id),
         }),
       });
+      // стартовые лайки/репосты: POST их не принимает (как просмотры), досылаем PATCH-ом
+      if (Number(likesBaseOffset) > 0 || Number(sharesBaseOffset) > 0) {
+        await api(`/articles/${created_res.article.id}`, {
+          method: 'PATCH',
+          body: JSON.stringify({
+            likesBaseOffset: Number(likesBaseOffset) || 0,
+            sharesBaseOffset: Number(sharesBaseOffset) || 0,
+          }),
+        });
+      }
       setCreated({ id: created_res.article.id, type, slug: effectiveSlug });
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Ошибка создания');
@@ -847,6 +864,16 @@ export default function ContentMasterPage() {
                 <option value="auth">Только авторизованным</option>
                 <option value="tariff">По тарифу</option>
               </select>
+            </div>
+            <div>
+              <label className="label">Стартовые лайки (seed)</label>
+              <input className="input w-full" type="number" min={0} max={1000000} value={likesBaseOffset} onChange={(e) => setLikesBaseOffset(e.target.value)} />
+              <p className="mt-1 text-xs text-zinc-600">Прибавится к реальным лайкам.</p>
+            </div>
+            <div>
+              <label className="label">Стартовые репосты (seed)</label>
+              <input className="input w-full" type="number" min={0} max={1000000} value={sharesBaseOffset} onChange={(e) => setSharesBaseOffset(e.target.value)} />
+              <p className="mt-1 text-xs text-zinc-600">Прибавится к реальным репостам.</p>
             </div>
             <div className="sm:col-span-2">
               <label className="label">Заголовок</label>

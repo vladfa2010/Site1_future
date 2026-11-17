@@ -69,6 +69,9 @@ export default function ArticleEditPage() {
   const [autoSavedAt, setAutoSavedAt] = useState<string | null>(null);
   // ТЗ-03: настройки счётчиков просмотров (докрутка) — только admin/super_admin
   const [viewsBaseOffset, setViewsBaseOffset] = useState('0');
+  // стартовая докрутка лайков/репостов (2026-11-17) — та же модель, что у просмотров
+  const [likesBaseOffset, setLikesBaseOffset] = useState('0');
+  const [sharesBaseOffset, setSharesBaseOffset] = useState('0');
   const [bumpEnabled, setBumpEnabled] = useState(false);
   const [bumpEveryHours, setBumpEveryHours] = useState('24');
   const [bumpMin, setBumpMin] = useState('1');
@@ -89,7 +92,7 @@ export default function ArticleEditPage() {
       setDealStages(stages.stages);
 
       if (!isNew && urlType && slug) {
-        const detail = await api<{ article: { id: number; type: string; slug: string; title: string; excerpt: string | null; thesis: string | null; contentHtml: string; status: string; coverMediaId: number | null; accessLevel: string | null; accessTariffId: number | null; videoUrl: string | null; stageIds?: number[]; viewsBaseOffset: number; viewsAutoBumpEnabled: boolean; viewsAutoBumpEveryHours: number | null; viewsAutoBumpMin: number; viewsAutoBumpMax: number }; coverUrl: string | null; meta: { description: string | null } }>(`/articles/${urlType}/${slug}`);
+        const detail = await api<{ article: { id: number; type: string; slug: string; title: string; excerpt: string | null; thesis: string | null; contentHtml: string; status: string; coverMediaId: number | null; accessLevel: string | null; accessTariffId: number | null; videoUrl: string | null; stageIds?: number[]; viewsBaseOffset: number; viewsAutoBumpEnabled: boolean; viewsAutoBumpEveryHours: number | null; viewsAutoBumpMin: number; viewsAutoBumpMax: number; likesBaseOffset: number; sharesBaseOffset: number }; coverUrl: string | null; meta: { description: string | null } }>(`/articles/${urlType}/${slug}`);
         const a = detail.article;
         setForm({
           type: a.type, slug: a.slug, title: a.title, excerpt: a.excerpt ?? '', thesis: a.thesis ?? '',
@@ -99,6 +102,8 @@ export default function ArticleEditPage() {
         });
         // ТЗ-03: предзаполнение настроек докрутки (детальный GET отдаёт колонки целиком)
         setViewsBaseOffset(String(a.viewsBaseOffset ?? 0));
+        setLikesBaseOffset(String(a.likesBaseOffset ?? 0));
+        setSharesBaseOffset(String(a.sharesBaseOffset ?? 0));
         setStageIds(a.stageIds ?? []);
         setBumpEnabled(a.viewsAutoBumpEnabled ?? false);
         setBumpEveryHours(String(a.viewsAutoBumpEveryHours ?? 24));
@@ -198,6 +203,8 @@ export default function ArticleEditPage() {
       // ТЗ-03: настройки докрутки — только существующей статье и только админу (сервер всё равно 403/игнор)
       if (!isNew && id && canEditViews) {
         payload.viewsBaseOffset = Number(viewsBaseOffset) || 0;
+        payload.likesBaseOffset = Number(likesBaseOffset) || 0;
+        payload.sharesBaseOffset = Number(sharesBaseOffset) || 0;
         payload.viewsAutoBump = bumpEnabled
           ? {
               enabled: true,
@@ -211,12 +218,14 @@ export default function ArticleEditPage() {
         const created = await api<{ article: { id: number } }>('/articles', { method: 'POST', body: JSON.stringify(payload) });
         id = created.article.id;
         setArticleId(id);
-        // новой статье можно было задать просмотры до первого сейва — досылаем сразу после создания
-        if (canEditViews && (Number(viewsBaseOffset) > 0 || bumpEnabled)) {
+        // новой статье можно было задать просмотры/лайки/репосты до первого сейва — досылаем сразу после создания
+        if (canEditViews && (Number(viewsBaseOffset) > 0 || Number(likesBaseOffset) > 0 || Number(sharesBaseOffset) > 0 || bumpEnabled)) {
           await api(`/articles/${id}`, {
             method: 'PATCH',
             body: JSON.stringify({
               viewsBaseOffset: Number(viewsBaseOffset) || 0,
+              likesBaseOffset: Number(likesBaseOffset) || 0,
+              sharesBaseOffset: Number(sharesBaseOffset) || 0,
               viewsAutoBump: bumpEnabled
                 ? {
                     enabled: true,
@@ -517,6 +526,12 @@ export default function ArticleEditPage() {
         // автосохранение никогда не публикует: новое — только draft, опубликованное — статус не трогаем
         status: isNew || form.status !== 'published' ? 'draft' : undefined,
       };
+      // докрутка счётчиков — существующей статье и только админу (сервер всё равно отфильтрует)
+      if (!isNew && articleId && canEditViews) {
+        payload.viewsBaseOffset = Number(viewsBaseOffset) || 0;
+        payload.likesBaseOffset = Number(likesBaseOffset) || 0;
+        payload.sharesBaseOffset = Number(sharesBaseOffset) || 0;
+      }
       if (isNew) {
         const created = await api<{ article: { id: number } }>('/articles', { method: 'POST', body: JSON.stringify(payload) });
         id = created.article.id;
@@ -755,7 +770,7 @@ export default function ArticleEditPage() {
       {/* ТЗ-03: счётчики просмотров — collapsible, только admin/super_admin (ревью v2.1 №9, №10) */}
       {canEditViews && (
         <details className="card space-y-4">
-          <summary className="cursor-pointer font-semibold">Счётчики просмотров (докрутка)</summary>
+          <summary className="cursor-pointer font-semibold">Счётчики (докрутка просмотров, лайков, репостов)</summary>
           {!isNew ? (
             <div className="grid gap-4 sm:grid-cols-4">
               <div>
@@ -769,6 +784,31 @@ export default function ArticleEditPage() {
                   onChange={(e) => setViewsBaseOffset(e.target.value)}
                 />
                 <p className="mt-1 text-xs text-zinc-500">Прибавляется к реальным просмотрам на карточках.</p>
+              </div>
+              {/* стартовая докрутка лайков/репостов (2026-11-17) */}
+              <div>
+                <label className="label">Стартовые лайки (seed)</label>
+                <input
+                  className="input"
+                  type="number"
+                  min={0}
+                  max={1000000}
+                  value={likesBaseOffset}
+                  onChange={(e) => setLikesBaseOffset(e.target.value)}
+                />
+                <p className="mt-1 text-xs text-zinc-500">Фейковая база под реальными лайками.</p>
+              </div>
+              <div>
+                <label className="label">Стартовые репосты (seed)</label>
+                <input
+                  className="input"
+                  type="number"
+                  min={0}
+                  max={1000000}
+                  value={sharesBaseOffset}
+                  onChange={(e) => setSharesBaseOffset(e.target.value)}
+                />
+                <p className="mt-1 text-xs text-zinc-500">Фейковая база под реальными репостами.</p>
               </div>
               <div className="sm:col-span-3">
                 <label className="flex items-center gap-2">

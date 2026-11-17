@@ -18,6 +18,10 @@ export const virtualViewsSql = sql<number>`(
   select count(*) from article_views av where av.article_id = ${articles.id}
 )::int + ${articles.viewsBaseOffset} + ${articles.viewsBumpAccumulated}`;
 
+/** Виртуальные лайки/репосты (2026-11-17): материализованный счётчик + стартовая докрутка. */
+export const virtualLikesSql = sql<number>`${articles.likesCount} + ${articles.likesBaseOffset}`;
+export const virtualSharesSql = sql<number>`${articles.sharesCount} + ${articles.sharesBaseOffset}`;
+
 /**
  * Один проход автодокрутки: всем «созревшим» статьям (enabled и дедлайн наступил)
  * добавляет случайное целое из [min, max] к accumulated и ставит lastBumpAt = now.

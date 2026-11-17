@@ -162,6 +162,13 @@
       "when": 1794769310945,
       "tag": "0022_content_master_sessions",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1794906000000,
+      "tag": "0023_likes_shares_base_offset",
+      "breakpoints": true
     }
   ]
 }
