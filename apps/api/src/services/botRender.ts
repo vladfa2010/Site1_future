@@ -77,7 +77,16 @@ export function normalizePath(raw: string): string | null {
   let p = raw.split('?')[0].split('#')[0].trim();
   if (!p.startsWith('/')) return null;
   if (p.length > 1) p = p.replace(/\/+$/, '');
-  return p === '' ? '/' : p;
+  if (p === '' || p === '/') return '/';
+  // Caddy передаёт {uri} процент-закодированным (/ip%D0%BE…), а записи redirects
+  // хранятся декодированными — без decode кириллические старые URL не матчились
+  // (баг 2026-11-17: 404 вместо 301 на /analitika/ipо-spacex-razbor)
+  try {
+    p = decodeURIComponent(p);
+  } catch {
+    /* malformed-последовательность — оставляем как есть */
+  }
+  return p;
 }
 
 /** Публичный origin.
