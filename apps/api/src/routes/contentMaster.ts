@@ -507,11 +507,40 @@ function mockRewrite(text: string): { title: string; html: string; excerpt: stri
   return { title, html, excerpt };
 }
 
+/** Извлечь первый сбалансированный JSON-объект из ответа модели.
+ *  Жадный /\{[\s\S]*\}/ брал от первой { до ПОСЛЕДНЕЙ } — если модель после JSON
+ *  дописывала текст с фигурными скобками, JSON.parse падал
+ *  («Unexpected non-whitespace character after JSON at position N», баг 2026-11-17).
+ *  Сканируем с балансировкой скобок и учётом строк/экранировок. */
+function extractFirstJson(raw: string): string | null {
+  const start = raw.indexOf('{');
+  if (start === -1) return null;
+  let depth = 0;
+  let inStr = false;
+  let esc = false;
+  for (let i = start; i < raw.length; i++) {
+    const ch = raw[i];
+    if (inStr) {
+      if (esc) esc = false;
+      else if (ch === '\\') esc = true;
+      else if (ch === '"') inStr = false;
+      continue;
+    }
+    if (ch === '"') inStr = true;
+    else if (ch === '{') depth++;
+    else if (ch === '}') {
+      depth--;
+      if (depth === 0) return raw.slice(start, i + 1);
+    }
+  }
+  return null;
+}
+
 /** Извлечь JSON из ответа модели (модели иногда оборачивают в ```json). */
 function parseRewrite(raw: string): { title: string; html: string; excerpt: string } {
-  const m = raw.match(/\{[\s\S]*\}/);
-  if (!m) throw new Error(`Модель не вернула JSON: ${raw.slice(0, 200) || '(пустой ответ)'}`);
-  const d = JSON.parse(m[0]) as { title?: unknown; html?: unknown; excerpt?: unknown };
+  const json = extractFirstJson(raw);
+  if (!json) throw new Error(`Модель не вернула JSON: ${raw.slice(0, 200) || '(пустой ответ)'}`);
+  const d = JSON.parse(json) as { title?: unknown; html?: unknown; excerpt?: unknown };
   const title = typeof d.title === 'string' ? d.title.trim() : '';
   const html = typeof d.html === 'string' ? d.html.trim() : '';
   if (!title || !html) throw new Error('Модель вернула пустой результат');
@@ -530,9 +559,9 @@ async function rewriteWithLlm(
 
 /** Разбор JSON фактчека из ответа модели. */
 function parseFactcheck(raw: string): { report: { claim: string; status: string; comment: string }[]; summary: string } {
-  const m = raw.match(/\{[\s\S]*\}/);
-  if (!m) throw new Error(`Модель не вернула JSON: ${raw.slice(0, 200) || '(пустой ответ)'}`);
-  const d = JSON.parse(m[0]) as { report?: unknown; summary?: unknown };
+  const json = extractFirstJson(raw);
+  if (!json) throw new Error(`Модель не вернула JSON: ${raw.slice(0, 200) || '(пустой ответ)'}`);
+  const d = JSON.parse(json) as { report?: unknown; summary?: unknown };
   const report = Array.isArray(d.report)
     ? (d.report as { claim?: unknown; status?: unknown; comment?: unknown }[]).map((r) => ({
         claim: String(r.claim ?? '').slice(0, 300),
@@ -797,12 +826,12 @@ contentMasterRouter.post(
       `ТЕКСТ:\n${parsed.data.text.slice(0, 12_000)}`,
       {},
     );
-    const m = raw.match(/\{[\s\S]*\}/);
-    if (!m) {
+    const json = extractFirstJson(raw);
+    if (!json) {
       res.status(502).json({ error: 'extract failed', message: 'Модель не вернула JSON' });
       return;
     }
-    const d = JSON.parse(m[0]) as { companyIds?: unknown; trendIds?: unknown; unknown?: unknown };
+    const d = JSON.parse(json) as { companyIds?: unknown; trendIds?: unknown; unknown?: unknown };
     const companyIds = new Set(Array.isArray(d.companyIds) ? d.companyIds.filter((x): x is number => Number.isInteger(x)) : []);
     const trendIds = new Set(Array.isArray(d.trendIds) ? d.trendIds.filter((x): x is number => Number.isInteger(x)) : []);
     const unknown = (Array.isArray(d.unknown) ? d.unknown : []).map(String).filter(Boolean).slice(0, 3);
