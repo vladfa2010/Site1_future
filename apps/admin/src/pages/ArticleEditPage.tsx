@@ -154,7 +154,28 @@ export default function ArticleEditPage() {
 
   const onSlugManual = (e: React.ChangeEvent<HTMLInputElement>) => {
     setAutoSlug(null); // ручная правка — автогенерацию отключаем
+    setDirty(true);
     setForm((f) => ({ ...f, slug: e.target.value }));
+  };
+
+  // Смена типа меняет адрес статьи (тип/slug) — при совпадении slug в новом типе
+  // сервер отдаст 409 и тип не сохранится (выглядит как «чип не обновился»).
+  // Предупреждаем сразу при выборе, а не после сохранения.
+  const onTypeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const nextType = e.target.value;
+    setDirty(true);
+    setForm((f) => ({ ...f, type: nextType }));
+    setNotice(null);
+    setError(null);
+    if (!isNew && articleId && nextType !== form.type && form.slug) {
+      api<{ exists?: boolean }>(`/articles/slug-exists?type=${encodeURIComponent(nextType)}&slug=${encodeURIComponent(form.slug)}&excludeId=${articleId}`)
+        .then((r) => {
+          if (r.exists) {
+            setError(`Внимание: статья типа «${TYPE_LABELS[nextType as keyof typeof TYPE_LABELS] ?? nextType}» со slug «${form.slug}» уже есть (id совпадения ищите в списке «Статьи»). Сохранение упадёт с 409 — сначала измените slug.`);
+          }
+        })
+        .catch(() => { /* проверка — подсказка, не критична */ });
+    }
   };
 
   const toggle = (key: keyof Relations, id: number) =>
@@ -539,7 +560,7 @@ export default function ArticleEditPage() {
       <div className="card grid gap-4 sm:grid-cols-3">
         <div>
           <label className="label">Тип</label>
-          <select className="input" value={form.type} onChange={set('type')}>
+          <select className="input" value={form.type} onChange={onTypeChange}>
             {TYPES.map((t) => <option key={t} value={t}>{TYPE_LABELS[t]}</option>)}
           </select>
         </div>

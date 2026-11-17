@@ -84,8 +84,25 @@ export function accessCondition(
 }
 
 // GET /api/articles?type=novost&status=published&page=1&limit=20
-articlesRouter.get('/', optionalAuth, async (req, res) => {
-  const type = req.query.type as ArticleType | undefined;
+// GET /api/articles/slug-exists?type=&slug=&excludeId= — занят ли slug в типе.
+// Подсказка редактора при смене типа: сервер отдаёт 409 на коллизию, но это видно
+// только после сохранения; здесь проверяем сразу при выборе (баг-репорт 2026-11-17).
+articlesRouter.get('/slug-exists', authRequired, requireRole('author', 'admin', 'super_admin'), async (req, res) => {
+  const type = String(req.query.type ?? '');
+  const slug = String(req.query.slug ?? '');
+  const excludeId = Number(req.query.excludeId ?? 0) || null;
+  if (!ARTICLE_TYPES.includes(type as (typeof ARTICLE_TYPES)[number]) || !slug) {
+    res.status(400).json({ error: 'validation', details: 'type и slug обязательны' });
+    return;
+  }
+  const conds = [eq(articles.type, type), eq(articles.slug, slug)];
+  if (excludeId) conds.push(sql`${articles.id} <> ${excludeId}`);
+  const [hit] = await db.select({ id: articles.id, title: articles.title, status: articles.status })
+    .from(articles).where(and(...conds)).limit(1);
+  res.json({ exists: Boolean(hit), article: hit ?? null });
+});
+
+articlesRouter.get('/', optionalAuth, async (req, res) => {  const type = req.query.type as ArticleType | undefined;
   const page = Math.max(1, Number(req.query.page ?? 1));
   const limit = Math.min(100, Math.max(1, Number(req.query.limit ?? 20)));
 
