@@ -106,7 +106,7 @@ export default function HomePage() {
               большинство узнают в будущем… а ты сейчас!
             </p>
             <Link
-              to="/portfolio"
+              to="/trends"
               className="mt-auto rounded-full bg-[#beff00] px-4 py-2 text-center text-sm font-bold text-zinc-950 hover:bg-[#c9ff2a]"
             >
               Посмотреть в будущее

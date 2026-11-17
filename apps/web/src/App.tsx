@@ -4,6 +4,7 @@ import HomePage from './pages/HomePage';
 import ArticlePage from './pages/ArticlePage';
 import CompanyPage from './pages/CompanyPage';
 import TrendPage from './pages/TrendPage';
+import TrendIndexPage from './pages/TrendIndexPage';
 import StoryPage from './pages/StoryPage';
 import PipelinePage from './pages/PipelinePage';
 import TypePage from './pages/TypePage';
@@ -37,6 +38,8 @@ export default function App() {
         <Route path="/trend/:slug" element={<TrendPage />} />
         <Route path="/syuzhet/:slug" element={<StoryPage />} />
         <Route path="/portfolio" element={<PipelinePage />} />
+        {/* подборка всех трендов — «Посмотреть в будущее» с главной (2026-11-17) */}
+        <Route path="/trends" element={<TrendIndexPage />} />
         <Route path="/login" element={<AuthModalOpener mode="login" />} />
         <Route path="/register" element={<AuthModalOpener mode="register" />} />
         <Route path="/propose" element={<ProposePage />} />
