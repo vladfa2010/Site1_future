@@ -44,7 +44,7 @@ export function RichTextEditor({ value, onChange }: { value: string; onChange: (
     if (!editor) return;
     if (value === lastApplied.current) return; // уже в редакторе (печать/прошлая подстановка)
     if (value === editor.getHTML()) { lastApplied.current = value; return; }
-    editor.commands.setContent(value, false);
+    editor.commands.setContent(value, { emitUpdate: false });
     lastApplied.current = value;
   }, [editor, value]);
 
