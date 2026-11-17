@@ -3,6 +3,7 @@ import { Link } from 'react-router';
 import { api, ApiError } from '../api';
 import { RichTextEditor } from '../components/RichTextEditor';
 import { sanitizeArticleHtml } from '../lib/sanitize';
+import { stripHtml } from '@newinvest/db/text-utils';
 
 /**
  * ContentMaster — AI-редактор для быстрого производства черновиков.
@@ -232,6 +233,16 @@ export default function ContentMasterPage() {
   const [creating, setCreating] = useState(false);
   const [created, setCreated] = useState<{ id: number; type: string; slug: string } | null>(null);
 
+  // ИИ-дозаполнение полей черновика (2026-11-17): те же эндпоинты, что в редакторе статьи
+  const [metaDescription, setMetaDescription] = useState('');
+  const [titleVariants, setTitleVariants] = useState<string[] | null>(null);
+  const [aiBusy, setAiBusy] = useState<string | null>(null); // какая именно кнопка сейчас работает
+  const [aiNotice, setAiNotice] = useState<string | null>(null);
+  const [coverMediaId, setCoverMediaId] = useState<number | null>(null); // уйдёт в POST при создании
+  const [coverPreview, setCoverPreview] = useState<string | null>(null);
+  const [genPrompt, setGenPrompt] = useState('');
+  const [coverMock, setCoverMock] = useState(false);
+
   const listRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
@@ -255,6 +266,12 @@ export default function ContentMasterPage() {
     setSessionId(null);
     setCreated(null);
     setStreamText('');
+    setTitleVariants(null);
+    setMetaDescription('');
+    setCoverMediaId(null);
+    setCoverPreview(null);
+    setGenPrompt('');
+    setAiNotice(null);
   };
 
   const applyResult = (res: RewriteResult) => {
@@ -305,6 +322,179 @@ export default function ContentMasterPage() {
     } catch { /* компания с таким именем может уже существовать — подскажет ошибка при следующем извлечении */ }
   };
 
+  // ---------- ИИ-дозаполнение полей черновика (те же промпты, что в редакторе статьи) ----------
+
+  const TYPE_LABEL: Record<string, string> = {
+    novost: 'новость', ideya: 'инвестиционная идея', analitika: 'аналитика',
+    sobytie: 'событие', interesnoe: 'интересный разбор', video: 'видео',
+  };
+
+  const entityNames = () => [
+    ...companies.map((c) => c.label),
+    ...tickers.map((t) => t.label),
+    ...trends.map((t) => t.label),
+  ].join(', ');
+
+  const requireText = (): string | null => {
+    const plain = stripHtml(contentHtml);
+    if (plain.length < 50) {
+      setError('Сначала заполните текст статьи — генерация читает его целиком');
+      return null;
+    }
+    return plain;
+  };
+
+  const genText = async (kind: 'title' | 'excerpt' | 'meta' | 'thesis', autoTitle = false): Promise<boolean> => {
+    const plain = requireText();
+    if (!plain) return false;
+    setAiBusy(kind);
+    setAiNotice(null);
+    setError(null);
+    try {
+      const common = [
+        `ЗАГОЛОВОК: ${title}`,
+        thesis ? `ТЕЗИС: ${thesis}` : '',
+        excerpt ? `ЛИД: ${excerpt}` : '',
+        entityNames() ? `УПОМИНАЮТСЯ: ${entityNames()}` : '',
+        `ТИП МАТЕРИАЛА: ${TYPE_LABEL[type] ?? type ?? 'новость'}`,
+      ].filter(Boolean).join('\n');
+      let prompt: string;
+      let maxChars: number;
+      if (kind === 'title') {
+        prompt = [
+          'Предложи 3 варианта заголовка для статьи инвестиционного медиа.',
+          common,
+          'ТРЕБОВАНИЯ: каждый вариант до 100 символов; конкретика (цифры, имена, тикеры) вместо общих слов; без кликбейта; ответь ТОЛЬКО тремя строками — по одному варианту на строку, без нумерации и кавычек.',
+          `ТЕКСТ: ${plain.slice(0, 6000)}`,
+        ].join('\n');
+        maxChars = 400;
+      } else if (kind === 'excerpt') {
+        prompt = [
+          'Напиши лид (анонс) к материалу.',
+          common,
+          'ТРЕБОВАНИЯ: 250±20% знаков, без воды, без «в этой статье мы расскажем», информативно, на русском.',
+          `ТЕКСТ: ${plain.slice(0, 6000)}`,
+        ].join('\n');
+        maxChars = 250;
+      } else if (kind === 'meta') {
+        prompt = [
+          'Прочитай статью и сгенерируй meta description.',
+          common,
+          metaDescription ? `ТЕКУЩИЙ META DESCRIPTION (можно улучшить): ${metaDescription}` : '',
+          'ТРЕБОВАНИЯ: 200±10% знаков, ключевые слова из текста естественно, без кликбейта, одно предложение или два коротких, на русском.',
+          `ТЕКСТ: ${plain.slice(0, 6000)}`,
+        ].join('\n');
+        maxChars = 200;
+      } else {
+        prompt = [
+          'Сформулируй инвестиционный тезис идеи одним абзацем: что покупаем/во что верим, почему сейчас, какой катализатор.',
+          common,
+          'ТРЕБОВАНИЯ: до 300 знаков, конкретика вместо общих слов, без обещаний доходности, на русском.',
+          `ТЕКСТ: ${plain.slice(0, 6000)}`,
+        ].join('\n');
+        maxChars = 300;
+      }
+      const res = await api<{ text: string; mock: boolean }>('/media/generate-text', {
+        method: 'POST',
+        body: JSON.stringify({ prompt, maxChars, ...(kind === 'meta' ? { persona: 'seo' } : {}) }),
+      });
+      if (kind === 'title') {
+        const variants = res.text
+          .split(/\n/)
+          .map((t) => t.replace(/^\s*[-–—\d.)]+\s*|^["«]+|["»]+\s*$/g, '').trim())
+          .filter((t) => t.length > 5)
+          .slice(0, 3);
+        if (autoTitle && variants.length > 0) {
+          setTitle(variants[0]); // «Заполнить всё» — применяем первый вариант без вопросов
+          setTitleVariants(null);
+        } else {
+          setTitleVariants(variants.length > 0 ? variants : [res.text.trim()]);
+        }
+      } else if (kind === 'excerpt') {
+        setExcerpt(res.text.trim());
+      } else if (kind === 'meta') {
+        setMetaDescription(res.text.trim().slice(0, 300));
+      } else {
+        setThesis(res.text.trim());
+      }
+      if (res.mock) setAiNotice('mock — без ключа LLM, собрано из текста');
+      return true;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Ошибка генерации');
+      return false;
+    } finally {
+      setAiBusy(null);
+    }
+  };
+
+  /** Этап 1 обложки: LLM пишет фотореалистичный промпт (редакторируемый). */
+  const genCoverPrompt = async (): Promise<boolean> => {
+    const plain = requireText();
+    if (!plain) return false;
+    setAiBusy('prompt');
+    setAiNotice(null);
+    try {
+      const prompt = [
+        `ЗАГОЛОВОК: ${title}`,
+        excerpt ? `ЛИД: ${excerpt}` : '',
+        thesis ? `ТЕЗИС: ${thesis}` : '',
+        `ТИП: ${TYPE_LABEL[type] ?? type ?? 'новость'}`,
+        `ТЕКСТ: ${plain.slice(0, 4000)}`,
+      ].filter(Boolean).join('\n');
+      const res = await api<{ text: string; mock: boolean }>('/media/generate-text', {
+        method: 'POST',
+        body: JSON.stringify({ prompt, maxChars: 700, persona: 'visual' }),
+      });
+      setGenPrompt(res.text.trim());
+      if (res.mock) setAiNotice('mock — промпт собран из текста, его можно править и копировать');
+      return true;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Ошибка генерации промпта');
+      return false;
+    } finally {
+      setAiBusy(null);
+    }
+  };
+
+  /** Этап 2 обложки: рисуем по промпту через Kimi (media без статьи, coverMediaId в POST черновика). */
+  const genCover = async (): Promise<boolean> => {
+    if (genPrompt.trim().length < 10) {
+      setError('Сначала получите промпт («✨ Промпт из текста») — его можно подправить');
+      return false;
+    }
+    setAiBusy('cover');
+    setAiNotice(null);
+    try {
+      const res = await api<{ url: string; mock: boolean; media: { id: number } }>('/media/generate', {
+        method: 'POST',
+        body: JSON.stringify({ prompt: genPrompt.trim() }),
+      });
+      setCoverMediaId(res.media.id);
+      setCoverPreview(`${window.location.origin}${res.url}`);
+      setCoverMock(res.mock);
+      return true;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Ошибка генерации обложки');
+      return false;
+    } finally {
+      setAiBusy(null);
+    }
+  };
+
+  /** «Заполнить всё»: последовательно гоняет все генерации одним махом. */
+  const fillAll = async () => {
+    if (aiBusy) return;
+    setAiNotice(null);
+    const steps: Promise<boolean>[] = [
+      genText('title', true).then((ok) => { if (ok) return genText('excerpt'); return false; }),
+      genText('meta'),
+    ];
+    if (type === 'ideya') steps.push(genText('thesis'));
+    steps.push(genCoverPrompt().then((ok) => (ok ? genCover() : false)));
+    const results = await Promise.all(steps);
+    setAiNotice(results.every(Boolean) ? 'Всё заполнено ✓' : 'Часть полей не заполнена — смотрите ошибки выше');
+  };
+
   const loadSession = async (id: number) => {
     setLoadingSession(true);
     setError(null);
@@ -332,6 +522,12 @@ export default function ContentMasterPage() {
       setMessages(restored);
       setCreated(null);
       setStreamText('');
+      setTitleVariants(null);
+      setMetaDescription('');
+      setCoverMediaId(null);
+      setCoverPreview(null);
+      setGenPrompt('');
+      setAiNotice(null);
       if (lastResult) {
         setActive(lastResult);
         setTitle(lastResult.title ?? ''); // factcheck-сессии без title — иначе slugify краш
@@ -411,6 +607,8 @@ export default function ContentMasterPage() {
           contentHtml: contentHtml || `<p>${active.summary ?? ''}</p>`, // тело могли править руками в панели
           excerpt: excerpt.trim() || undefined,
           thesis: thesis.trim() || undefined,
+          metaDescription: metaDescription.trim() || undefined,
+          coverMediaId: coverMediaId ?? undefined,
           sourceUrl: sourceUrl.trim() || undefined,
           videoUrl: type === 'video' && videoUrl.trim() ? videoUrl.trim() : undefined,
           accessLevel,
@@ -652,7 +850,24 @@ export default function ContentMasterPage() {
             </div>
             <div className="sm:col-span-2">
               <label className="label">Заголовок</label>
-              <input className="input w-full" value={title} onChange={(e) => setTitle(e.target.value)} />
+              <span className="flex gap-2">
+                <input className="input w-full" value={title} onChange={(e) => setTitle(e.target.value)} />
+                <button type="button" className="btn-secondary shrink-0" disabled={aiBusy === 'title'} onClick={() => void genText('title')}>
+                  {aiBusy === 'title' ? '…' : '✨ Заголовок'}
+                </button>
+              </span>
+              {titleVariants && (
+                <span className="mt-2 flex flex-wrap gap-1.5">
+                  {titleVariants.map((v) => (
+                    <button key={v} type="button"
+                      onClick={() => { setTitle(v); setTitleVariants(null); setSlugTouched(false); }}
+                      className="rounded-full bg-zinc-800 px-2.5 py-1 text-left text-xs text-zinc-200 hover:bg-[#beff00] hover:text-black"
+                      title="Нажмите, чтобы применить этот вариант">
+                      {v}
+                    </button>
+                  ))}
+                </span>
+              )}
             </div>
             <div>
               <label className="label">Slug</label>
@@ -672,14 +887,61 @@ export default function ContentMasterPage() {
             </div>
             <div className="sm:col-span-2">
               <label className="label">Лид (excerpt)</label>
-              <textarea className="input min-h-14 w-full" value={excerpt} onChange={(e) => setExcerpt(e.target.value)} />
+              <span className="flex gap-2">
+                <textarea className="input min-h-14 w-full" value={excerpt} onChange={(e) => setExcerpt(e.target.value)} />
+                <button type="button" className="btn-secondary h-fit shrink-0" disabled={aiBusy === 'excerpt'} onClick={() => void genText('excerpt')}>
+                  {aiBusy === 'excerpt' ? '…' : '✨ Лид'}
+                </button>
+              </span>
+            </div>
+            <div className="sm:col-span-2">
+              <label className="label">SEO description (meta)</label>
+              <span className="flex gap-2">
+                <input className="input w-full" maxLength={300} value={metaDescription} onChange={(e) => setMetaDescription(e.target.value)} />
+                <button type="button" className="btn-secondary shrink-0" disabled={aiBusy === 'meta'} onClick={() => void genText('meta')}>
+                  {aiBusy === 'meta' ? '…' : '✨ (SEO)'}
+                </button>
+              </span>
             </div>
             {type === 'ideya' && (
               <div className="sm:col-span-2">
                 <label className="label">Тезис идеи</label>
-                <textarea className="input min-h-14 w-full" value={thesis} onChange={(e) => setThesis(e.target.value)} />
+                <span className="flex gap-2">
+                  <textarea className="input min-h-14 w-full" value={thesis} onChange={(e) => setThesis(e.target.value)} />
+                  <button type="button" className="btn-secondary h-fit shrink-0" disabled={aiBusy === 'thesis'} onClick={() => void genText('thesis')}>
+                    {aiBusy === 'thesis' ? '…' : '✨ Тезис'}
+                  </button>
+                </span>
               </div>
             )}
+            {/* Обложка: двухэтапно, как в редакторе — промпт (LLM) → генерация (Kimi); media без статьи, coverMediaId в POST черновика */}
+            <div className="sm:col-span-2">
+              <label className="label">Обложка</label>
+              <div className="flex items-start gap-4">
+                {coverPreview ? (
+                  <img src={coverPreview} alt="Обложка" className="h-32 w-24 rounded-lg border border-zinc-800 object-cover" />
+                ) : (
+                  <div className="flex h-32 w-24 items-center justify-center rounded-lg border border-dashed border-zinc-700 text-xs text-zinc-600">нет</div>
+                )}
+                <span className="flex min-w-0 flex-1 flex-col gap-2">
+                  {coverMock && <span className="rounded-full bg-amber-500/10 px-2 py-1 text-xs text-amber-400">mock — без ключа Kimi</span>}
+                  <textarea
+                    className="input min-h-16 w-full font-mono text-xs"
+                    value={genPrompt}
+                    onChange={(e) => setGenPrompt(e.target.value)}
+                    placeholder="промпт для генерации — «✨ Промпт из текста» или свой"
+                  />
+                  <span className="flex gap-2">
+                    <button type="button" className="btn-secondary" disabled={aiBusy === 'prompt'} onClick={() => void genCoverPrompt()}>
+                      {aiBusy === 'prompt' ? '…' : '✨ Промпт из текста'}
+                    </button>
+                    <button type="button" className="btn" disabled={aiBusy === 'cover' || genPrompt.trim().length < 10} onClick={() => void genCover()}>
+                      {aiBusy === 'cover' ? 'Рисуем…' : 'Сгенерировать (Kimi)'}
+                    </button>
+                  </span>
+                </span>
+              </div>
+            </div>
             {type === 'video' && (
               <div className="sm:col-span-2">
                 <label className="label">URL видео</label>
@@ -743,8 +1005,12 @@ export default function ContentMasterPage() {
             <button className="btn" onClick={() => void createDraft()} disabled={creating}>
               {creating ? 'Создаём…' : 'Создать черновик'}
             </button>
+            <button type="button" className="btn-secondary" onClick={() => void fillAll()} disabled={Boolean(aiBusy) || creating}>
+              {aiBusy ? `Генерируем (${aiBusy})…` : '✨ Заполнить всё'}
+            </button>
+            {aiNotice && <span className="text-xs text-zinc-400">{aiNotice}</span>}
             {created && <Link to={`/articles/${created.type}/${created.slug}/edit`} className="text-sm text-[#beff00] hover:underline">Открыть в редакторе →</Link>}
-            <span className="text-xs text-zinc-600">Обложку и остальное — уже в редакторе статьи</span>
+            <span className="text-xs text-zinc-600">Обложку можно поменять и в редакторе статьи</span>
           </div>
         </div>
       )}
