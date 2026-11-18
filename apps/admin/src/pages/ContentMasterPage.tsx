@@ -250,6 +250,12 @@ export default function ContentMasterPage() {
   // стартовая докрутка лайков/репостов (2026-11-17) — PATCH-ом после создания черновика
   const [likesBaseOffset, setLikesBaseOffset] = useState('0');
   const [sharesBaseOffset, setSharesBaseOffset] = useState('0');
+  // просмотры: стартовые + автодокрутка (2026-11-18) — паритет с редактором статьи (ТЗ-03)
+  const [viewsBaseOffset, setViewsBaseOffset] = useState('0');
+  const [bumpEnabled, setBumpEnabled] = useState(false);
+  const [bumpEveryHours, setBumpEveryHours] = useState('24');
+  const [bumpMin, setBumpMin] = useState('1');
+  const [bumpMax, setBumpMax] = useState('3');
 
   const listRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -282,6 +288,11 @@ export default function ContentMasterPage() {
     setAiNotice(null);
     setLikesBaseOffset('0');
     setSharesBaseOffset('0');
+    setViewsBaseOffset('0');
+    setBumpEnabled(false);
+    setBumpEveryHours('24');
+    setBumpMin('1');
+    setBumpMax('3');
   };
 
   const applyResult = (res: RewriteResult) => {
@@ -540,6 +551,11 @@ export default function ContentMasterPage() {
       setAiNotice(null);
       setLikesBaseOffset('0');
       setSharesBaseOffset('0');
+      setViewsBaseOffset('0');
+      setBumpEnabled(false);
+      setBumpEveryHours('24');
+      setBumpMin('1');
+      setBumpMax('3');
       if (lastResult) {
         setActive(lastResult);
         setTitle(lastResult.title ?? ''); // factcheck-сессии без title — иначе slugify краш
@@ -635,13 +651,22 @@ export default function ContentMasterPage() {
           tickerIds: tickers.map((t) => t.id),
         }),
       });
-      // стартовые лайки/репосты: POST их не принимает (как просмотры), досылаем PATCH-ом
-      if (Number(likesBaseOffset) > 0 || Number(sharesBaseOffset) > 0) {
+      // счётчики-докрутки: POST их не принимает (как и в редакторе), досылаем одним PATCH-ом
+      if (Number(viewsBaseOffset) > 0 || Number(likesBaseOffset) > 0 || Number(sharesBaseOffset) > 0 || bumpEnabled) {
         await api(`/articles/${created_res.article.id}`, {
           method: 'PATCH',
           body: JSON.stringify({
+            viewsBaseOffset: Number(viewsBaseOffset) || 0,
             likesBaseOffset: Number(likesBaseOffset) || 0,
             sharesBaseOffset: Number(sharesBaseOffset) || 0,
+            viewsAutoBump: bumpEnabled
+              ? {
+                  enabled: true,
+                  everyHours: Math.min(168, Math.max(1, Number(bumpEveryHours) || 24)),
+                  min: Math.max(0, Number(bumpMin) || 0),
+                  max: Math.max(0, Number(bumpMax) || 0),
+                }
+              : null,
           }),
         });
       }
@@ -879,6 +904,34 @@ export default function ContentMasterPage() {
               <label className="label">Стартовые репосты (seed)</label>
               <input className="input w-full" type="number" min={0} max={1000000} value={sharesBaseOffset} onChange={(e) => setSharesBaseOffset(e.target.value)} />
               <p className="mt-1 text-xs text-zinc-600">Прибавится к реальным репостам.</p>
+            </div>
+            {/* Просмотры: стартовые + автодокрутка — паритет с секцией «Счётчики» в редакторе статьи (ТЗ-03) */}
+            <div>
+              <label className="label">Стартовые просмотры (seed)</label>
+              <input className="input w-full" type="number" min={0} max={1000000} value={viewsBaseOffset} onChange={(e) => setViewsBaseOffset(e.target.value)} />
+              <p className="mt-1 text-xs text-zinc-600">Прибавится к реальным просмотрам на карточках.</p>
+            </div>
+            <div className="sm:col-span-2">
+              <label className="flex items-center gap-2">
+                <input type="checkbox" checked={bumpEnabled} onChange={(e) => setBumpEnabled(e.target.checked)} />
+                <span className="label">Автодокрутка просмотров (раз в N часов добавляется случайное число из диапазона)</span>
+              </label>
+              {bumpEnabled && (
+                <div className="mt-3 grid gap-4 sm:grid-cols-3">
+                  <div>
+                    <label className="label">Каждые, часов (1–168)</label>
+                    <input className="input w-full" type="number" min={1} max={168} value={bumpEveryHours} onChange={(e) => setBumpEveryHours(e.target.value)} />
+                  </div>
+                  <div>
+                    <label className="label">Мин. добавка</label>
+                    <input className="input w-full" type="number" min={0} max={10000} value={bumpMin} onChange={(e) => setBumpMin(e.target.value)} />
+                  </div>
+                  <div>
+                    <label className="label">Макс. добавка</label>
+                    <input className="input w-full" type="number" min={0} max={10000} value={bumpMax} onChange={(e) => setBumpMax(e.target.value)} />
+                  </div>
+                </div>
+              )}
             </div>
             <div className="sm:col-span-2">
               <label className="label">Заголовок</label>
