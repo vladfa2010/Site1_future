@@ -235,15 +235,20 @@ async function chatRound(
     throw new Error(`chat API: ${res.status} ${data.error?.message ?? 'пустой ответ'}`);
   }
   let content = '';
+  let reasoningContent = '';
   const toolCalls: { id: string; type: 'function'; function: { name: string; arguments: string } }[] = [];
   let usage: ChatUsage = { ...ZERO_USAGE };
   for await (const payload of readSse(res)) {
     const chunk = JSON.parse(payload) as {
-      choices?: { delta?: { content?: string; tool_calls?: { index?: number; id?: string; function?: { name?: string; arguments?: string } }[] }; finish_reason?: string }[];
+      choices?: { delta?: { content?: string; reasoning_content?: string; tool_calls?: { index?: number; id?: string; function?: { name?: string; arguments?: string } }[] }; finish_reason?: string }[];
       usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
     };
     const delta = chunk.choices?.[0]?.delta;
     if (delta?.content) { content += delta.content; h.onDelta?.(delta.content); }
+    // thinking-модели (deepseek-reasoner) шлют reasoning отдельными дельтами — собираем,
+    // иначе при ответе с tool_calls в стрим-раунде следующий запрос упадёт с 400
+    // «reasoning_content must be passed back» (баг 2026-11-18, исследовательский режим)
+    if (delta?.reasoning_content) reasoningContent += delta.reasoning_content;
     for (const tc of delta?.tool_calls ?? []) {
       const slot = toolCalls[tc.index ?? 0] ?? (toolCalls[tc.index ?? 0] = { id: '', type: 'function', function: { name: '', arguments: '' } });
       if (tc.id) slot.id = tc.id;
@@ -258,7 +263,7 @@ async function chatRound(
       };
     }
   }
-  return { content, toolCalls: toolCalls.filter((c) => c.id), usage };
+  return { content, reasoningContent: reasoningContent || undefined, toolCalls: toolCalls.filter((c) => c.id), usage };
 }
 
 /** Разбор SSE-тела ответа провайдера: генерация по data:-строкам, конец — [DONE]. */
@@ -354,6 +359,7 @@ async function chatWithSearch(
     console.log(`[content-master] пост-цикл: исполняем ${qs.length} DSML-вызовов, шот ${shot}`);
     const calls = qs.map((q, i) => ({ id: `post_${shot}_${i}`, type: 'function' as const, function: { name: 'web_search', arguments: JSON.stringify({ query: q }) } }));
     const asstPost: Record<string, unknown> = { role: 'assistant', content: null, tool_calls: calls };
+    if (final.reasoningContent) asstPost.reasoning_content = final.reasoningContent; // reasoner: обязателен в истории
     messages.push(asstPost);
     for (const c of calls) {
       await sleep(350);
