@@ -72,6 +72,8 @@ export default function ArticleEditPage() {
   // стартовая докрутка лайков/репостов (2026-11-17) — та же модель, что у просмотров
   const [likesBaseOffset, setLikesBaseOffset] = useState('0');
   const [sharesBaseOffset, setSharesBaseOffset] = useState('0');
+  // итоговые счётчики «как на сайте» — показываем в блоке докрутки (2026-11-18)
+  const [counterStats, setCounterStats] = useState<{ views: number; likes: number; shares: number } | null>(null);
   const [bumpEnabled, setBumpEnabled] = useState(false);
   const [bumpEveryHours, setBumpEveryHours] = useState('24');
   const [bumpMin, setBumpMin] = useState('1');
@@ -92,7 +94,7 @@ export default function ArticleEditPage() {
       setDealStages(stages.stages);
 
       if (!isNew && urlType && slug) {
-        const detail = await api<{ article: { id: number; type: string; slug: string; title: string; excerpt: string | null; thesis: string | null; contentHtml: string; status: string; coverMediaId: number | null; accessLevel: string | null; accessTariffId: number | null; videoUrl: string | null; stageIds?: number[]; viewsBaseOffset: number; viewsAutoBumpEnabled: boolean; viewsAutoBumpEveryHours: number | null; viewsAutoBumpMin: number; viewsAutoBumpMax: number; likesBaseOffset: number; sharesBaseOffset: number }; coverUrl: string | null; meta: { description: string | null } }>(`/articles/${urlType}/${slug}`);
+        const detail = await api<{ article: { id: number; type: string; slug: string; title: string; excerpt: string | null; thesis: string | null; contentHtml: string; status: string; coverMediaId: number | null; accessLevel: string | null; accessTariffId: number | null; videoUrl: string | null; stageIds?: number[]; viewsBaseOffset: number; viewsAutoBumpEnabled: boolean; viewsAutoBumpEveryHours: number | null; viewsAutoBumpMin: number; viewsAutoBumpMax: number; likesBaseOffset: number; sharesBaseOffset: number }; coverUrl: string | null; meta: { description: string | null }; viewsCount: number; likesCount: number; sharesCount: number }>(`/articles/${urlType}/${slug}`);
         const a = detail.article;
         setForm({
           type: a.type, slug: a.slug, title: a.title, excerpt: a.excerpt ?? '', thesis: a.thesis ?? '',
@@ -104,6 +106,7 @@ export default function ArticleEditPage() {
         setViewsBaseOffset(String(a.viewsBaseOffset ?? 0));
         setLikesBaseOffset(String(a.likesBaseOffset ?? 0));
         setSharesBaseOffset(String(a.sharesBaseOffset ?? 0));
+        setCounterStats({ views: detail.viewsCount ?? 0, likes: detail.likesCount ?? 0, shares: detail.sharesCount ?? 0 });
         setStageIds(a.stageIds ?? []);
         setBumpEnabled(a.viewsAutoBumpEnabled ?? false);
         setBumpEveryHours(String(a.viewsAutoBumpEveryHours ?? 24));
@@ -767,12 +770,38 @@ export default function ArticleEditPage() {
         )}
       </div>
 
-      {/* ТЗ-03: счётчики просмотров — collapsible, только admin/super_admin (ревью v2.1 №9, №10) */}
+      {/* ТЗ-03: счётчики просмотров — collapsible, только admin/super_admin (ревью v2.1 №9, №10).
+          При открытии блока подтягиваем свежие значения из базы (2026-11-18) */}
       {canEditViews && (
-        <details className="card space-y-4">
+        <details
+          className="card space-y-4"
+          onToggle={(e) => {
+            const el = e.currentTarget;
+            if (!el.open || isNew || !urlType || !slug) return;
+            // свежие seed-значения и итоги: блок могли не открывать давно, данные устарели
+            api<{ article: { viewsBaseOffset: number; likesBaseOffset: number; sharesBaseOffset: number; viewsAutoBumpEnabled: boolean; viewsAutoBumpEveryHours: number | null; viewsAutoBumpMin: number; viewsAutoBumpMax: number }; viewsCount: number; likesCount: number; sharesCount: number }>(`/articles/${urlType}/${slug}`)
+              .then((d) => {
+                setViewsBaseOffset(String(d.article.viewsBaseOffset ?? 0));
+                setLikesBaseOffset(String(d.article.likesBaseOffset ?? 0));
+                setSharesBaseOffset(String(d.article.sharesBaseOffset ?? 0));
+                setBumpEnabled(d.article.viewsAutoBumpEnabled ?? false);
+                setBumpEveryHours(String(d.article.viewsAutoBumpEveryHours ?? 24));
+                setBumpMin(String(d.article.viewsAutoBumpMin ?? 1));
+                setBumpMax(String(d.article.viewsAutoBumpMax ?? 3));
+                setCounterStats({ views: d.viewsCount ?? 0, likes: d.likesCount ?? 0, shares: d.sharesCount ?? 0 });
+              })
+              .catch(() => { /* тихо: значения из начальной загрузки остаются */ });
+          }}
+        >
           <summary className="cursor-pointer font-semibold">Счётчики (докрутка просмотров, лайков, репостов)</summary>
           {!isNew ? (
             <div className="grid gap-4 sm:grid-cols-4">
+              {counterStats && (
+                <p className="sm:col-span-4 rounded-lg bg-zinc-800/60 px-3 py-2 text-sm text-zinc-300">
+                  Сейчас на сайте: 👁 {counterStats.views.toLocaleString('ru-RU')} просмотров · ♥ {counterStats.likes.toLocaleString('ru-RU')} лайков · ↻ {counterStats.shares.toLocaleString('ru-RU')} репостов
+                  <span className="ml-2 text-xs text-zinc-500">(реальные + докрутка; обновляется при открытии блока)</span>
+                </p>
+              )}
               <div>
                 <label className="label">Стартовые просмотры (seed)</label>
                 <input
