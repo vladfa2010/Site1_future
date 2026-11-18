@@ -85,6 +85,11 @@ async function streamRewrite(
     body: JSON.stringify({ ...body, stream: true }),
   });
   if (!res.ok || !res.body) {
+    // протухший/инвалидный токен: ведём на логин, как в api-клиенте, а не показываем сырую 401
+    if (res.status === 401 && token) {
+      localStorage.removeItem('token');
+      if (!window.location.pathname.startsWith('/login')) window.location.href = '/login';
+    }
     const errBody = await res.json().catch(() => ({}));
     throw new ApiError(res.status, errBody);
   }
