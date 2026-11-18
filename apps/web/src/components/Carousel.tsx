@@ -15,7 +15,10 @@ export function Carousel({ children }: { children: React.ReactNode }) {
     const el = ref.current;
     if (!el) return;
     drag.current = { startX: e.clientX, startScroll: el.scrollLeft, moved: false };
-    el.setPointerCapture(e.pointerId);
+    // setPointerCapture НЕ делаем здесь: при захвате click ретаргетится на контейнер
+    // карусели и ссылки-карточки перестают получать клики (баг 2026-11-18: «нажимаю
+    // на новость — не открывается»). Захватываем пойнтер только когда драг реально
+    // начался (см. onPointerMove) — обычный клик тогда идёт по настоящей цели.
   };
 
   const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -26,6 +29,7 @@ export function Carousel({ children }: { children: React.ReactNode }) {
     if (!d.moved && Math.abs(dx) > 6) {
       d.moved = true;
       setDragging(true);
+      el.setPointerCapture(e.pointerId); // драг начался — теперь захват уместен
     }
     if (d.moved) {
       el.scrollLeft = d.startScroll - dx;
