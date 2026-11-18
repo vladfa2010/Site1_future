@@ -517,6 +517,17 @@ function mockRewrite(text: string): { title: string; html: string; excerpt: stri
   return { title, html, excerpt };
 }
 
+/** Вырезать нативный синтаксис tool-вызовов DeepSeek (DSML), который модель иногда
+ *  оставляет прямо в финальном контенте вместо нормального ответа (2026-11-18:
+ *  «Модель не вернула JSON: <｜｜DSML｜｜ calls>…»). Полные блоки calls → оборванный
+ *  хвост без закрытия → остаточные теги. */
+function stripDsml(text: string): string {
+  return text
+    .replace(/<｜｜DSML｜｜\s*calls>[\s\S]*?<｜｜DSML｜｜\s*\/calls>/g, '')
+    .replace(/<｜｜DSML｜｜\s*calls>[\s\S]*$/g, '')
+    .replace(/<｜｜DSML｜｜[^>]*>/g, '');
+}
+
 /** Извлечь первый сбалансированный JSON-объект из ответа модели.
  *  Жадный /\{[\s\S]*\}/ брал от первой { до ПОСЛЕДНЕЙ } — если модель после JSON
  *  дописывала текст с фигурными скобками, JSON.parse падал
@@ -548,11 +559,11 @@ function extractFirstJson(raw: string): string | null {
 
 /** Извлечь JSON из ответа модели (модели иногда оборачивают в ```json). */
 function parseRewrite(raw: string): { title: string; html: string; excerpt: string } {
-  const json = extractFirstJson(raw);
-  if (!json) throw new Error(`Модель не вернула JSON: ${raw.slice(0, 200) || '(пустой ответ)'}`);
+  const json = extractFirstJson(stripDsml(raw));
+  if (!json) throw new Error(`Модель не вернула ответ — попробуйте ещё раз${raw.includes('DSML') ? ' (модель пыталась вызвать поиск: включите «искать в интернете», чтобы вызовы исполнялись)' : ''}`);
   const d = JSON.parse(json) as { title?: unknown; html?: unknown; excerpt?: unknown };
-  const title = typeof d.title === 'string' ? d.title.trim() : '';
-  const html = typeof d.html === 'string' ? d.html.trim() : '';
+  const title = typeof d.title === 'string' ? stripDsml(d.title).trim() : '';
+  const html = typeof d.html === 'string' ? stripDsml(d.html).trim() : '';
   if (!title || !html) throw new Error('Модель вернула пустой результат');
   return { title: title.slice(0, 200), html, excerpt: typeof d.excerpt === 'string' ? d.excerpt.trim().slice(0, 500) : '' };
 }
@@ -569,8 +580,8 @@ async function rewriteWithLlm(
 
 /** Разбор JSON фактчека из ответа модели. */
 function parseFactcheck(raw: string): { report: { claim: string; status: string; comment: string }[]; summary: string } {
-  const json = extractFirstJson(raw);
-  if (!json) throw new Error(`Модель не вернула JSON: ${raw.slice(0, 200) || '(пустой ответ)'}`);
+  const json = extractFirstJson(stripDsml(raw));
+  if (!json) throw new Error(`Модель не вернула ответ — попробуйте ещё раз${raw.includes('DSML') ? ' (модель пыталась вызвать поиск: включите «искать в интернете», чтобы вызовы исполнялись)' : ''}`);
   const d = JSON.parse(json) as { report?: unknown; summary?: unknown };
   const report = Array.isArray(d.report)
     ? (d.report as { claim?: unknown; status?: unknown; comment?: unknown }[]).map((r) => ({
