@@ -56,6 +56,9 @@ export default function ArticleEditPage() {
   const [tariffPlans, setTariffPlans] = useState<{ id: number; name: string }[]>([]);
   const [dealStages, setDealStages] = useState<{ id: number; name: string }[]>([]);
   const [stageIds, setStageIds] = useState<number[]>([]);
+  // фазы портфеля (пайплайн/портфель/архив) — 2026-11-18
+  const [dealPhases, setDealPhases] = useState<{ id: number; name: string }[]>([]);
+  const [phaseIds, setPhaseIds] = useState<number[]>([]);
   const [dicts, setDicts] = useState<{ companies: Option[]; tickers: Option[]; industries: Option[]; trends: Option[] }>({ companies: [], tickers: [], industries: [], trends: [] });
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -81,10 +84,11 @@ export default function ArticleEditPage() {
 
   useEffect(() => {
     void (async () => {
-      const [companies, tickers, stages, industries, trends, plans] = await Promise.all([
+      const [companies, tickers, stages, phases, industries, trends, plans] = await Promise.all([
         api<{ companies: Option[] }>('/companies').catch(() => ({ companies: [] })),
         api<{ tickers: Option[] }>('/tickers').catch(() => ({ tickers: [] })),
         api<{ stages: { id: number; name: string }[] }>('/deal-stages').catch(() => ({ stages: [] })),
+        api<{ phases: { id: number; name: string }[] }>('/deal-phases').catch(() => ({ phases: [] })),
         api<{ industries: Option[] }>('/industries').catch(() => ({ industries: [] })),
         api<{ trends: Option[] }>('/trends').catch(() => ({ trends: [] })),
         api<{ plans: { id: number; name: string }[] }>('/tariff-plans').catch(() => ({ plans: [] })),
@@ -92,9 +96,10 @@ export default function ArticleEditPage() {
       setDicts({ companies: companies.companies, tickers: tickers.tickers, industries: industries.industries, trends: trends.trends });
       setTariffPlans(plans.plans);
       setDealStages(stages.stages);
+      setDealPhases(phases.phases);
 
       if (!isNew && urlType && slug) {
-        const detail = await api<{ article: { id: number; type: string; slug: string; title: string; excerpt: string | null; thesis: string | null; contentHtml: string; status: string; coverMediaId: number | null; accessLevel: string | null; accessTariffId: number | null; videoUrl: string | null; stageIds?: number[]; viewsBaseOffset: number; viewsAutoBumpEnabled: boolean; viewsAutoBumpEveryHours: number | null; viewsAutoBumpMin: number; viewsAutoBumpMax: number; likesBaseOffset: number; sharesBaseOffset: number }; coverUrl: string | null; meta: { description: string | null }; viewsCount: number; likesCount: number; sharesCount: number }>(`/articles/${urlType}/${slug}`);
+        const detail = await api<{ article: { id: number; type: string; slug: string; title: string; excerpt: string | null; thesis: string | null; contentHtml: string; status: string; coverMediaId: number | null; accessLevel: string | null; accessTariffId: number | null; videoUrl: string | null; stageIds?: number[]; phaseIds?: number[]; viewsBaseOffset: number; viewsAutoBumpEnabled: boolean; viewsAutoBumpEveryHours: number | null; viewsAutoBumpMin: number; viewsAutoBumpMax: number; likesBaseOffset: number; sharesBaseOffset: number }; coverUrl: string | null; meta: { description: string | null }; viewsCount: number; likesCount: number; sharesCount: number }>(`/articles/${urlType}/${slug}`);
         const a = detail.article;
         setForm({
           type: a.type, slug: a.slug, title: a.title, excerpt: a.excerpt ?? '', thesis: a.thesis ?? '',
@@ -108,6 +113,7 @@ export default function ArticleEditPage() {
         setSharesBaseOffset(String(a.sharesBaseOffset ?? 0));
         setCounterStats({ views: detail.viewsCount ?? 0, likes: detail.likesCount ?? 0, shares: detail.sharesCount ?? 0 });
         setStageIds(a.stageIds ?? []);
+        setPhaseIds(a.phaseIds ?? []);
         setBumpEnabled(a.viewsAutoBumpEnabled ?? false);
         setBumpEveryHours(String(a.viewsAutoBumpEveryHours ?? 24));
         setBumpMin(String(a.viewsAutoBumpMin ?? 1));
@@ -250,6 +256,7 @@ export default function ArticleEditPage() {
         });
         if (form.type === 'ideya') {
           await api(`/articles/${id}/stages`, { method: 'PUT', body: JSON.stringify({ stageIds }) });
+          await api(`/articles/${id}/phases`, { method: 'PUT', body: JSON.stringify({ phaseIds }) });
         }
       }
       setDirty(false);
@@ -934,6 +941,28 @@ export default function ArticleEditPage() {
           createEndpoint="/trends"
           buildCreateBody={(raw) => ({ name: raw, slug: slugify(raw) || `t${Date.now()}` })}
         />
+
+        {form.type === 'ideya' && dealPhases.length > 0 && (
+          <div>
+            <span className="label">Фаза портфеля</span>
+            <div className="flex flex-wrap gap-1.5">
+              {dealPhases.map((ph) => {
+                const on = phaseIds.includes(ph.id);
+                return (
+                  <button
+                    key={ph.id}
+                    type="button"
+                    onClick={() => { setDirty(true); setPhaseIds(on ? phaseIds.filter((x) => x !== ph.id) : [ph.id]); }}
+                    className={`rounded-full px-3 py-1 text-xs ${on ? 'bg-[#beff00] font-semibold text-black' : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'}`}
+                  >
+                    {ph.name}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="mt-1 text-xs text-zinc-600">Раздел в скринере «Скринер проектов»: идея → пайплайн → портфель → архив.</p>
+          </div>
+        )}
 
         {form.type === 'ideya' && dealStages.length > 0 && (
           <div>

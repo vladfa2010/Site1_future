@@ -21,6 +21,7 @@ import {
   articles,
   media,
   articleDealStages,
+  articleDealPhases,
   ARTICLE_TYPES,
 } from '@newinvest/db';
 import { optionalAuth, authRequired, requireRole, ADMIN_ROLES } from '../middleware/auth.js';
@@ -212,4 +213,27 @@ bindingsRouter.put('/articles/:id/stages', authRequired, requireRole('admin', 's
     }
   });
   res.json({ ok: true, stageIds: parsed.data.stageIds });
+});
+
+// PUT /api/articles/:id/phases {phaseIds: [..]} — фазы портфеля (пайплайн/портфель/архив),
+// заменить набор транзакционно, admin. Зеркало стадий (2026-11-18).
+bindingsRouter.put('/articles/:id/phases', authRequired, requireRole('admin', 'super_admin'), async (req, res) => {
+  const articleId = Number(req.params.id);
+  const parsed = z.object({ phaseIds: z.array(z.number().int()).max(3) }).safeParse(req.body);
+  if (!Number.isInteger(articleId) || !parsed.success) {
+    res.status(400).json({ error: 'validation', details: parsed.success ? undefined : parsed.error.flatten() });
+    return;
+  }
+  const [article] = await db.select({ id: articles.id }).from(articles).where(eq(articles.id, articleId)).limit(1);
+  if (!article) {
+    res.status(404).json({ error: 'not found' });
+    return;
+  }
+  await db.transaction(async (tx) => {
+    await tx.delete(articleDealPhases).where(eq(articleDealPhases.articleId, articleId));
+    for (const phaseId of parsed.data.phaseIds) {
+      await tx.insert(articleDealPhases).values({ articleId, phaseId }).onConflictDoNothing();
+    }
+  });
+  res.json({ ok: true, phaseIds: parsed.data.phaseIds });
 });

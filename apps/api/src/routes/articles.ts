@@ -9,7 +9,7 @@ import {
   db, articles, ARTICLE_TYPES, type ArticleType,
   companies, trends, articleCompanies, articleTrends, media,
   metaFields, articleViews, users, stories,
-  tickers, articleTickers, dealStages, articleDealStages,
+  tickers, articleTickers, dealStages, articleDealStages, dealPhases, articleDealPhases,
   articleLikes,
   calcReadingTime,
 } from '@newinvest/db';
@@ -218,6 +218,12 @@ articlesRouter.get('/:type/:slug', optionalAuth, async (req, res) => {
     .from(articleDealStages)
     .innerJoin(dealStages, eq(articleDealStages.stageId, dealStages.id))
     .where(eq(articleDealStages.articleId, article.id));
+  // фазы портфеля (пайплайн/портфель/архив) — для редактора идеи (2026-11-18)
+  const phasesRows = await db
+    .select({ id: dealPhases.id, name: dealPhases.name })
+    .from(articleDealPhases)
+    .innerJoin(dealPhases, eq(articleDealPhases.phaseId, dealPhases.id))
+    .where(eq(articleDealPhases.articleId, article.id));
   // фиксируем просмотр (аналитика, раздел 6.2) — не блокируем ответ
   void db.insert(articleViews).values({ userId: req.user?.id ?? null, articleId: article.id }).catch(() => {});
   // SEO meta description (meta_fields)
@@ -256,6 +262,7 @@ articlesRouter.get('/:type/:slug', optionalAuth, async (req, res) => {
     relations: { companies: relCompanies, trends: relTrends, tickers: relTickers },
     stages: stagesRows.map((s) => s.name),
     stageIds: stagesRows.map((s) => s.id),
+    phaseIds: phasesRows.map((p) => p.id),
   });
 });
 
