@@ -321,9 +321,11 @@ async function chatWithSearch(
         const asstDsml: Record<string, unknown> = { role: 'assistant', content: null, tool_calls: calls };
         if (r.reasoningContent) asstDsml.reasoning_content = r.reasoningContent;
         messages.push(asstDsml);
+        // нюдж сразу: после DSML-вызовов модель склонна слать DSML снова вместо ответа
+        messages.push({ role: 'user', content: 'Вызовы приняты к исполнению, результаты будут ниже. После получения результатов дай финальный ответ в требуемом формате — без DSML и без повторных вызовов.' });
       }
     }
-    if (calls.length === 0) return { content: r.content, sources, usage };
+    if (calls.length === 0) return { content: stripDsml(r.content), sources, usage };
     if (calls === r.toolCalls) {
       const asst: Record<string, unknown> = { role: 'assistant', content: r.content || null, tool_calls: calls };
       if (r.reasoningContent) asst.reasoning_content = r.reasoningContent;
@@ -355,7 +357,7 @@ async function chatWithSearch(
     usage = final.usage;
     if (!final.content.includes('DSML')) return { content: final.content, sources, usage };
     const qs = [...final.content.matchAll(/parameter name="query"[^>]*>([^<｜]+)/g)].map((m) => m[1].trim()).filter(Boolean);
-    if (qs.length === 0) return { content: final.content, sources, usage };
+    if (qs.length === 0) return { content: stripDsml(final.content), sources, usage };
     console.log(`[content-master] пост-цикл: исполняем ${qs.length} DSML-вызовов, шот ${shot}`);
     const calls = qs.map((q, i) => ({ id: `post_${shot}_${i}`, type: 'function' as const, function: { name: 'web_search', arguments: JSON.stringify({ query: q }) } }));
     const asstPost: Record<string, unknown> = { role: 'assistant', content: null, tool_calls: calls };
@@ -370,9 +372,11 @@ async function chatWithSearch(
       } catch { /* ошибка поиска — модель получит пустые результаты и ответит из знаний */ }
       messages.push({ role: 'tool', tool_call_id: c.id, name: 'web_search', content: JSON.stringify({ results: hits }) });
     }
+    // нюдж: после исполнённого поиска модель должна дать ФИНАЛЬНЫЙ ответ, а не слать DSML снова
+    messages.push({ role: 'user', content: 'Поиск выполнен, результаты выше. Теперь дай финальный ответ строго в требуемом формате. Никаких вызовов функций и синтаксиса DSML — только сам ответ.' });
   }
   const last = await chatRound(base, key, model, messages, undefined, Boolean(h.onDelta), h);
-  return { content: last.content, sources, usage: last.usage };
+  return { content: stripDsml(last.content), sources, usage: last.usage };
 }
 
 const REWRITER_SYSTEM = `Ты редактор инвестиционного медиа «Инвестиционно.рф». Переписываешь материалы по инструкции автора: меняешь стиль, структуру, глубину изложения — сохраняя факты и числа исходного текста, не добавляя выдуманных данных.
@@ -558,9 +562,13 @@ function extractFirstJson(raw: string): string | null {
 }
 
 /** Извлечь JSON из ответа модели (модели иногда оборачивают в ```json). */
-function parseRewrite(raw: string): { title: string; html: string; excerpt: string } {
+function parseRewrite(raw: string, searchEnabled: boolean): { title: string; html: string; excerpt: string } {
   const json = extractFirstJson(stripDsml(raw));
-  if (!json) throw new Error(`Модель не вернула ответ — попробуйте ещё раз${raw.includes('DSML') ? ' (модель пыталась вызвать поиск: включите «искать в интернете», чтобы вызовы исполнялись)' : ''}`);
+  if (!json) {
+    throw new Error(searchEnabled
+      ? 'Модель так и не дала ответ — повторите запрос ещё раз'
+      : 'Модель вернула вызовы поиска вместо ответа — включите «искать в интернете», чтобы вызовы исполнялись, и повторите');
+  }
   const d = JSON.parse(json) as { title?: unknown; html?: unknown; excerpt?: unknown };
   const title = typeof d.title === 'string' ? stripDsml(d.title).trim() : '';
   const html = typeof d.html === 'string' ? stripDsml(d.html).trim() : '';
@@ -579,9 +587,13 @@ async function rewriteWithLlm(
 }
 
 /** Разбор JSON фактчека из ответа модели. */
-function parseFactcheck(raw: string): { report: { claim: string; status: string; comment: string }[]; summary: string } {
+function parseFactcheck(raw: string, searchEnabled: boolean): { report: { claim: string; status: string; comment: string }[]; summary: string } {
   const json = extractFirstJson(stripDsml(raw));
-  if (!json) throw new Error(`Модель не вернула ответ — попробуйте ещё раз${raw.includes('DSML') ? ' (модель пыталась вызвать поиск: включите «искать в интернете», чтобы вызовы исполнялись)' : ''}`);
+  if (!json) {
+    throw new Error(searchEnabled
+      ? 'Модель так и не дала ответ — повторите запрос ещё раз'
+      : 'Модель вернула вызовы поиска вместо ответа — включите «искать в интернете», чтобы вызовы исполнялись, и повторите');
+  }
   const d = JSON.parse(json) as { report?: unknown; summary?: unknown };
   const report = Array.isArray(d.report)
     ? (d.report as { claim?: unknown; status?: unknown; comment?: unknown }[]).map((r) => ({
@@ -761,14 +773,14 @@ contentMasterRouter.post(
         const executeSearch = isDeepseek ? (q: string) => deepseekSearch(q, key) : ddgSearch;
         const { content, sources, usage } = await chatWithSearch(base, key, model, system, userPrompt, searchTool, executeSearch, h);
         if (parsed.data.mode === 'factcheck') {
-          outcome = { payload: { ...parseFactcheck(content), sources, mock: false, sourceUrl, sessionId, truncated, usage }, persistTitle: 'Фактчек' };
+          outcome = { payload: { ...parseFactcheck(content, parsed.data.search), sources, mock: false, sourceUrl, sessionId, truncated, usage }, persistTitle: 'Фактчек' };
         } else {
-          const r = parseRewrite(content);
+          const r = parseRewrite(content, parsed.data.search);
           outcome = { payload: { ...r, sources, mock: false, sourceUrl, sessionId, truncated, usage }, persistTitle: r.title };
         }
       } else if (parsed.data.mode === 'factcheck') {
         const { content, usage } = await rewriteWithLlm(base, key, model, FACTCHECK_SYSTEM, userPrompt, h);
-        outcome = { payload: { ...parseFactcheck(content), sources: [], mock: false, sourceUrl, sessionId, truncated, usage }, persistTitle: 'Фактчек' };
+        outcome = { payload: { ...parseFactcheck(content, parsed.data.search), sources: [], mock: false, sourceUrl, sessionId, truncated, usage }, persistTitle: 'Фактчек' };
       } else {
         const systemWithContext = history.length
           ? `${REWRITER_SYSTEM}\nПеред текущей инструкцией — предыдущие ходы работы над этим материалом (твои ответы сокращены). Опирайся на них, не повторяйся.`
@@ -779,7 +791,7 @@ contentMasterRouter.post(
           { role: 'user', content: userPrompt },
         ];
         const r = await chatRound(base, key, model, messages, undefined, Boolean(h.onDelta), h);
-        const parsedResult = parseRewrite(r.content);
+        const parsedResult = parseRewrite(r.content, parsed.data.search);
         outcome = { payload: { ...parsedResult, sources: [], mock: false, sourceUrl, sessionId, truncated, usage: r.usage }, persistTitle: parsedResult.title };
       }
 
