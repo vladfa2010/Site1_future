@@ -586,7 +586,12 @@ export default function ContentMasterPage() {
   };
 
   const send = async () => {
-    if (!source.trim() || !instruction.trim() || busy) return;
+    if (!instruction.trim() || busy) return;
+    // без текста/ссылки работаем только в исследовательском режиме (поиск включён)
+    if (!source.trim() && !search) {
+      setError('Без текста или ссылки нечего обрабатывать — поставьте галочку «искать в интернете», и модель сама найдёт материал по вашему запросу');
+      return;
+    }
     setBusy(true);
     setError(null);
     setStreamText('');
@@ -832,7 +837,7 @@ export default function ContentMasterPage() {
             className="input min-h-28 w-full font-mono text-xs"
             value={source}
             onChange={(e) => setSource(e.target.value)}
-            placeholder="Вставьте текст статьи или http(s)-ссылку — страница выкачается автоматически"
+            placeholder="Текст статьи, http(s)-ссылка… или оставьте пустым — с включённым поиском модель сама найдёт материал по запросу справа"
           />
         </div>
         <div className="flex flex-wrap gap-2">
@@ -856,7 +861,7 @@ export default function ContentMasterPage() {
           />
         </div>
         <div className="flex items-center gap-4">
-          <button className="btn" onClick={() => void send()} disabled={busy || !source.trim() || !instruction.trim()}>
+          <button className="btn" onClick={() => void send()} disabled={busy || (!source.trim() && !search) || !instruction.trim()}>
             {busy ? 'Пишем…' : mode === 'factcheck' ? 'Проверить' : 'Отправить'}
           </button>
           <label className="flex items-center gap-2 text-sm text-zinc-400" title="Работает с обоими провайдерами: модель сама формирует поисковые запросы, исполнение — на платформе">

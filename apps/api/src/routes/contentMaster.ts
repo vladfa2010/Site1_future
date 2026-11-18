@@ -34,12 +34,16 @@ const rewriteLimiter = rateLimit({
 });
 
 const rewriteSchema = z.object({
-  source: z.string().trim().min(10).max(200_000),
+  // source необязателен: пустой + search=true = режим исследования — модель сама
+  // ищет материал по инструкции (2026-11-18: «найди и напиши статью о X»)
+  source: z.string().trim().max(200_000).default(''),
   instruction: z.string().trim().min(3).max(2000),
   mode: z.enum(['rewrite', 'factcheck']).default('rewrite'),
   search: z.boolean().default(false), // поиск в интернете (DeepSeek + DuckDuckGo, агентный цикл)
   sessionId: z.number().int().positive().optional(), // продолжить сессию (ТЗ-13)
   stream: z.boolean().default(false), // SSE-ответ (ТЗ-13)
+}).refine((v) => v.source.length >= 10 || v.search, {
+  message: 'Без текста или ссылки нужен поиск в интернете — включите search',
 });
 
 // ---------- Сессии (ТЗ-13): персистентная история чата ----------
@@ -665,7 +669,7 @@ contentMasterRouter.post(
     try {
       let text: string;
       let sourceUrl: string | null = null;
-      if (URL_RE.test(parsed.data.source)) {
+      if (parsed.data.source && URL_RE.test(parsed.data.source)) {
         sourceUrl = parsed.data.source;
         text = await fetchUrlText(parsed.data.source);
         if (text.length < 50) {
@@ -677,6 +681,7 @@ contentMasterRouter.post(
         text = parsed.data.source;
       }
       const truncated = text.length > 15_000;
+      const research = text.length < 50; // режим исследования: источника нет — модель ищет сама
 
       // --- сессия: продолжение или создание ---
       let sessionId: number;
@@ -698,7 +703,8 @@ contentMasterRouter.post(
       } else {
         const [row] = await db.insert(cmSessions).values({
           userId: req.user!.id,
-          title: sessionTitleFrom(parsed.data.source),
+          // без источника название сессии — из инструкции (иначе пустые сессии-«без названия»)
+          title: sessionTitleFrom(parsed.data.source || parsed.data.instruction),
           source: parsed.data.source.slice(0, 50_000),
           mode: parsed.data.mode,
           search: parsed.data.search,
@@ -712,8 +718,8 @@ contentMasterRouter.post(
       sse(meta);
 
       if (!key) {
-        // mock-режим: мгновенный ответ, стримить нечего
-        const mock = mockRewrite(text);
+        // mock-режим: мгновенный ответ, стримить нечего (без источника mock от инструкции)
+        const mock = mockRewrite(text || parsed.data.instruction);
         const payload: Record<string, unknown> = { ...mock, mock: true, sourceUrl, sessionId, truncated, usage: null };
         await persistTurn(sessionId, parsed.data.instruction, payload, mock.title);
         if (wantStream) { sse({ type: 'done', ...payload }); res.end(); } else res.json(payload);
@@ -721,7 +727,10 @@ contentMasterRouter.post(
       }
       const isDeepseek = s.provider === 'deepseek';
 
-      const userPrompt = `Инструкция автора:\n${parsed.data.instruction}\n\n=== ИСХОДНЫЙ ТЕКСТ ===\n${text.slice(0, 15_000)}`;
+      // исследовательский режим: источника нет — модель сама ищет факты через web_search
+      const userPrompt = research
+        ? `Инструкция автора:\n${parsed.data.instruction}\n\nИСХОДНОГО ТЕКСТА НЕТ — исследуй тему самостоятельно: через поиск в интернете найди первоисточники и актуальные факты по теме инструкции, проверь цифры и даты, затем выполни инструкцию. Ссылайся на найденные источники.`
+        : `Инструкция автора:\n${parsed.data.instruction}\n\n=== ИСХОДНЫЙ ТЕКСТ ===\n${text.slice(0, 15_000)}`;
       const model = isDeepseek ? s.deepseekModel : s.textModel;
       const base = isDeepseek ? DEEPSEEK_BASE_URL : s.baseUrl;
       const h: StreamHandlers = wantStream ? { onDelta: (t) => sse({ type: 'delta', text: t }), signal: abort.signal } : {};
