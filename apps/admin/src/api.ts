@@ -41,3 +41,28 @@ export const isAdminRole = (role?: string) => role === 'admin' || role === 'supe
 export async function adminViewsBump(): Promise<{ processed: number; details: { articleId: number; added: number }[] }> {
   return api('/admin/views/bump', { method: 'POST' });
 }
+
+/** Скользящее продление сессии (2026-11-18): админка раз в час меняет токен на свежий,
+ *  пока юзер активен — протухает только после 12 часов бездействия, а не от звонка
+ *  будильника. Принимает действующий токен; 401 (токен умер/аккаунт заблокирован) —
+ *  чистим и ведём на логин, как в api(). */
+export async function refreshTokenSliding(): Promise<void> {
+  const token = localStorage.getItem('token');
+  if (!token) return;
+  try {
+    const res = await fetch('/api/auth/refresh', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (res.status === 401 && token) {
+      localStorage.removeItem('token');
+      if (!window.location.pathname.startsWith('/login')) window.location.href = '/login';
+      return;
+    }
+    if (!res.ok) return;
+    const body = (await res.json().catch(() => ({}))) as { token?: string };
+    if (body.token) localStorage.setItem('token', body.token);
+  } catch {
+    /* сетевой сбой — повторим на следующем тике */
+  }
+}

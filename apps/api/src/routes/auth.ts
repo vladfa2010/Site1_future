@@ -92,6 +92,22 @@ authRouter.get('/me', authRequired, async (req, res) => {
   res.json({ user });
 });
 
+// POST /api/auth/refresh — скользящее продление сессии (2026-11-18): админка раз в час
+// тихо обновляет токен, пока юзер активен. Принимает ДЕЙСТВУЮЩИЙ токен (authRequired
+// отсекает протухшие — тогда клиент сам ведёт на логин), проверяет что аккаунт жив,
+// и выдаёт новый полный TTL. Пароль не нужен.
+authRouter.post('/refresh', authRequired, async (req, res) => {
+  const [user] = await db.select({
+    id: users.id, role: users.role, isBlocked: users.isBlocked,
+    tariffId: users.tariffId, tariffExpiresAt: users.tariffExpiresAt,
+  }).from(users).where(eq(users.id, req.user!.id)).limit(1);
+  if (!user || user.isBlocked) {
+    res.status(401).json({ error: 'unauthorized' });
+    return;
+  }
+  res.json({ token: signToken(user) });
+});
+
 // PATCH /api/auth/me — частичное обновление своего профиля (ТЗ-05: bio «о себе»).
 // Свой профиль, любая роль; лимит 500 — только zod (в БД ограничения нет, решение ТЗ).
 const patchMeSchema = z.object({ bio: z.string().trim().max(500, 'Максимум 500 символов') }).partial();

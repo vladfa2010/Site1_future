@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes } from 'react-router';
+import { useEffect } from 'react';
 import { AuthProvider, useAuth } from './auth';
-import { isAdminRole } from './api';
+import { isAdminRole, refreshTokenSliding } from './api';
 import { Layout } from './components/Layout';
 import LoginPage from './pages/LoginPage';
 import ArticlesPage from './pages/ArticlesPage';
@@ -36,6 +37,14 @@ function RequireAdmin({ children }: { children: React.ReactNode }) {
 }
 
 export default function App() {
+  // Скользящее продление сессии (2026-11-18): сразу при открытии админки и далее раз
+  // в час тихо меняем токен на свежий — TTL отсчитывается от последней активности.
+  useEffect(() => {
+    void refreshTokenSliding();
+    const t = setInterval(() => void refreshTokenSliding(), 60 * 60 * 1000);
+    return () => clearInterval(t);
+  }, []);
+
   return (
     <AuthProvider>
       <Routes>
