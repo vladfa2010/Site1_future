@@ -708,33 +708,30 @@ export default function ArticleEditPage() {
             <button type="button" className="btn-secondary" onClick={() => setPickerOpen(true)}>
               🗂 Из медиатеки
             </button>
-            {!isNew && (
-              <>
-                <input
-                  ref={coverFileRef}
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp,image/svg+xml"
-                  className="hidden"
-                  onChange={(e) => e.target.files?.[0] && void uploadCover(e.target.files[0])}
-                />
-                <button type="button" className="btn-secondary" disabled={uploadBusy} onClick={() => coverFileRef.current?.click()}>
-                  {uploadBusy ? 'Загружаем…' : '⬆ Загрузить картинку'}
-                </button>
-                <button
-                  type="button"
-                  className="btn-secondary"
-                  onClick={() => {
-                    setGenPrompt(buildPrompt());
-                    setGenOpen(!genOpen);
-                  }}
-                >
-                  ✨ Сгенерировать обложку
-                </button>
-              </>
-            )}
+            {/* ТЗ-11: обложка доступна ДО первого сейва — media создаётся сразу, coverMediaId в POST */}
+            <input
+              ref={coverFileRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              className="hidden"
+              onChange={(e) => e.target.files?.[0] && void uploadCover(e.target.files[0])}
+            />
+            <button type="button" className="btn-secondary" disabled={uploadBusy} onClick={() => coverFileRef.current?.click()}>
+              {uploadBusy ? 'Загружаем…' : '⬆ Загрузить картинку'}
+            </button>
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={() => {
+                setGenPrompt(buildPrompt());
+                setGenOpen(!genOpen);
+              }}
+            >
+              ✨ Сгенерировать обложку
+            </button>
           </span>
         </div>
-        {isNew && <p className="text-sm text-zinc-500">Сохраните статью — затем появится генерация обложки.</p>}
+        {isNew && <p className="text-sm text-zinc-500">Обложка встанет на статью при первом сохранении — можно выбрать картинку до него.</p>}
         {coverPreview && (
           <div className="flex items-start gap-4">
             <img src={coverPreview} alt="Обложка" className="h-48 w-36 rounded-lg border border-zinc-800 object-cover" />
