@@ -337,6 +337,26 @@ auth-smoke 5/5 (чужой audience → 401, подделанный payload → 
 `requireRole`. Слабое место того аудита — guard секрета со строкой, не совпадающей
 с фактическими дефолтами (исправлено 2026-11-14).
 
+### 2026-11-20 (подготовка к пентесту) — Этап 0 ТЗ pentest: кодовые фиксы
+
+По ТЗ на пентест (docs/pentest-prep-2026-11.md — полный статус и ops-чеклист):
+
+- **CVE-2026-111497 (Node2Shell, Brotli OOB write → RCE)**: миграция на Node 22 LTS
+  (`node:22-slim` в Dockerfile.api; Dockerfile.all — build-образ node:22-slim +
+  рантайм-пин v22.23.5, архив проверен). Node 20 EOL с апреля 2026.
+- **Defense-in-depth**: глобальный middleware отклоняет `Content-Encoding: br`
+  до body-parser'ов (415; identity/gzip/deflate — ок). Проверено: gzip→400,
+  br→415, identity→200.
+- **Lockfile сверен** с планом: body-parser 1.20.9 (CVE-2026-111181 ✓), multer 2.5.0
+  (CVE-2026-113872 ✓), busboy 1.6.0 классический (CVE-2026-19481 — неприменимо),
+  sharp 0.35.5, express 4.22.3. Подтверждение на VDS — пересборка с актуальным main.
+- Хвосты аудита (refresh-кап с origIat, passwordChangedAt, psql-переменная,
+  dummy-сравнение) — закрыты ранее, регрессия зелёная (refresh-smoke 6/6,
+  auth-smoke 5/5 на коде с reject-br).
+
+Остаются операционные: пересборка VDS (Node 22 + lockfile + pgvector ≥0.8.2 +
+Caddy), чек-лист CORS/сертификата/ТЗ-12, maintenance-окно стенда, staging.
+
 ## 4. Регламент
 
 1. **Новый секрет** — только через env; запрещено: значение в compose/Dockerfile/коде,
