@@ -49,6 +49,7 @@ const TYPES = [
   { value: 'analitika', label: 'Аналитика' },
   { value: 'interesnoe', label: 'Интересное' },
   { value: 'video', label: 'Видео' },
+  { value: 'trend', label: 'Тренд' },
 ] as const;
 
 const RU_TO_LAT: Record<string, string> = {
@@ -237,7 +238,7 @@ export default function ContentMasterPage() {
   const [companies, setCompanies] = useState<Opt[]>([]);
   const [tickers, setTickers] = useState<Opt[]>([]);
   const [creating, setCreating] = useState(false);
-  const [created, setCreated] = useState<{ id: number; type: string; slug: string } | null>(null);
+  const [created, setCreated] = useState<{ id: number; label: string; link: string } | null>(null);
 
   // ИИ-дозаполнение полей черновика (2026-11-17): те же эндпоинты, что в редакторе статьи
   const [metaDescription, setMetaDescription] = useState('');
@@ -348,7 +349,7 @@ export default function ContentMasterPage() {
 
   const TYPE_LABEL: Record<string, string> = {
     novost: 'новость', ideya: 'инвестиционная идея', analitika: 'аналитика',
-    sobytie: 'событие', interesnoe: 'интересный разбор', video: 'видео',
+    sobytie: 'событие', interesnoe: 'интересный разбор', video: 'видео', trend: 'тренд',
   };
 
   const entityNames = () => [
@@ -508,7 +509,8 @@ export default function ContentMasterPage() {
     if (aiBusy) return;
     setAiNotice(null);
     const steps: Promise<boolean>[] = [
-      genText('title', true).then((ok) => { if (ok) return genText('excerpt'); return false; }),
+      // у тренда лида нет — после заголовка сразу SEO
+      genText('title', true).then((ok) => (ok && type !== 'trend' ? genText('excerpt') : ok)),
       genText('meta'),
     ];
     if (type === 'ideya') steps.push(genText('thesis'));
@@ -632,6 +634,22 @@ export default function ContentMasterPage() {
     setCreating(true);
     setError(null);
     try {
+      // ТРЕНД — отдельная сущность (не статья): свои поля, без связей/счётчиков/доступа
+      if (type === 'trend') {
+        const res = await api<{ trend: { id: number } }>('/trends', {
+          method: 'POST',
+          body: JSON.stringify({
+            slug: effectiveSlug,
+            name: title.trim(),
+            description: contentHtml || `<p>${active.summary ?? ''}</p>`,
+            status: 'active',
+            metaDescription: metaDescription.trim() || undefined,
+            coverMediaId: coverMediaId ?? undefined,
+          }),
+        });
+        setCreated({ id: res.trend.id, label: 'Тренд создан ✓', link: `/trends/${res.trend.id}/edit` });
+        return;
+      }
       const created_res = await api<{ article: { id: number } }>('/articles', {
         method: 'POST',
         body: JSON.stringify({
@@ -676,7 +694,7 @@ export default function ContentMasterPage() {
           }),
         });
       }
-      setCreated({ id: created_res.article.id, type, slug: effectiveSlug });
+      setCreated({ id: created_res.article.id, label: 'Черновик создан ✓', link: `/articles/${type}/${effectiveSlug}/edit` });
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Ошибка создания');
     } finally {
@@ -703,8 +721,8 @@ export default function ContentMasterPage() {
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold">ContentMaster</h1>
         {created && (
-          <Link to={`/articles/${created.type}/${created.slug}/edit`} className="btn text-[#beff00]">
-            Открыть черновик в редакторе →
+          <Link to={created.link} className="btn text-[#beff00]">
+            {created.label} — открыть в редакторе →
           </Link>
         )}
       </div>
@@ -893,6 +911,7 @@ export default function ContentMasterPage() {
                 {TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
               </select>
             </div>
+            {type !== 'trend' && (
             <div>
               <label className="label">Доступ</label>
               <select className="input w-full" value={accessLevel} onChange={(e) => setAccessLevel(e.target.value)}>
@@ -901,6 +920,8 @@ export default function ContentMasterPage() {
                 <option value="tariff">По тарифу</option>
               </select>
             </div>
+            )}
+            {type !== 'trend' && (<>
             <div>
               <label className="label">Стартовые лайки (seed)</label>
               <input className="input w-full" type="number" min={0} max={1000000} value={likesBaseOffset} onChange={(e) => setLikesBaseOffset(e.target.value)} />
@@ -939,6 +960,7 @@ export default function ContentMasterPage() {
                 </div>
               )}
             </div>
+            </>)}
             <div className="sm:col-span-2">
               <label className="label">Заголовок</label>
               <span className="flex gap-2">
@@ -968,10 +990,12 @@ export default function ContentMasterPage() {
                 onChange={(e) => { setSlug(e.target.value); setSlugTouched(true); }}
               />
             </div>
+            {type !== 'trend' && (
             <div>
               <label className="label">Источник (URL)</label>
               <input className="input w-full font-mono" value={sourceUrl} onChange={(e) => setSourceUrl(e.target.value)} placeholder="https://…" />
             </div>
+            )}
             <div className="sm:col-span-2">
               <label className="label">Контент (то, что пойдёт в статью — можно править прямо здесь)</label>
               <RichTextEditor value={contentHtml} onChange={setContentHtml} />
@@ -980,6 +1004,7 @@ export default function ContentMasterPage() {
                 <AiSlopPanel getHtml={() => contentHtml} onApply={(html) => setContentHtml(html)} />
               </div>
             </div>
+            {type !== 'trend' && (
             <div className="sm:col-span-2">
               <label className="label">Лид (excerpt)</label>
               <span className="flex gap-2">
@@ -989,6 +1014,7 @@ export default function ContentMasterPage() {
                 </button>
               </span>
             </div>
+            )}
             <div className="sm:col-span-2">
               <label className="label">SEO description (meta)</label>
               <span className="flex gap-2">
@@ -1104,7 +1130,7 @@ export default function ContentMasterPage() {
               {aiBusy ? `Генерируем (${aiBusy})…` : '✨ Заполнить всё'}
             </button>
             {aiNotice && <span className="text-xs text-zinc-400">{aiNotice}</span>}
-            {created && <Link to={`/articles/${created.type}/${created.slug}/edit`} className="text-sm text-[#beff00] hover:underline">Открыть в редакторе →</Link>}
+            {created && <Link to={created.link} className="text-sm text-[#beff00] hover:underline">Открыть в редакторе →</Link>}
             <span className="text-xs text-zinc-600">Обложку можно поменять и в редакторе статьи</span>
           </div>
         </div>
