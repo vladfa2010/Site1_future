@@ -96,13 +96,14 @@ authRouter.get('/me', authRequired, async (req, res) => {
 // тихо обновляет токен, пока юзер активен. Принимает ДЕЙСТВУЮЩИЙ токен (authRequired
 // отсекает протухшие — тогда клиент сам ведёт на логин), проверяет что аккаунт жив,
 // и выдаёт новый полный TTL. Пароль не нужен.
-// Аудит 2026-11-20: АБСОЛЮТНЫЙ потолок сессии 72 ч — иначе украденный (особенно
-// админский, TTL 12 ч) токен продлевается refresh'ем бесконечно. Старше 72 ч —
-// отказ, клиент идёт на полный логин.
+// Аудит 2026-11-20 + ревью (major): АБСОЛЮТНЫЙ потолок сессии 72 ч считается от
+// origIat — якоря первичной аутентификации, который копируется через цепочку refresh.
+// Считать от iat предъявленного токена нельзя: новый токен получает новый iat, и
+// украденный токен продлевался бы бесконечно (потолок вырождался в скользящий).
 const SESSION_ABSOLUTE_MAX_SEC = 72 * 3600;
 
 authRouter.post('/refresh', authRequired, async (req, res) => {
-  if (req.user!.tokenIssuedAt && Date.now() / 1000 - req.user!.tokenIssuedAt > SESSION_ABSOLUTE_MAX_SEC) {
+  if (req.user!.sessionOrigIat && Date.now() / 1000 - req.user!.sessionOrigIat > SESSION_ABSOLUTE_MAX_SEC) {
     res.status(401).json({ error: 'session expired, login again' });
     return;
   }
@@ -114,7 +115,8 @@ authRouter.post('/refresh', authRequired, async (req, res) => {
     res.status(401).json({ error: 'unauthorized' });
     return;
   }
-  res.json({ token: signToken(user) });
+  // origIat пробрасываем дальше — потолок считается от первого логина
+  res.json({ token: signToken(user, req.user!.sessionOrigIat) });
 });
 
 // PATCH /api/auth/me — частичное обновление своего профиля (ТЗ-05: bio «о себе»).
@@ -211,10 +213,14 @@ authRouter.post('/forgot-password', async (req, res) => {
     return;
   }
   const email = parsed.data.email;
+  // Аудит 2026-11-20 (ревью): заблокирован оракул существования email — форма ответа
+  // для чужого адреса ИДЕНТИЧНА (delivered — глобальная конфигурация, не факт аккаунта),
+  // а отправка письма — fire-and-forget (иначе латентность sendEmail выдавала аккаунт).
+  const delivered = emailEnabled(); // глобальный флаг, не сведение об аккаунте
   const [user] = await db.select({ id: users.id, email: users.email, displayName: users.displayName })
     .from(users).where(sql`lower(${users.email}) = lower(${email})`).limit(1);
   if (!user) {
-    res.json({ success: true }); // не раскрываем существование аккаунта
+    res.json({ success: true, delivered });
     return;
   }
   const now = new Date();
@@ -227,7 +233,7 @@ authRouter.post('/forgot-password', async (req, res) => {
     // код жив — не пересоздаём (иначе бесконечный поток писем на чужую почту);
     // но и не флудим: повторная отправка не чаще раза в минуту на email
     if (now.getTime() - active.createdAt.getTime() < RESEND_INTERVAL_MS) {
-      res.json({ success: true, delivered: emailEnabled() });
+      res.json({ success: true, delivered });
       return;
     }
     code = active.code; // пересылаем тот же код
@@ -240,14 +246,15 @@ authRouter.post('/forgot-password', async (req, res) => {
       expiresAt: new Date(now.getTime() + 15 * 60 * 1000),
     });
   }
-  if (emailEnabled()) {
-    await sendEmail(email, 'Код восстановления пароля — Инвестиционно.рф', renderResetCodeEmail(user.displayName ?? '', code))
+  if (delivered) {
+    // без await: ответ не ждёт SMTP — тайминг одинаков для существующего и чужого email
+    void sendEmail(email, 'Код восстановления пароля — Инвестиционно.рф', renderResetCodeEmail(user.displayName ?? '', code))
       .catch((e) => console.error('[auth] reset email failed:', (e as Error).message));
   } else {
     // dev-режим без почты: код в лог, чтобы поток можно было пройти локально
     console.log(`[auth] reset code для ${email}: ${code} (RESEND_API_KEY не задан)`);
   }
-  res.json({ success: true, delivered: emailEnabled() });
+  res.json({ success: true, delivered });
 });
 
 // POST /api/auth/verify-code — проверка кода → resetToken (JWT purpose=password_reset, 15 минут)
@@ -343,9 +350,11 @@ authRouter.post('/reset-password', async (req, res) => {
   }
   // ТЗ 4.2 (2026-11-15): токен, выданный ДО последней смены пароля, не принимаем —
   // украденный resetToken не живёт 15 минут после того, как владелец сменил пароль.
-  // Сравнение в миллисекундах с допуском 1 с (iat — с секундным разрешением).
+  // Строгое «раньше», единая семантика с verifyToken (ревью 2026-11-20):
+  // passwordChangedAt хранится с секундным разрешением — допуск наоборот ломал
+  // legit-поток (токен следующей секунды после смены).
   if (user.passwordChangedAt && typeof payload.iat === 'number'
-      && payload.iat * 1000 <= user.passwordChangedAt.getTime() + 1000) {
+      && payload.iat * 1000 < user.passwordChangedAt.getTime()) {
     res.status(401).json({ error: 'Недействительная или просроченная ссылка' });
     return;
   }

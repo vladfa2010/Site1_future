@@ -13,8 +13,9 @@ export interface AuthUser {
   role: string;
   tariffId?: number | null;
   tariffExpiresAt?: string | null;
-  /** iat принятого токена (сек) — для абсолютного потолка сессии в /auth/refresh */
-  tokenIssuedAt?: number;
+  /** origIat сессии (якорь первичной аутентификации) — потолок 72 ч считается от него,
+   *  а не от iat предъявленного токена (иначе потолок скользящий, ревью 2026-11-20) */
+  sessionOrigIat?: number;
 }
 
 declare module 'express-serve-static-core' {
@@ -59,7 +60,9 @@ async function verifyToken(token: string): Promise<AuthUser | null> {
       role: u.role,
       tariffId: u.tariffId ?? null,
       tariffExpiresAt: u.tariffExpiresAt ? u.tariffExpiresAt.toISOString() : null,
-      tokenIssuedAt: typeof payload.iat === 'number' ? payload.iat : undefined,
+      sessionOrigIat: typeof payload.origIat === 'number'
+        ? payload.origIat
+        : (typeof payload.iat === 'number' ? payload.iat : undefined), // токены до origIat
     };
   } catch {
     return null;
@@ -105,11 +108,20 @@ export function requireRole(...roles: string[]) {
   };
 }
 
-export function signToken(user: { id: number; role: string; tariffId?: number | null; tariffExpiresAt?: Date | string | null }): string {
+/** origIat — якорь первичной аутентификации (ревью 2026-11-20, major): копируется через
+ *  цепочку /auth/refresh, чтобы АБСОЛЮТНЫЙ потолок сессии считался от первого логина,
+ *  а не от iat предъявленного токена (иначе потолок скользящий и украденный токен
+ *  продлевается бесконечно). Для токенов без origIat (выданных до этого изменения)
+ *  fallback — на их iat. */
+export function signToken(
+  user: { id: number; role: string; tariffId?: number | null; tariffExpiresAt?: Date | string | null },
+  origIat?: number,
+): string {
   // Админам — короткий TTL: утечка admin-токена необратима 7 дней (аудит 2026-11-08)
   const isAdmin = ADMIN_ROLES.includes(user.role);
+  const now = Math.floor(Date.now() / 1000);
   return jwt.sign(
-    { role: user.role, tariffId: user.tariffId ?? null, tariffExpiresAt: user.tariffExpiresAt ? new Date(user.tariffExpiresAt).toISOString() : null },
+    { role: user.role, tariffId: user.tariffId ?? null, tariffExpiresAt: user.tariffExpiresAt ? new Date(user.tariffExpiresAt).toISOString() : null, origIat: origIat ?? now },
     config.jwtSecret,
     { subject: String(user.id), expiresIn: isAdmin ? '12h' : '7d', issuer: config.jwtIssuer, audience: config.jwtAudience },
   );
