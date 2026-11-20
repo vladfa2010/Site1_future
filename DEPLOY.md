@@ -166,6 +166,10 @@ docker compose -f infra/docker-compose.yml -f infra/docker-compose.local.yml dow
    POSTGRES_PASSWORD=<сильный пароль>
    JWT_SECRET=<сильный секрет ≥ 32 символов — иначе API не стартует (fail fast)>
    PUBLIC_SITE_URL=https://xn--b1aghca0aeahc1am7c.xn--p1ai
+   # CORS: домены + ДОПОЛНИТЕЛЬНЫЕ origin'ы админки из Caddyfile.ip (аудит 2026-11-20):
+   CORS_ORIGINS=https://xn--b1aghca0aeahc1am7c.xn--p1ai,https://admin.xn--b1aghca0aeahc1am7c.xn--p1ai,https://217-114-10-164.sslip.io:8443,https://<IP-VDS>:8080
+   # origin'ы должны совпадать с адресной строкой браузера ТОЧНО (схема+порт);
+   # без них админка по sslip.io:8443 / IP:8080 получит 403 от API
    MOONSHOT_API_KEY=<опционально>
    DEEPSEEK_API_KEY=<опционально>
    RESEND_API_KEY=<опционально, письма>

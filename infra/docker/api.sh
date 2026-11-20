@@ -22,18 +22,22 @@ $PSQL -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname='$POSTGRES_DB'" 
 $PSQL -d "$POSTGRES_DB" -c "CREATE EXTENSION IF NOT EXISTS vector"
 
 # Рантайм-роль без SUPERUSER + DML-привилегии (idempotent, выполняется при каждом старте)
+# Пароль/имя БД — psql-переменные (:'pw', :'db'), НЕ интерполяция в SQL-строку:
+# кавычка в пароле иначе ломала бы старт, значение env — инъекцией в SQL (аудит 2026-11-20)
 : "${APP_DB_PASSWORD:?Задайте APP_DB_PASSWORD в infra/.env (сильный пароль, отличный от POSTGRES_PASSWORD)}"
-$PSQL -d "$POSTGRES_DB" <<SQL
-DO \$\$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'newinvest_app') THEN
-    CREATE ROLE newinvest_app LOGIN PASSWORD '$APP_DB_PASSWORD' NOSUPERUSER NOCREATEDB NOCREATEROLE;
-  ELSE
-    ALTER ROLE newinvest_app WITH LOGIN PASSWORD '$APP_DB_PASSWORD' NOSUPERUSER NOCREATEDB NOCREATEROLE;
-  END IF;
-END
-\$\$;
-GRANT CONNECT ON DATABASE "$POSTGRES_DB" TO newinvest_app;
+# psql не подставляет переменные внутри dollar-quoted DO-блока — поэтому CREATE/ALTER
+# отдельными -c (подстановка :'pw' работает), ветка по факту существования роли
+if [ "$($PSQL -d "$POSTGRES_DB" -tAc "SELECT 1 FROM pg_roles WHERE rolname='newinvest_app'")" = "1" ]; then
+  $PSQL -d "$POSTGRES_DB" -v pw="$APP_DB_PASSWORD" <<'SQL'
+ALTER ROLE newinvest_app WITH LOGIN PASSWORD :'pw' NOSUPERUSER NOCREATEDB NOCREATEROLE;
+SQL
+else
+  $PSQL -d "$POSTGRES_DB" -v pw="$APP_DB_PASSWORD" <<'SQL'
+CREATE ROLE newinvest_app LOGIN PASSWORD :'pw' NOSUPERUSER NOCREATEDB NOCREATEROLE;
+SQL
+fi
+$PSQL -d "$POSTGRES_DB" -v db="$POSTGRES_DB" <<SQL
+GRANT CONNECT ON DATABASE :'db' TO newinvest_app;
 GRANT USAGE ON SCHEMA public TO newinvest_app;
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO newinvest_app;
 GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO newinvest_app;

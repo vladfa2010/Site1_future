@@ -260,9 +260,19 @@ authRouter.post('/verify-code', async (req, res) => {
     return;
   }
   const invalid = () => res.status(400).json({ error: 'Неверный или просроченный код' });
+  // Аудит 2026-11-20: тайминговая энумерация email — для несуществующего email
+  // ответ иначе мгновенный (нет timingSafeEqual и записи в БД). Dummy-сравнение
+  // выравнивает тайминг и не раскрывает, существует ли аккаунт.
+  const dummyCompare = () => {
+    timingSafeEqual(
+      Buffer.from('000000'.padEnd(8, '\0')),
+      Buffer.from(parsed.data.code.padEnd(8, '\0')),
+    );
+  };
   const [user] = await db.select({ id: users.id }).from(users)
     .where(sql`lower(${users.email}) = lower(${parsed.data.email})`).limit(1);
   if (!user) {
+    dummyCompare();
     invalid();
     return;
   }
@@ -270,6 +280,9 @@ authRouter.post('/verify-code', async (req, res) => {
     .where(and(eq(passwordResetCodes.userId, user.id), eq(passwordResetCodes.used, false)))
     .orderBy(desc(passwordResetCodes.createdAt))
     .limit(1);
+  if (!row) {
+    dummyCompare();
+  }
   if (!row || row.expiresAt < new Date()) {
     invalid();
     return;
