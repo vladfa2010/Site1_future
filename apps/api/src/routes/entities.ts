@@ -382,7 +382,12 @@ entitiesRouter.get('/trends/:slug', optionalAuth, async (req, res) => {
     .where(and(...conditions))
     .orderBy(sql`${articles.publishedAt} desc nulls last`)
     .limit(50);
-  res.json({ trend, articles: trendArticles });
+  // обложка тренда + SEO meta — редактору (2026-11-20)
+  const [cover] = await db.select({ filePath: media.filePath }).from(media)
+    .where(eq(media.id, trend.coverMediaId ?? -1)).limit(1);
+  const [meta] = await db.select({ value: metaFields.value }).from(metaFields)
+    .where(and(eq(metaFields.ownerType, 'trend'), eq(metaFields.ownerId, trend.id), eq(metaFields.key, 'meta_description'))).limit(1);
+  res.json({ trend, articles: trendArticles, coverUrl: cover?.filePath ?? null, meta: { description: meta?.value ?? null } });
 });
 
 const trendSchema = z.object({
@@ -390,7 +395,16 @@ const trendSchema = z.object({
   name: z.string().min(1),
   description: z.string().optional(), // лонгрид лендинга
   status: z.enum(['active', 'closed']).optional(),
+  coverMediaId: z.number().int().nullable().optional(), // 2026-11-20: обложка как у статей (null — снять)
+  metaDescription: z.string().max(300).optional(), // SEO (meta_fields, ownerType 'trend')
 });
+
+// meta_description тренда — в meta_fields, как у статей
+async function saveTrendMeta(trendId: number, value: string): Promise<void> {
+  await db.insert(metaFields)
+    .values({ ownerType: 'trend', ownerId: trendId, key: 'meta_description', value })
+    .onConflictDoUpdate({ target: [metaFields.ownerType, metaFields.ownerId, metaFields.key], set: { value } });
+}
 
 entitiesRouter.post('/trends', authRequired, requireRole('admin', 'super_admin'), async (req, res) => {
   const parsed = trendSchema.safeParse(req.body);
@@ -398,7 +412,9 @@ entitiesRouter.post('/trends', authRequired, requireRole('admin', 'super_admin')
     res.status(400).json({ error: 'validation', details: parsed.error.flatten() });
     return;
   }
-  const [row] = await db.insert(trends).values(parsed.data).returning();
+  const { metaDescription, ...data } = parsed.data;
+  const [row] = await db.insert(trends).values(data).returning();
+  if (metaDescription) await saveTrendMeta(row.id, metaDescription);
   res.status(201).json({ trend: row });
 });
 
@@ -409,11 +425,13 @@ entitiesRouter.patch('/trends/:id', authRequired, requireRole('admin', 'super_ad
     res.status(400).json({ error: 'validation', details: parsed.error.flatten() });
     return;
   }
-  const [row] = await db.update(trends).set(parsed.data).where(eq(trends.id, Number(req.params.id))).returning();
+  const { metaDescription, ...data } = parsed.data;
+  const [row] = await db.update(trends).set(data).where(eq(trends.id, Number(req.params.id))).returning();
   if (!row) {
     res.status(404).json({ error: 'not found' });
     return;
   }
+  if (metaDescription !== undefined) await saveTrendMeta(row.id, metaDescription);
   res.json({ trend: row });
 });
 
