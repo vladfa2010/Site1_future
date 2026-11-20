@@ -79,7 +79,7 @@ export default function AiSlopPanel({ getHtml, onApply }: { getHtml: () => strin
         <span className="text-xs text-zinc-600">Стилистическая проверка: палит ли текст как сгенерированный (не детектор ИИ, а аудит штампов)</span>
       </div>
 
-      {error && <p className="mt-2 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-400">{error}</p>}
+      {error && <p className="toast-inline mt-2 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-400">{error}</p>}
 
       {result && (
         <div className="mt-3 space-y-3">

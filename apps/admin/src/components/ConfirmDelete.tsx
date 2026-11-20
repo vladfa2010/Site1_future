@@ -52,7 +52,7 @@ export default function ConfirmDelete({ label, onDelete, onDeleted }: Props) {
             <p className="mt-2 text-sm text-zinc-400">
               Действие необратимо: запись и связанные привязки будут удалены без возможности восстановления.
             </p>
-            {error && <p className="mt-2 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-400">{error}</p>}
+            {error && <p className="toast-inline mt-2 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-400">{error}</p>}
             <div className="mt-4 flex justify-end gap-3">
               <button className="btn-secondary" onClick={() => setOpen(false)} disabled={busy}>Отмена</button>
               <button
