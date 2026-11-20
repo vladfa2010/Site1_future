@@ -30,6 +30,12 @@ export function Carousel({ children }: { children: React.ReactNode }) {
       d.moved = true;
       setDragging(true);
       el.setPointerCapture(e.pointerId); // драг начался — теперь захват уместен
+      // snap-mandatory конфликтует с программной прокруткой: пока тянем,
+      // браузер дёргает scrollLeft обратно к snap-точке (баг «карусель
+      // откатывается назад при листании»). На время драга snap отключаем
+      // инлайн-стилем (перекрывает классы tailwind), на release — вернётся
+      // и браузер доснапит к ближайшей точке.
+      el.style.scrollSnapType = 'none';
     }
     if (d.moved) {
       el.scrollLeft = d.startScroll - dx;
@@ -37,6 +43,8 @@ export function Carousel({ children }: { children: React.ReactNode }) {
   };
 
   const endDrag = () => {
+    const el = ref.current;
+    if (el && drag.current?.moved) el.style.scrollSnapType = ''; // snap обратно → доснап к карточке
     drag.current = null;
     setDragging(false);
   };
