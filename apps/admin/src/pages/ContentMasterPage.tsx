@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { api, ApiError } from '../api';
 import { RichTextEditor } from '../components/RichTextEditor';
+import AiSlopPanel from '../components/AiSlopPanel';
 import { sanitizeArticleHtml } from '../lib/sanitize';
 import { stripHtml } from '@newinvest/db/text-utils';
 
@@ -974,6 +975,10 @@ export default function ContentMasterPage() {
             <div className="sm:col-span-2">
               <label className="label">Контент (то, что пойдёт в статью — можно править прямо здесь)</label>
               <RichTextEditor value={contentHtml} onChange={setContentHtml} />
+              {/* Аудит готового текста на ИИ-штампы (2026-11-20) */}
+              <div className="mt-3">
+                <AiSlopPanel getHtml={() => contentHtml} onApply={(html) => setContentHtml(html)} />
+              </div>
             </div>
             <div className="sm:col-span-2">
               <label className="label">Лид (excerpt)</label>

@@ -3,7 +3,9 @@
 # Запуск:  docker-compose -f infra/docker-compose.all.yml up -d
 
 # ── Этап 1: сборка фронтов (web, admin) и установка зависимостей всех воркспейсов ──
-FROM node:20-slim AS build
+# Node 22 LTS: Node 20 EOL с апреля 2026 и подвержен CVE-2026-111497 (Node2Shell).
+# Пентест-ТЗ 2026-11, раздел 6.1.
+FROM node:22-slim AS build
 WORKDIR /app
 # bcryptjs — чистый JS (без native-модулей), toolchain для сборки не нужен
 # (аудит 2026-11-14: замена bcrypt — закрыт critical tar / high node-pre-gyp)
@@ -29,8 +31,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       supervisor curl ca-certificates xz-utils \
   && rm -rf /var/lib/apt/lists/*
 
-# Node.js 20 (нужен API в рантайме)
-RUN curl -fsSL https://nodejs.org/dist/v20.20.2/node-v20.20.2-linux-x64.tar.xz \
+# Node.js 22 LTS (нужен API в рантайме). Пин конкретной версии 22.x для воспроизводимости;
+# при обновлении — менять оба места (здесь и Dockerfile.api). Пентест-ТЗ 2026-11 §6.1.
+RUN curl -fsSL https://nodejs.org/dist/v22.23.5/node-v22.23.5-linux-x64.tar.xz \
       | tar -xJ -C /usr/local --strip-components=1 \
   && node --version && npm --version
 

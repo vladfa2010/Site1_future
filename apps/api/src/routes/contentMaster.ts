@@ -525,7 +525,7 @@ function mockRewrite(text: string): { title: string; html: string; excerpt: stri
  *  оставляет прямо в финальном контенте вместо нормального ответа (2026-11-18:
  *  «Модель не вернула JSON: <｜｜DSML｜｜ calls>…»). Полные блоки calls → оборванный
  *  хвост без закрытия → остаточные теги. */
-function stripDsml(text: string): string {
+export function stripDsml(text: string): string {
   return text
     .replace(/<｜｜DSML｜｜\s*calls>[\s\S]*?<｜｜DSML｜｜\s*\/calls>/g, '')
     .replace(/<｜｜DSML｜｜\s*calls>[\s\S]*$/g, '')
@@ -537,7 +537,7 @@ function stripDsml(text: string): string {
  *  дописывала текст с фигурными скобками, JSON.parse падал
  *  («Unexpected non-whitespace character after JSON at position N», баг 2026-11-17).
  *  Сканируем с балансировкой скобок и учётом строк/экранировок. */
-function extractFirstJson(raw: string): string | null {
+export function extractFirstJson(raw: string): string | null {
   const start = raw.indexOf('{');
   if (start === -1) return null;
   let depth = 0;

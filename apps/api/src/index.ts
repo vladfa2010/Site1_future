@@ -26,6 +26,7 @@ import { adminPlansRouter } from './routes/adminPlans.js';
 import { searchRouter } from './routes/search.js';
 import { kimiSettingsRouter } from './routes/kimiSettings.js';
 import { contentMasterRouter } from './routes/contentMaster.js';
+import { aiSlopRouter } from './routes/aiSlop.js';
 import { telemetryRouter } from './routes/telemetry.js';
 import { metricsRouter } from './routes/metrics.js';
 import { trendingRouter } from './routes/trending.js';
@@ -57,6 +58,19 @@ process.on('uncaughtException', (reason) => {
 app.use(securityHeaders);
 app.use(corsAllowlist(config.corsOrigins));
 app.use('/api/', apiLimiter);
+
+// Пентест-ТЗ 2026-11 §6.1 (CVE-2026-111497 «Node2Shell»): отклоняем Content-Encoding
+// br ДО body-parser'ов — дефектный Brotli-декодер Node не должен получать трафик.
+// Defense-in-depth поверх миграции на Node 22 LTS. Проверка только заголовка — дёшево.
+app.use((req, res, next) => {
+  const enc = (req.get('Content-Encoding') || 'identity').trim().toLowerCase();
+  if (!['identity', 'gzip', 'deflate'].includes(enc)) {
+    res.status(415).json({ error: 'unsupported content-encoding — use gzip, deflate or none' });
+    return;
+  }
+  next();
+});
+
 app.use('/api/auth/login', loginLimiter);
 app.use('/api/auth/register', registerLimiter);
 app.use('/api/auth/forgot-password', forgotPasswordLimiter); // аудит 2026-11-14
@@ -95,6 +109,7 @@ app.use('/api', marketRouter);     // /market/chart
 app.use('/api', featuresRouter);   // /features + /admin/features (ПЕРЕД cabinet: у него router-wide auth)
 app.use('/api/admin/plans', adminPlansRouter); // админка тарифов (новая модель subscription_plans)
 app.use('/api/admin/content-master', contentMasterRouter); // AI-редактор черновиков
+app.use('/api/admin/ai-slop', aiSlopRouter); // аудит готового текста на ИИ-штампы (2026-11-20)
 app.use('/api', telemetryRouter); // публичная телеметрия (page-load)
 app.use('/api', cabinetRouter);    // /favorites /subscriptions /feed (auth) — ПОСЛЕДНИЙ: router.use(authRequired)
 

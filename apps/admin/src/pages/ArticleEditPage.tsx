@@ -5,6 +5,7 @@ import { api, isAdminRole } from '../api';
 import { useAuth } from '../auth';
 import PreviewModal from '../components/PreviewModal';
 import MediaPickerModal from '../components/MediaPickerModal';
+import AiSlopPanel from '../components/AiSlopPanel';
 import EntityCloud from '../components/EntityCloud';
 import { toEmbedUrl } from '../lib/video';
 
@@ -706,6 +707,9 @@ export default function ArticleEditPage() {
           </Suspense>
         </div>
       </div>
+
+      {/* Аудит готового текста на ИИ-штампы (2026-11-20): диагностика → исправление с подтверждением */}
+      <AiSlopPanel getHtml={() => form.contentHtml} onApply={(html) => { setForm((f) => ({ ...f, contentHtml: html })); setDirty(true); }} />
 
       {/* Обложка: текущая + генерация/загрузка */}
       <div className="card space-y-3">
