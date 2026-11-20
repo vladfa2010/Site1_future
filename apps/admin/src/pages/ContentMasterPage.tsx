@@ -731,6 +731,7 @@ export default function ContentMasterPage() {
         В рамках сессии модель помнит предыдущие ходы — можно просить «сделай короче», «добавь цифры».
       </p>
       {error && <p className="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-400">{error}</p>}
+      {aiNotice && <p className="rounded-lg bg-green-500/10 px-3 py-2 text-sm text-green-400">{aiNotice}</p>}
 
       {/* Сессии (ТЗ-13) */}
       <div className="card flex flex-wrap items-center gap-2">
@@ -1129,7 +1130,6 @@ export default function ContentMasterPage() {
             <button type="button" className="btn-secondary" onClick={() => void fillAll()} disabled={Boolean(aiBusy) || creating}>
               {aiBusy ? `Генерируем (${aiBusy})…` : '✨ Заполнить всё'}
             </button>
-            {aiNotice && <span className="text-xs text-zinc-400">{aiNotice}</span>}
             {created && <Link to={created.link} className="text-sm text-[#beff00] hover:underline">Открыть в редакторе →</Link>}
             <span className="text-xs text-zinc-600">Обложку можно поменять и в редакторе статьи</span>
           </div>
