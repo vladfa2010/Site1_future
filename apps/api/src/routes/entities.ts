@@ -413,6 +413,12 @@ entitiesRouter.post('/trends', authRequired, requireRole('admin', 'super_admin')
     return;
   }
   const { metaDescription, ...data } = parsed.data;
+  // 409 вместо пустого 500 при коллизии slug (как в статьях)
+  const [hit] = await db.select({ id: trends.id }).from(trends).where(eq(trends.slug, data.slug)).limit(1);
+  if (hit) {
+    res.status(409).json({ error: 'Такой slug уже есть у тренда', code: 'SLUG_EXISTS' });
+    return;
+  }
   const [row] = await db.insert(trends).values(data).returning();
   if (metaDescription) await saveTrendMeta(row.id, metaDescription);
   res.status(201).json({ trend: row });
