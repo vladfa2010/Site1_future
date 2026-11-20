@@ -101,6 +101,21 @@ mediaRouter.post('/media/generate', authRequired, requireRole('admin', 'super_ad
 
   try {
     const s = await getKimiSettings();
+    const mock = !s.apiKey;
+
+    // mock без ключа Kimi — детерминированная заглушка: НЕ плодим копии в медиатеке,
+    // переиспользуем одну запись (баг 2026-11-20: 5 одинаковых картинок в галерее)
+    if (mock) {
+      const [existing] = await db.select().from(media).where(eq(media.sourceUrl, 'mock-generator')).orderBy(desc(media.createdAt)).limit(1);
+      if (existing) {
+        if (articleId) {
+          await db.update(articles).set({ coverMediaId: existing.id }).where(eq(articles.id, articleId));
+        }
+        res.status(200).json({ media: existing, url: existing.filePath, mock: true, reused: true });
+        return;
+      }
+    }
+
     const img = await generateImage(prompt);
     const dir = path.resolve(config.uploadDir);
     await mkdir(dir, { recursive: true });
@@ -112,14 +127,14 @@ mediaRouter.post('/media/generate', authRequired, requireRole('admin', 'super_ad
     const url = `/uploads/${name}`;
     const [row] = await db
       .insert(media)
-      .values({ filePath: url, alt: prompt.slice(0, 120), sourceUrl: s.apiKey ? 'kimi-image-api' : 'mock-generator' })
+      .values({ filePath: url, alt: prompt.slice(0, 120), sourceUrl: mock ? 'mock-generator' : 'kimi-image-api' })
       .returning();
 
     if (articleId) {
       await db.update(articles).set({ coverMediaId: row.id }).where(eq(articles.id, articleId));
     }
 
-    res.status(201).json({ media: row, url, mock: !s.apiKey });
+    res.status(201).json({ media: row, url, mock });
   } catch (e) {
     res.status(502).json({ error: 'generation failed', message: e instanceof Error ? e.message : 'unknown' });
   }
