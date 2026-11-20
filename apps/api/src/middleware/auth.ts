@@ -13,6 +13,8 @@ export interface AuthUser {
   role: string;
   tariffId?: number | null;
   tariffExpiresAt?: string | null;
+  /** iat принятого токена (сек) — для абсолютного потолка сессии в /auth/refresh */
+  tokenIssuedAt?: number;
 }
 
 declare module 'express-serve-static-core' {
@@ -38,16 +40,26 @@ async function verifyToken(token: string): Promise<AuthUser | null> {
         tariffId: users.tariffId,
         tariffExpiresAt: users.tariffExpiresAt,
         isBlocked: users.isBlocked,
+        passwordChangedAt: users.passwordChangedAt, // аудит 2026-11-20: смена пароля инвалидирует сессии
       })
       .from(users)
       .where(eq(users.id, Number(payload.sub)))
       .limit(1);
     if (!u || u.isBlocked) return null; // удалён/заблокирован — токен не принимаем
+    // Сессионные JWT, выданные ДО смены пароля, не принимаем — иначе украденный
+    // токен живёт до конца TTL после смены пароля (аудит 2026-11-20). Строгое «раньше»:
+    // токен, выданный в ту же секунду, что и смена, или позже — валиден (иначе свежая
+    // сессия сразу после reset отлетала бы — гонка секундного разрешения iat).
+    if (u.passwordChangedAt && typeof payload.iat === 'number'
+        && payload.iat * 1000 < u.passwordChangedAt.getTime()) {
+      return null;
+    }
     return {
       id: u.id,
       role: u.role,
       tariffId: u.tariffId ?? null,
       tariffExpiresAt: u.tariffExpiresAt ? u.tariffExpiresAt.toISOString() : null,
+      tokenIssuedAt: typeof payload.iat === 'number' ? payload.iat : undefined,
     };
   } catch {
     return null;

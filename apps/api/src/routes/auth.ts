@@ -96,7 +96,16 @@ authRouter.get('/me', authRequired, async (req, res) => {
 // тихо обновляет токен, пока юзер активен. Принимает ДЕЙСТВУЮЩИЙ токен (authRequired
 // отсекает протухшие — тогда клиент сам ведёт на логин), проверяет что аккаунт жив,
 // и выдаёт новый полный TTL. Пароль не нужен.
+// Аудит 2026-11-20: АБСОЛЮТНЫЙ потолок сессии 72 ч — иначе украденный (особенно
+// админский, TTL 12 ч) токен продлевается refresh'ем бесконечно. Старше 72 ч —
+// отказ, клиент идёт на полный логин.
+const SESSION_ABSOLUTE_MAX_SEC = 72 * 3600;
+
 authRouter.post('/refresh', authRequired, async (req, res) => {
+  if (req.user!.tokenIssuedAt && Date.now() / 1000 - req.user!.tokenIssuedAt > SESSION_ABSOLUTE_MAX_SEC) {
+    res.status(401).json({ error: 'session expired, login again' });
+    return;
+  }
   const [user] = await db.select({
     id: users.id, role: users.role, isBlocked: users.isBlocked,
     tariffId: users.tariffId, tariffExpiresAt: users.tariffExpiresAt,
@@ -328,8 +337,10 @@ authRouter.post('/reset-password', async (req, res) => {
     return;
   }
   const passwordHash = await bcrypt.hash(parsed.data.password, 12);
+  // passwordChangedAt храним с секундным разрешением — как iat JWT: иначе легитимная
+  // сессия, созданная в ту же секунду, что и смена пароля, отлетала бы (аудит 2026-11-20)
   await db.update(users)
-    .set({ passwordHash, passwordChangedAt: new Date() })
+    .set({ passwordHash, passwordChangedAt: new Date(Math.floor(Date.now() / 1000) * 1000) })
     .where(eq(users.id, user.id));
   res.json({
     user: { id: user.id, email: user.email, role: user.role, displayName: user.displayName },
