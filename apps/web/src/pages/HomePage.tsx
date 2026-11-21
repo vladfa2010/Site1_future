@@ -190,10 +190,9 @@ export default function HomePage() {
                 <li key={t.slug}><Link to={`/trend/${t.slug}`}>{t.name}</Link></li>
               ))}
             </ul>
-            {/* твёрдая зона — ровно ширине карточки (240px), дальше затухание к прозрачному */}
-            <div className="pointer-events-none absolute inset-y-0 left-0 z-10 hidden w-[248px] flex-col justify-between bg-[linear-gradient(to_right,#09090b_0px,#09090b_216px,rgba(9,9,11,0)_248px)] p-5 pr-4 sm:flex">
-              {/* колонка текста — ровно ширине карточки (240px), как у карточек трендов */}
-              <div className="pointer-events-auto w-[192px]">
+            {/* интро-КАРТОЧКА слева: цельная панель — текст и кнопка строго внутри неё */}
+            <div className="pointer-events-none absolute inset-y-0 left-0 z-10 hidden w-[216px] flex-col justify-between rounded-l-2xl border-r border-zinc-800/60 bg-zinc-950 p-5 sm:flex">
+              <div className="pointer-events-auto">
                 <h3 className="text-xl font-bold uppercase tracking-wide text-[#c9ff2a]">Тренды</h3>
                 <p className="mt-3 text-sm leading-relaxed text-zinc-300">
                   То, что уже меняет мир. Великие идеи, инновации, новые сектора в экономике. То, о чем
@@ -202,11 +201,13 @@ export default function HomePage() {
               </div>
               <Link
                 to="/trends"
-                className="pointer-events-auto block w-[192px] rounded-full bg-[#beff00] px-4 py-2 text-center text-sm font-bold text-zinc-950 hover:bg-[#c9ff2a]"
+                className="pointer-events-auto block w-full rounded-full bg-[#beff00] px-4 py-2 text-center text-sm font-bold text-zinc-950 hover:bg-[#c9ff2a]"
               >
                 Посмотреть в будущее
               </Link>
             </div>
+            {/* короткое затухание после карточки — карусель растворяется, не упирается в край */}
+            <div className="pointer-events-none absolute inset-y-0 left-[216px] z-10 hidden w-[96px] bg-gradient-to-r from-zinc-950 to-transparent sm:block" />
             {/* скелетон: стильные карточки-заглушки с бегущим бликом, пока собираются текстуры */}
             {!carouselReady && (
               <div className="absolute inset-0 z-10 flex items-center gap-5 overflow-hidden rounded-2xl px-1" aria-hidden="true">
