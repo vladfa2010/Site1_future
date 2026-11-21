@@ -157,6 +157,12 @@ async function composeCardCanvas(
   aspectW: number,
   aspectH: number,
 ): Promise<HTMLCanvasElement> {
+  // метрики шрифта без загруженного шрифта дают неверный перенос — дожидаемся
+  try {
+    await document.fonts.ready;
+  } catch {
+    /* старые браузеры — рисуем системным */
+  }
   const W = 720;
   const H = Math.round((W * aspectH) / aspectW);
   const canvas = document.createElement("canvas");
@@ -342,7 +348,9 @@ const Plane: React.FC<PlaneProps> = ({
       if (cancelled) return;
       const tex = new THREE.CanvasTexture(canvas);
       tex.colorSpace = THREE.SRGBColorSpace;
-      tex.minFilter = THREE.LinearFilter;
+      // мипмапы: без них даунскейл 720×960 → 240×320 «резал» мелкий текст
+      tex.generateMipmaps = true;
+      tex.minFilter = THREE.LinearMipmapLinearFilter;
       tex.magFilter = THREE.LinearFilter;
       tex.wrapS = THREE.ClampToEdgeWrapping;
       tex.wrapT = THREE.ClampToEdgeWrapping;
