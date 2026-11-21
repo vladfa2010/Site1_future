@@ -1,4 +1,4 @@
-import { Suspense, lazy, useState } from 'react';
+import { Suspense, lazy } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 
@@ -46,7 +46,6 @@ const KNOWLEDGE = [
 
 export default function HomePage() {
   const navigate = useNavigate();
-  const [activeTrend, setActiveTrend] = useState(0);
   const q = {
     trends: useQuery({ queryKey: ['trends'], queryFn: () => api.trends() }),
     feed: useQuery({ queryKey: ['feed'], queryFn: () => api.articles() }), // лента событий: все типы, свежие сверху
@@ -114,7 +113,12 @@ export default function HomePage() {
           <div className="relative h-[340px] overflow-hidden rounded-2xl sm:h-[440px]">
             <Suspense fallback={<div className="flex h-full items-center justify-center rounded-lg border border-[#2a2a2a] text-zinc-500">Загружаем карусель…</div>}>
               <ParallaxCarousel
-                items={trends.trends.map((t) => ({ src: t.coverUrl ?? '', label: t.name, href: `/trend/${t.slug}` }))}
+                items={trends.trends.map((t) => ({
+                  src: t.coverUrl ?? '',
+                  label: t.name,
+                  description: t.description ? t.description.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 160) : undefined,
+                  href: `/trend/${t.slug}`,
+                }))}
                 imageWidth={240}
                 imageHeight={320}
                 gap={20}
@@ -125,26 +129,12 @@ export default function HomePage() {
                 autoplaySpeed={18}
                 pauseOnHover
                 showProgress={false}
-                onActiveChange={(i) => setActiveTrend(i)}
                 onItemClick={(i) => {
                   const t = trends.trends[i];
                   if (t) navigate(`/trend/${t.slug}`);
                 }}
               />
             </Suspense>
-            {/* подпись центрального тренда: имя + описание (как было на карточках) — не блокирует drag */}
-            {trends.trends[activeTrend] && (
-              <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-zinc-950/95 via-zinc-950/50 to-transparent px-4 pb-3 pt-12">
-                <span className="text-base font-bold uppercase tracking-wide text-[#c9ff2a]">
-                  {trends.trends[activeTrend].name}
-                </span>
-                {trends.trends[activeTrend].description && (
-                  <p className="mt-1 line-clamp-2 max-w-2xl text-sm text-zinc-300">
-                    {trends.trends[activeTrend].description.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 220)}
-                  </p>
-                )}
-              </div>
-            )}
           </div>
           <p className="mt-3 text-sm text-zinc-500">
             То, что уже меняет мир. Великие идеи, инновации, новые сектора в экономике —{' '}

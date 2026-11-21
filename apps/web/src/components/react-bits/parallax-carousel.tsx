@@ -14,6 +14,8 @@ import { cn } from "@/lib/utils";
 export interface ParallaxCarouselItem {
   src: string;
   label?: string;
+  /** описание — запекается в текстуру плоскости (внутри карточки) */
+  description?: string;
   href?: string;
 }
 
@@ -142,6 +144,104 @@ function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
 }
 
+/** Подпись (название + описание) запечена внутрь текстуры — как на старых карточках трендов. */
+interface CardCaption {
+  title?: string;
+  text?: string;
+}
+
+/** Canvas 3:4: обложка (cover) + нижний градиент + название/описание. */
+async function composeCardCanvas(
+  src: string,
+  caption: CardCaption | undefined,
+  aspectW: number,
+  aspectH: number,
+): Promise<HTMLCanvasElement> {
+  const W = 720;
+  const H = Math.round((W * aspectH) / aspectW);
+  const canvas = document.createElement("canvas");
+  canvas.width = W;
+  canvas.height = H;
+  const ctx = canvas.getContext("2d")!;
+  const bg = ctx.createLinearGradient(0, 0, 0, H);
+  bg.addColorStop(0, "#18181b");
+  bg.addColorStop(1, "#09090b");
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, W, H);
+
+  if (src) {
+    await new Promise<void>((resolve) => {
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      img.onload = () => {
+        const scale = Math.max(W / img.naturalWidth, H / img.naturalHeight);
+        const w = img.naturalWidth * scale;
+        const h = img.naturalHeight * scale;
+        ctx.drawImage(img, (W - w) / 2, (H - h) / 2, w, h);
+        resolve();
+      };
+      img.onerror = () => resolve();
+      img.src = src;
+    });
+  }
+
+  if (caption?.title) {
+    const g = ctx.createLinearGradient(0, H * 0.45, 0, H);
+    g.addColorStop(0, "rgba(9,9,11,0)");
+    g.addColorStop(1, "rgba(9,9,11,0.94)");
+    ctx.fillStyle = g;
+    ctx.fillRect(0, H * 0.45, W, H * 0.55);
+
+    const pad = Math.round(W * 0.06);
+    const font = (px: number, weight: number) =>
+      `${weight} ${Math.round(px)}px Inter, -apple-system, 'Segoe UI', Roboto, sans-serif`;
+
+    if (caption.text) {
+      ctx.fillStyle = "#d4d4d8";
+      ctx.font = font(W * 0.042, 400);
+      const maxW = W - pad * 2;
+      const words = caption.text.split(/\s+/).filter(Boolean);
+      const lines: string[] = [];
+      let cur = "";
+      for (const w of words) {
+        const t = cur ? `${cur} ${w}` : w;
+        if (ctx.measureText(t).width > maxW && cur) {
+          lines.push(cur);
+          cur = w;
+          if (lines.length === 2) {
+            cur = "";
+            break;
+          }
+        } else {
+          cur = t;
+        }
+      }
+      if (cur && lines.length < 2) lines.push(cur);
+      const truncated = lines.length === 2 && (cur === "" || words.join(" ").length > lines.join(" ").length + 1);
+      if (truncated && lines[1]) {
+        let last = `${lines[1]}…`;
+        while (ctx.measureText(last).width > maxW && last.length > 2) {
+          last = `${last.slice(0, -2)}…`;
+        }
+        lines[1] = last;
+      }
+      let y = H - pad - (lines.length - 1) * W * 0.056;
+      for (const line of lines) {
+        ctx.fillText(line, pad, y);
+        y += W * 0.056;
+      }
+    }
+
+    ctx.fillStyle = "#c9ff2a";
+    ctx.font = font(W * 0.058, 700);
+    const titleY = caption.text
+      ? H - pad - Math.min(2, caption.text.split(/\s+/).length > 0 ? 2 : 1) * W * 0.056 - W * 0.075
+      : H - pad;
+    ctx.fillText(caption.title.toUpperCase(), pad, Math.max(titleY, H * 0.6));
+  }
+  return canvas;
+}
+
 function buildUniforms() {
   return {
     uMap: { value: null as THREE.Texture | null },
@@ -164,6 +264,7 @@ interface ScrollState {
 interface PlaneProps {
   src: string;
   index: number;
+  caption?: CardCaption;
   /** разнообразие глубины: ±25% к интенсивности параллакса (2026-11-21) */
   variance: number;
   /** вертикальное смещение плоскости — «лесенка» вместо конвейера */
@@ -183,6 +284,7 @@ interface PlaneProps {
 const Plane: React.FC<PlaneProps> = ({
   src,
   index,
+  caption,
   variance,
   yOffset,
   onItemClick,
@@ -232,29 +334,22 @@ const Plane: React.FC<PlaneProps> = ({
   ]);
 
   useEffect(() => {
-    if (!src) return;
+    // подпись всегда «внутри карточки»: рисуем обложку+текст на canvas, текстуру из него
     let cancelled = false;
-    const loader = new THREE.TextureLoader();
-    loader.setCrossOrigin("anonymous");
-    loader.load(
-      src,
-      (tex) => {
-        if (cancelled) {
-          tex.dispose();
-          return;
-        }
-        tex.colorSpace = THREE.SRGBColorSpace;
-        tex.minFilter = THREE.LinearFilter;
-        tex.magFilter = THREE.LinearFilter;
-        tex.wrapS = THREE.ClampToEdgeWrapping;
-        tex.wrapT = THREE.ClampToEdgeWrapping;
-        textureRef.current = tex;
-      },
-      undefined,
-      () => {
-        if (!cancelled) textureRef.current = null;
-      },
-    );
+    void (async () => {
+      const pr = propsRef.current;
+      const canvas = await composeCardCanvas(src, caption, pr.imageWidth, pr.imageHeight);
+      if (cancelled) return;
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      tex.minFilter = THREE.LinearFilter;
+      tex.magFilter = THREE.LinearFilter;
+      tex.wrapS = THREE.ClampToEdgeWrapping;
+      tex.wrapT = THREE.ClampToEdgeWrapping;
+      textureRef.current = tex;
+    })().catch(() => {
+      if (!cancelled) textureRef.current = null;
+    });
     return () => {
       cancelled = true;
       if (textureRef.current) {
@@ -262,7 +357,7 @@ const Plane: React.FC<PlaneProps> = ({
         textureRef.current = null;
       }
     };
-  }, [src]);
+  }, [src, caption]);
 
   useFrame(() => {
     const mesh = meshRef.current;
@@ -636,6 +731,7 @@ const ParallaxCarousel = React.forwardRef<
               loop={loop}
               variance={0.75 + 0.5 * (((i * 7919) % 97) / 97)}
               yOffset={((i % 3) - 1) * 10}
+              caption={resolvedItems[i] ? { title: resolvedItems[i].label, text: resolvedItems[i].description } : undefined}
               totalCount={resolvedImages.length}
               scrollRef={scrollRef}
             />
