@@ -216,7 +216,7 @@ export default function HomePage() {
               </div>
             )}
             <Suspense fallback={<div className="flex h-full items-center justify-center rounded-lg border border-[#2a2a2a] text-zinc-500">Загружаем карусель…</div>}>
-              <CarouselBoundary fallback={<div className="h-full"><TrendsFallback trends={trends.trends} /></div>}>
+              <CarouselBoundary fallback={<div className="relative z-20 h-full bg-zinc-950 p-2"><TrendsFallback trends={trends.trends} /></div>}>
               <ParallaxCarousel
                 items={trendItems}
                 imageWidth={240}

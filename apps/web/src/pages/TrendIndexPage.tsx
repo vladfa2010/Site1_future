@@ -13,7 +13,7 @@ interface Trend {
 /** Подборка всех трендов — куда ведёт «Посмотреть в будущее» с главной. */
 export default function TrendIndexPage() {
   const { data, isLoading } = useQuery({
-    queryKey: ['trends-index'],
+    queryKey: ['trends'],
     queryFn: () => fetch('/api/trends').then((r) => r.json() as Promise<{ trends: Trend[] }>),
     staleTime: 60_000,
   });

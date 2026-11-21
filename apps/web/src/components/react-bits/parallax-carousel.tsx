@@ -402,13 +402,30 @@ const Plane: React.FC<PlaneProps> = ({
       ]);
       if (cancelled) return;
       textureRef.current = makeTex(imgCanvas);
-      capTextureRef.current = makeTex(capCanvas);
-      setCapTex(capTextureRef.current);
+      // сразу назначаем в uniforms: если frameloop="never" (старт вне вьюпорта),
+      // useFrame не крутится — без этого карточки остались бы тёмными до появления на экране
+      const mesh = meshRef.current;
+      if (mesh) {
+        const u = (mesh.material as THREE.ShaderMaterial).uniforms;
+        u.uMap.value = textureRef.current;
+        u.uTexPx.value.set(imgCanvas.width, imgCanvas.height);
+        u.uHasTexture.value = 1;
+      }
+      if (caption?.title) {
+        capTextureRef.current = makeTex(capCanvas);
+        setCapTex(capTextureRef.current);
+      } else {
+        capTextureRef.current = null;
+        setCapTex(null);
+      }
       onReadyRef.current?.(); // скелетон можно убирать — первые карточки готовы
     })().catch(() => {
       if (!cancelled) {
         textureRef.current = null;
         capTextureRef.current = null;
+        setCapTex(null);
+        // скелетон убираем даже при ошибке — покажем тёмную заглушку, не вечный шиммер
+        onReadyRef.current?.();
       }
     });
     return () => {
@@ -659,6 +676,12 @@ const ParallaxCarousel = React.forwardRef<
         const settings = settingsRef.current;
 
         const last = lastFrameTsRef.current ?? now;
+        if (pausedRef.current) {
+          // вне вьюпорта: не считаем lerp/autoplay впустую (батарея) — просто держим цикл
+          lastFrameTsRef.current = now;
+          rafRef.current = requestAnimationFrame(tick);
+          return;
+        }
         // кап 100 мс: после джанка загрузки/фоновой вкладки НЕ догоняем пропущенное —
         // иначе автоплей телепортирует карусель вперёд одним скачком
         const dt = Math.min(Math.max(0, (now - last) / 1000), 0.1);
