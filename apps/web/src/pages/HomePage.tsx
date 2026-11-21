@@ -119,8 +119,8 @@ export default function HomePage() {
                 imageHeight={320}
                 gap={20}
                 borderRadius={16}
-                parallaxIntensity={0.15}
-                uvScale={0.7}
+                parallaxIntensity={0.1}
+                uvScale={0.65}
                 loop
                 autoplaySpeed={18}
                 pauseOnHover
