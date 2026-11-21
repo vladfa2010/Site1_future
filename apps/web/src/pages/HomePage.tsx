@@ -111,7 +111,7 @@ export default function HomePage() {
             <h2 className="text-lg font-semibold uppercase tracking-wide text-zinc-400">Тренды</h2>
             <Link to="/trends" className="text-sm">все →</Link>
           </div>
-          <div className="relative h-[340px] sm:h-[440px]">
+          <div className="relative h-[340px] overflow-hidden rounded-2xl sm:h-[440px]">
             <Suspense fallback={<div className="flex h-full items-center justify-center rounded-lg border border-[#2a2a2a] text-zinc-500">Загружаем карусель…</div>}>
               <ParallaxCarousel
                 items={trends.trends.map((t) => ({ src: t.coverUrl ?? '', label: t.name, href: `/trend/${t.slug}` }))}
@@ -132,11 +132,18 @@ export default function HomePage() {
                 }}
               />
             </Suspense>
-            {/* подпись центрального тренда — поверх canvas, не блокирует drag */}
+            {/* подпись центрального тренда: имя + описание (как было на карточках) — не блокирует drag */}
             {trends.trends[activeTrend] && (
-              <span className="pointer-events-none absolute bottom-3 left-3 rounded-full bg-zinc-950/80 px-3 py-1 text-sm font-bold uppercase tracking-wide text-[#c9ff2a] backdrop-blur-sm">
-                {trends.trends[activeTrend].name}
-              </span>
+              <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-zinc-950/95 via-zinc-950/50 to-transparent px-4 pb-3 pt-12">
+                <span className="text-base font-bold uppercase tracking-wide text-[#c9ff2a]">
+                  {trends.trends[activeTrend].name}
+                </span>
+                {trends.trends[activeTrend].description && (
+                  <p className="mt-1 line-clamp-2 max-w-2xl text-sm text-zinc-300">
+                    {trends.trends[activeTrend].description.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 220)}
+                  </p>
+                )}
+              </div>
             )}
           </div>
           <p className="mt-3 text-sm text-zinc-500">
