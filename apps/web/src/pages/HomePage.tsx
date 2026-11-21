@@ -111,6 +111,20 @@ export default function HomePage() {
             <Link to="/trends" className="text-sm">все →</Link>
           </div>
           <div className="relative h-[340px] overflow-hidden rounded-2xl sm:h-[440px]">
+            {/* статичный интро-блок (был первым элементом карусели до WebGL): поверх canvas слева */}
+            <div className="absolute inset-y-0 left-0 z-10 flex w-[240px] flex-col rounded-l-2xl border border-[#beff00]/30 bg-gradient-to-br from-zinc-900 to-zinc-950 p-5 sm:w-[280px]">
+              <h3 className="text-xl font-bold uppercase tracking-wide text-[#c9ff2a]">Тренды</h3>
+              <p className="mt-3 text-sm leading-relaxed text-zinc-300">
+                То, что уже меняет мир. Великие идеи, инновации, новые сектора в экономике. То, о чем
+                большинство узнают в будущем… а ты сейчас!
+              </p>
+              <Link
+                to="/trends"
+                className="mt-auto rounded-full bg-[#beff00] px-4 py-2 text-center text-sm font-bold text-zinc-950 hover:bg-[#c9ff2a]"
+              >
+                Посмотреть в будущее
+              </Link>
+            </div>
             <Suspense fallback={<div className="flex h-full items-center justify-center rounded-lg border border-[#2a2a2a] text-zinc-500">Загружаем карусель…</div>}>
               <ParallaxCarousel
                 items={trends.trends.map((t) => ({
@@ -136,10 +150,6 @@ export default function HomePage() {
               />
             </Suspense>
           </div>
-          <p className="mt-3 text-sm text-zinc-500">
-            То, что уже меняет мир. Великие идеи, инновации, новые сектора в экономике —{' '}
-            <Link to="/trends" className="text-[#c9ff2a] hover:underline">посмотреть в будущее →</Link>
-          </p>
         </section>
       )}
 
