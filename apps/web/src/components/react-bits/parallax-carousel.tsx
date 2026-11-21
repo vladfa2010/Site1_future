@@ -220,6 +220,10 @@ async function composeCaptionCanvas(
   const font = (px: number, weight: number) =>
     `${weight} ${Math.round(px)}px Inter, -apple-system, 'Segoe UI', Roboto, sans-serif`;
 
+  // ФИКСИРОВАННАЯ сетка: у всех карточек заголовок на одной базовой линии,
+  // описание — в двух фиксированных слотах под ним (не прыгает от карточки к карточке)
+  const titleY = H - pad - 2 * W * 0.056 - W * 0.075;
+
   if (caption.text) {
     ctx.fillStyle = "#d4d4d8";
     ctx.font = font(W * 0.042, 400);
@@ -249,19 +253,15 @@ async function composeCaptionCanvas(
       }
       lines[1] = last;
     }
-    let y = H - pad - (lines.length - 1) * W * 0.056;
-    for (const line of lines) {
-      ctx.fillText(line, pad, y);
-      y += W * 0.056;
-    }
+    // слоты жёстко прибиты: первая строка сразу под заголовком, вторая — ниже
+    const slot1 = titleY + W * 0.075;
+    if (lines[0]) ctx.fillText(lines[0], pad, slot1);
+    if (lines[1]) ctx.fillText(lines[1], pad, slot1 + W * 0.056);
   }
 
   ctx.fillStyle = "#c9ff2a";
   ctx.font = font(W * 0.058, 700);
-  const titleY = caption.text
-    ? H - pad - 2 * W * 0.056 - W * 0.075
-    : H - pad;
-  ctx.fillText(caption.title.toUpperCase(), pad, Math.max(titleY, H * 0.6));
+  ctx.fillText(caption.title.toUpperCase(), pad, titleY);
   return canvas;
 }
 
@@ -797,7 +797,7 @@ const ParallaxCarousel = React.forwardRef<
               borderRadius={borderRadius}
               loop={loop}
               variance={0.75 + 0.5 * (((i * 7919) % 97) / 97)}
-              yOffset={((i % 3) - 1) * 10}
+              yOffset={0}
               caption={resolvedItems[i] ? { title: resolvedItems[i].label, text: resolvedItems[i].description } : undefined}
               totalCount={resolvedImages.length}
               scrollRef={scrollRef}
