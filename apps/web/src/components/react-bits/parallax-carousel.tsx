@@ -164,6 +164,10 @@ interface ScrollState {
 interface PlaneProps {
   src: string;
   index: number;
+  /** разнообразие глубины: ±25% к интенсивности параллакса (2026-11-21) */
+  variance: number;
+  /** вертикальное смещение плоскости — «лесенка» вместо конвейера */
+  yOffset: number;
   onItemClick?: (index: number) => void;
   imageWidth: number;
   imageHeight: number;
@@ -179,6 +183,8 @@ interface PlaneProps {
 const Plane: React.FC<PlaneProps> = ({
   src,
   index,
+  variance,
+  yOffset,
   onItemClick,
   imageWidth,
   imageHeight,
@@ -279,14 +285,17 @@ const Plane: React.FC<PlaneProps> = ({
     }
 
     mesh.position.x = offsetPx;
-    mesh.position.y = 0;
-    mesh.scale.set(p.imageWidth, p.imageHeight, 1);
+    mesh.position.y = yOffset;
 
     const viewport = Math.max(size.width, 1);
     const norm = clamp(offsetPx / viewport, -p.uvScale, p.uvScale);
     u.uShift.value = -norm;
-    u.uIntensity.value = p.parallaxIntensity;
-    u.uMaxShift.value = p.uvScale * p.parallaxIntensity;
+    // глубина разная у каждой плоскости — параллакс не «конвейерный»
+    u.uIntensity.value = p.parallaxIntensity * variance;
+    u.uMaxShift.value = p.uvScale * p.parallaxIntensity * variance;
+    // уклон в центр: крайние плоскости чуть меньше (до −8%)
+    const scaleMul = 1 - 0.08 * Math.min(1, Math.abs(offsetPx) / viewport);
+    mesh.scale.set(p.imageWidth * scaleMul, p.imageHeight * scaleMul, 1);
     u.uRadiusPx.value = p.borderRadius;
     (u.uPlanePx.value as THREE.Vector2).set(p.imageWidth, p.imageHeight);
 
@@ -625,6 +634,8 @@ const ParallaxCarousel = React.forwardRef<
               uvScale={uvScale}
               borderRadius={borderRadius}
               loop={loop}
+              variance={0.75 + 0.5 * (((i * 7919) % 97) / 97)}
+              yOffset={((i % 3) - 1) * 10}
               totalCount={resolvedImages.length}
               scrollRef={scrollRef}
             />
