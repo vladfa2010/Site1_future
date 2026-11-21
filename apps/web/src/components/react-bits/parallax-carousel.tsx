@@ -173,15 +173,20 @@ async function composeCardCanvas(
   if (src) {
     await new Promise<void>((resolve) => {
       const img = new Image();
+      const timer = setTimeout(() => resolve(), 8000); // зависший запрос — тёмная заглушка, не вечное ожидание
       img.crossOrigin = "anonymous";
       img.onload = () => {
+        clearTimeout(timer);
         const scale = Math.max(W / img.naturalWidth, H / img.naturalHeight);
         const w = img.naturalWidth * scale;
         const h = img.naturalHeight * scale;
         ctx.drawImage(img, (W - w) / 2, (H - h) / 2, w, h);
         resolve();
       };
-      img.onerror = () => resolve();
+      img.onerror = () => {
+        clearTimeout(timer);
+        resolve();
+      };
       img.src = src;
     });
   }
@@ -487,16 +492,18 @@ const Plane: React.FC<PlaneProps> = ({
           transparent
         />
       </mesh>
-      {/* слой подписи: обычный материал без параллакс-сдвига */}
-      <mesh ref={capMeshRef} renderOrder={1}>
-        <planeGeometry args={[1, 1, 1, 1]} />
-        <meshBasicMaterial
-          key={capTex ? "with-map" : "no-map"}
-          map={capTex ?? undefined}
-          transparent
-          depthWrite={false}
-        />
-      </mesh>
+      {/* слой подписи: монтируем ТОЛЬКО с готовой текстурой — без map материал
+          рисует белый непрозрачный квад поверх карточки (белые заглушки) */}
+      {capTex && (
+        <mesh ref={capMeshRef} renderOrder={1}>
+          <planeGeometry args={[1, 1, 1, 1]} />
+          <meshBasicMaterial
+            map={capTex}
+            transparent
+            depthWrite={false}
+          />
+        </mesh>
+      )}
     </>
   );
 };
