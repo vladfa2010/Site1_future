@@ -28,6 +28,8 @@ export interface ParallaxCarouselProps {
   onActiveChange?: (index: number) => void;
   /** Клик по плоскости (навигация). */
   onItemClick?: (index: number) => void;
+  /** Пауза рендера/автоплея (секция вне вьюпорта) — экономия батареи. */
+  paused?: boolean;
   /** Plane width in CSS pixels. */
   imageWidth?: number;
   /** Plane height in CSS pixels. */
@@ -156,7 +158,7 @@ async function composeCardCanvas(
   aspectW: number,
   aspectH: number,
 ): Promise<HTMLCanvasElement> {
-  const W = 720;
+  const W = 520; // на экране плоскость 240px — 520 хватает с mipmaps, экономим ~50% GPU-памяти
   const H = Math.round((W * aspectH) / aspectW);
   const canvas = document.createElement("canvas");
   canvas.width = W;
@@ -195,7 +197,7 @@ async function composeCaptionCanvas(
   aspectW: number,
   aspectH: number,
 ): Promise<HTMLCanvasElement> {
-  const W = 720;
+  const W = 520;
   const H = Math.round((W * aspectH) / aspectW);
   const canvas = document.createElement("canvas");
   canvas.width = W;
@@ -360,6 +362,10 @@ const Plane: React.FC<PlaneProps> = ({
     loop,
   ]);
 
+  // caption — inline-объект от родителя: сравниваем по содержимому, иначе текстуры
+  // всех плоскостей пересоздаются на каждый ре-рендер HomePage
+  const capKey = `${caption?.title ?? ""}|${caption?.text ?? ""}`;
+
   useEffect(() => {
     // ДВА слоя: изображение (параллаксится через UV-сдвиг в шейдере) и подпись
     // (отдельная полупрозрачная текстура БЕЗ сдвига — текст статичен внутри карточки)
@@ -397,7 +403,8 @@ const Plane: React.FC<PlaneProps> = ({
       textureRef.current = null;
       capTextureRef.current = null;
     };
-  }, [src, caption]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [src, capKey]);
 
   useFrame(() => {
     const mesh = meshRef.current;
@@ -481,9 +488,10 @@ const Plane: React.FC<PlaneProps> = ({
         />
       </mesh>
       {/* слой подписи: обычный материал без параллакс-сдвига */}
-      <mesh ref={capMeshRef}>
+      <mesh ref={capMeshRef} renderOrder={1}>
         <planeGeometry args={[1, 1, 1, 1]} />
         <meshBasicMaterial
+          key={capTex ? "with-map" : "no-map"}
           map={capTex ?? undefined}
           transparent
           depthWrite={false}
@@ -524,6 +532,7 @@ const ParallaxCarousel = React.forwardRef<
       items,
       onActiveChange,
       onItemClick,
+      paused = false,
       imageWidth = 420,
       imageHeight = 560,
       gap = 32,
@@ -623,6 +632,10 @@ const ParallaxCarousel = React.forwardRef<
 
     const tickRef = useRef<((now: number) => void) | null>(null);
     const lastActiveRef = useRef(0);
+    const pausedRef = useRef(paused);
+    useEffect(() => {
+      pausedRef.current = paused;
+    }, [paused]);
     useEffect(() => {
       const tick = (now: number) => {
         const s = scrollRef.current;
@@ -633,6 +646,7 @@ const ParallaxCarousel = React.forwardRef<
         lastFrameTsRef.current = now;
 
         if (
+          !pausedRef.current &&
           settings.autoplaySpeed !== 0 &&
           !draggingRef.current &&
           !(settings.pauseOnHover && hoverRef.current)
@@ -679,24 +693,34 @@ const ParallaxCarousel = React.forwardRef<
       const node = containerRef.current;
       if (!node) return;
 
+      // колесо: перехватываем ТОЛЬКО горизонтальный жест (трекпад) — иначе страницу
+      // невозможно проскроллить мимо карусели; вертикальный скролл идёт как обычно
       const onWheel = (e: WheelEvent) => {
-        // иначе страница скроллится ВМЕСТЕ с каруселью (двойное движение)
+        if (Math.abs(e.deltaX) <= Math.abs(e.deltaY)) return;
         e.preventDefault();
         const settings = settingsRef.current;
-        const delta =
-          Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
-        scrollRef.current.target += delta * settings.wheelSensitivity;
+        scrollRef.current.target += e.deltaX * settings.wheelSensitivity;
       };
 
+      let captured = false;
+      let downX = 0;
       const onPointerDown = (e: PointerEvent) => {
+        if (e.button !== 0) return; // правый клик — не драг
         draggingRef.current = true;
+        captured = false;
+        downX = e.clientX;
         lastPointerXRef.current = e.clientX;
-        node.setPointerCapture(e.pointerId);
         node.style.cursor = "grabbing";
       };
 
       const onPointerMove = (e: PointerEvent) => {
         if (!draggingRef.current) return;
+        // захват пойнтера только когда реально начался драг — иначе capture ретаргетит
+        // click на контейнер и onItemClick плоскости (клик по карточке) не срабатывает
+        if (!captured && Math.abs(e.clientX - downX) > 4) {
+          captured = true;
+          node.setPointerCapture(e.pointerId);
+        }
         const settings = settingsRef.current;
         const dx = e.clientX - lastPointerXRef.current;
         lastPointerXRef.current = e.clientX;
@@ -706,10 +730,13 @@ const ParallaxCarousel = React.forwardRef<
       const onPointerUp = (e: PointerEvent) => {
         if (!draggingRef.current) return;
         draggingRef.current = false;
-        try {
-          node.releasePointerCapture(e.pointerId);
-        } catch {
-          /* ignore */
+        if (captured) {
+          try {
+            node.releasePointerCapture(e.pointerId);
+          } catch {
+            /* ignore */
+          }
+          captured = false;
         }
         node.style.cursor = "grab";
       };
@@ -778,7 +805,7 @@ const ParallaxCarousel = React.forwardRef<
           ...style,
         }}
       >
-        <Canvas
+        <Canvas frameloop={paused ? "never" : "always"}
           gl={{ antialias: true, alpha: true }}
           dpr={[1, 2]}
           className="absolute! inset-0 w-full h-full"

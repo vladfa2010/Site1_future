@@ -1,4 +1,4 @@
-import { Suspense, lazy } from 'react';
+import React, { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 
@@ -44,8 +44,51 @@ const KNOWLEDGE = [
   { title: 'Личная консультация', desc: 'Разбор вашего портфеля и стратегии', bg: 'from-cyan-600/40 to-zinc-900' },
 ];
 
+/** Деградация без WebGL: вместо белого экрана — обычный список карточек трендов. */
+class CarouselBoundary extends React.Component<{ children: React.ReactNode; fallback: React.ReactNode }, { err: boolean }> {
+  state = { err: false };
+  static getDerivedStateFromError() {
+    return { err: true };
+  }
+  render() {
+    return this.state.err ? this.props.fallback : this.props.children;
+  }
+}
+
+function TrendsFallback({ trends }: { trends: { slug: string; name: string; coverUrl: string | null }[] }) {
+  return (
+    <div className="flex gap-4 overflow-x-auto pb-2">
+      {trends.map((t) => (
+        <Link key={t.slug} to={`/trend/${t.slug}`} className="group w-[240px] shrink-0">
+          <div className="relative flex aspect-[3/4] w-full flex-col justify-end overflow-hidden rounded-lg border border-[#2a2a2a] bg-gradient-to-br from-zinc-800 to-zinc-900 p-4 group-hover:border-[#beff00]/50">
+            {t.coverUrl && <img src={t.coverUrl} alt={t.name} loading="lazy" className="absolute inset-0 h-full w-full object-cover" />}
+            <div className="absolute inset-0 bg-gradient-to-t from-zinc-950/80 to-transparent" />
+            <h3 className="relative text-lg font-bold uppercase tracking-wide text-[#c9ff2a]">{t.name}</h3>
+          </div>
+        </Link>
+      ))}
+    </div>
+  );
+}
+
 export default function HomePage() {
   const navigate = useNavigate();
+  // prefers-reduced-motion: автоплей выключаем по системной настройке
+  const reduceMotion = useMemo(
+    () => (typeof window !== 'undefined' ? window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false : false),
+    [],
+  );
+  // пауза рендера карусели вне вьюпорта (батарея/вентилятор)
+  const carouselWrapRef = useRef<HTMLDivElement>(null);
+  const [carouselInView, setCarouselInView] = useState(true);
+  useEffect(() => {
+    const el = carouselWrapRef.current;
+    if (!el || typeof IntersectionObserver === 'undefined') return;
+    const io = new IntersectionObserver(([e]) => setCarouselInView(e.isIntersecting), { threshold: 0.05 });
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+
   const q = {
     trends: useQuery({ queryKey: ['trends'], queryFn: () => api.trends() }),
     feed: useQuery({ queryKey: ['feed'], queryFn: () => api.articles() }), // лента событий: все типы, свежие сверху
@@ -58,6 +101,20 @@ export default function HomePage() {
     analitika: useQuery({ queryKey: ['analitika'], queryFn: () => api.articles('analitika') }),
   };
   const { data: trends } = q.trends;
+
+  // мемо: структурно те же данные → тот же массив (аудит: inline-items пересоздавали текстуры 22 плоскостей)
+  const trendItems = useMemo(
+    () =>
+      (trends?.trends ?? []).map((t) => ({
+        src: t.coverUrl ?? '',
+        label: t.name,
+        description: t.description
+          ? t.description.replace(/<(script|style|noscript)[\s\S]*?<\/\1>/gi, ' ').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 160)
+          : undefined,
+        href: `/trend/${t.slug}`,
+      })),
+    [trends],
+  );
   const { data: feed } = q.feed;
   const { data: news } = q.news;
   const { data: pipeline } = q.pipeline;
@@ -124,8 +181,14 @@ export default function HomePage() {
               Посмотреть в будущее
             </Link>
           </div>
-          <div className="relative h-[340px] overflow-hidden rounded-2xl sm:h-[440px]">
+          <div ref={carouselWrapRef} className="relative h-[340px] overflow-hidden rounded-2xl sm:h-[440px]">
             {/* интро-блок слева: не карточка, а полоса с затемнением — тренды визуально уходят В НЕЁ */}
+            {/* доступность: canvas недостижим с клавиатуры — дублируем ссылки screen-reader'ом */}
+            <ul className="sr-only">
+              {trends.trends.map((t) => (
+                <li key={t.slug}><Link to={`/trend/${t.slug}`}>{t.name}</Link></li>
+              ))}
+            </ul>
             {/* твёрдая зона — ровно ширине карточки (240px), дальше затухание к прозрачному */}
             <div className="pointer-events-none absolute inset-y-0 left-0 z-10 hidden w-[310px] flex-col justify-between bg-[linear-gradient(to_right,#09090b_0px,#09090b_240px,rgba(9,9,11,0)_310px)] p-5 pr-10 sm:flex">
               {/* колонка текста — ровно ширине карточки (240px), как у карточек трендов */}
@@ -144,13 +207,9 @@ export default function HomePage() {
               </Link>
             </div>
             <Suspense fallback={<div className="flex h-full items-center justify-center rounded-lg border border-[#2a2a2a] text-zinc-500">Загружаем карусель…</div>}>
+              <CarouselBoundary fallback={<div className="h-full"><TrendsFallback trends={trends.trends} /></div>}>
               <ParallaxCarousel
-                items={trends.trends.map((t) => ({
-                  src: t.coverUrl ?? '',
-                  label: t.name,
-                  description: t.description ? t.description.replace(/<(script|style|noscript)[\s\S]*?<\/\1>/gi, ' ').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 160) : undefined,
-                  href: `/trend/${t.slug}`,
-                }))}
+                items={trendItems}
                 imageWidth={240}
                 imageHeight={320}
                 gap={20}
@@ -158,14 +217,16 @@ export default function HomePage() {
                 parallaxIntensity={0.1}
                 uvScale={0.65}
                 loop
-                autoplaySpeed={18}
+                autoplaySpeed={reduceMotion ? 0 : 18}
                 pauseOnHover
+                paused={!carouselInView}
                 showProgress={false}
                 onItemClick={(i) => {
                   const t = trends.trends[i];
                   if (t) navigate(`/trend/${t.slug}`);
                 }}
               />
+              </CarouselBoundary>
             </Suspense>
           </div>
         </section>
