@@ -63,6 +63,7 @@ export default function App() {
                   <Route path="/companies" element={<CompaniesPage />} />
                   <Route path="/companies/:slug/edit" element={<CompanyEditPage />} />
                   <Route path="/trends" element={<TrendsPage />} />
+                  <Route path="/trends/new" element={<TrendEditPage />} />
                   <Route path="/trends/:id/edit" element={<TrendEditPage />} />
                   <Route path="/industries" element={<DictionariesPage />} />
                   <Route path="/tickers" element={<TickersPage />} />

@@ -1,17 +1,31 @@
 import { useEffect, useRef, useState } from 'react';
-import { useParams } from 'react-router';
+import { useNavigate, useParams } from 'react-router';
 import { api } from '../api';
 import { RichTextEditor } from '../components/RichTextEditor';
 import MediaPickerModal from '../components/MediaPickerModal';
 import { stripHtml } from '@newinvest/db/text-utils';
 
+/** Заголовок → slug (транслит, как везде на платформе). */
+function slugify(title: string): string {
+  const map: Record<string, string> = {
+    а: 'a', б: 'b', в: 'v', г: 'g', д: 'd', е: 'e', ё: 'e', ж: 'zh', з: 'z', и: 'i', й: 'y',
+    к: 'k', л: 'l', м: 'm', н: 'n', о: 'o', п: 'p', р: 'r', с: 's', т: 't', у: 'u', ф: 'f',
+    х: 'h', ц: 'c', ч: 'ch', ш: 'sh', щ: 'sch', ъ: '', ы: 'y', ь: '', э: 'e', ю: 'yu', я: 'ya',
+  };
+  return title.toLowerCase().split('').map((ch) => map[ch] ?? ch).join('')
+    .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 80);
+}
+
 /**
  * Редактор тренда — паритет возможностей с редактором статьи (2026-11-20):
  * обложка (загрузка/генерация/медиатека), SEO description с ИИ, ИИ-название,
  * лонгрид с вставкой картинок из медиатеки (тулбар RichTextEditor).
+ * Полноценное создание (2026-11-21): /trends/new — те же поля, после сохранения → редактор.
  */
 export default function TrendEditPage() {
   const { id } = useParams();
+  const navigate = useNavigate();
+  const isNew = id === 'new' || id === undefined;
   const [form, setForm] = useState({ slug: '', name: '', description: '', status: 'active' });
   const [metaDescription, setMetaDescription] = useState('');
   const [notice, setNotice] = useState<string | null>(null);
@@ -33,8 +47,10 @@ export default function TrendEditPage() {
   // ИИ-кнопки
   const [aiBusy, setAiBusy] = useState<string | null>(null);
   const [nameVariants, setNameVariants] = useState<string[] | null>(null);
+  const [slugTouched, setSlugTouched] = useState(false);
 
   useEffect(() => {
+    if (isNew) return; // создание: форма пустая, slug генерится из названия
     void (async () => {
       // публичный список: найдём по id → деталь по slug (там обложка и meta)
       const { trends } = await api<{ trends: { id: number; slug: string; name: string; description: string | null; status: string }[] }>('/trends');
@@ -46,17 +62,21 @@ export default function TrendEditPage() {
       setCoverMediaId(detail.trend.coverMediaId);
       setCoverPreview(detail.coverUrl ? (detail.coverUrl.startsWith('/') ? `${window.location.origin}${detail.coverUrl}` : detail.coverUrl) : null);
     })().catch(() => setError('Ошибка загрузки'));
-  }, [id]);
+  }, [id, isNew]);
 
   const save = async () => {
     setError(null);
     setNotice(null);
+    if (!form.name.trim()) { setError('Название пустое — задайте его вручную или сгенерируйте'); return; }
+    const payload = { ...form, slug: form.slug || slugify(form.name) || `trend-${Date.now()}`, metaDescription: metaDescription.trim() || undefined, coverMediaId };
     setBusy(true);
     try {
-      await api(`/trends/${id}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ ...form, metaDescription: metaDescription.trim() || undefined, coverMediaId }),
-      });
+      if (isNew) {
+        const res = await api<{ trend: { id: number } }>('/trends', { method: 'POST', body: JSON.stringify(payload) });
+        navigate(`/trends/${res.trend.id}/edit`, { replace: true });
+        return;
+      }
+      await api(`/trends/${id}`, { method: 'PATCH', body: JSON.stringify(payload) });
       setNotice('Сохранено ✓');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Ошибка сохранения');
@@ -203,7 +223,7 @@ export default function TrendEditPage() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-xl font-bold">Тренд</h1>
+      <h1 className="text-xl font-bold">{isNew ? 'Новый тренд' : 'Тренд'}</h1>
       {notice && <p className="rounded-lg bg-green-50 px-3 py-2 text-sm text-green-700">{notice}</p>}
       {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
@@ -211,7 +231,10 @@ export default function TrendEditPage() {
         <div>
           <label className="label">Название</label>
           <span className="flex gap-2">
-            <input className="input w-full" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+            <input className="input w-full" value={form.name} onChange={(e) => {
+              const name = e.target.value;
+              setForm((f) => ({ ...f, name, slug: slugTouched ? f.slug : slugify(name) }));
+            }} />
             <button type="button" className="btn-secondary shrink-0" disabled={aiBusy === 'name'} onClick={() => void genName()}>
               {aiBusy === 'name' ? '…' : '✨ Название'}
             </button>
@@ -229,7 +252,7 @@ export default function TrendEditPage() {
         </div>
         <div>
           <label className="label">Slug</label>
-          <input className="input font-mono" value={form.slug} onChange={(e) => setForm({ ...form, slug: e.target.value })} />
+          <input className="input font-mono" value={form.slug} onChange={(e) => { setSlugTouched(true); setForm({ ...form, slug: e.target.value }); }} placeholder="авто из названия" />
         </div>
         <div>
           <label className="label">Статус</label>
@@ -307,7 +330,7 @@ export default function TrendEditPage() {
       </div>
 
       <button className="btn" onClick={() => void save()} disabled={busy}>
-        {busy ? 'Сохраняем…' : 'Сохранить'}
+        {busy ? 'Сохраняем…' : isNew ? 'Создать тренд' : 'Сохранить'}
       </button>
 
       {pickerOpen && (
