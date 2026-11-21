@@ -112,7 +112,8 @@ export default function HomePage() {
           </div>
           <div className="relative h-[340px] overflow-hidden rounded-2xl sm:h-[440px]">
             {/* интро-блок слева: не карточка, а полоса с затемнением — тренды визуально уходят В НЕЁ */}
-            <div className="pointer-events-none absolute inset-y-0 left-0 z-10 flex w-[290px] flex-col justify-between bg-gradient-to-r from-zinc-950 via-zinc-950/85 to-transparent p-5 pr-12 sm:w-[350px]">
+            {/* твёрдая зона — ровно ширине карточки (240px), дальше затухание к прозрачному */}
+            <div className="pointer-events-none absolute inset-y-0 left-0 z-10 flex w-[380px] flex-col justify-between bg-[linear-gradient(to_right,#09090b_0px,#09090b_240px,rgba(9,9,11,0)_380px)] p-5 pr-16">
               <div className="pointer-events-auto">
                 <h3 className="text-xl font-bold uppercase tracking-wide text-[#c9ff2a]">Тренды</h3>
                 <p className="mt-3 text-sm leading-relaxed text-zinc-300">
