@@ -111,14 +111,16 @@ export default function HomePage() {
             <h2 className="text-lg font-semibold uppercase tracking-wide text-zinc-400">Тренды</h2>
             <Link to="/trends" className="text-sm">все →</Link>
           </div>
-          <div className="relative h-[380px] sm:h-[500px]">
+          <div className="relative h-[340px] sm:h-[440px]">
             <Suspense fallback={<div className="flex h-full items-center justify-center rounded-lg border border-[#2a2a2a] text-zinc-500">Загружаем карусель…</div>}>
               <ParallaxCarousel
                 items={trends.trends.map((t) => ({ src: t.coverUrl ?? '', label: t.name, href: `/trend/${t.slug}` }))}
-                imageWidth={300}
-                imageHeight={400}
-                gap={24}
+                imageWidth={240}
+                imageHeight={320}
+                gap={20}
                 borderRadius={16}
+                parallaxIntensity={0.15}
+                uvScale={0.7}
                 loop
                 autoplaySpeed={18}
                 pauseOnHover
