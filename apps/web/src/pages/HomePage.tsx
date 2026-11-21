@@ -177,7 +177,7 @@ export default function HomePage() {
             </p>
             <Link
               to="/trends"
-              className="mt-3 inline-block rounded-full bg-[#beff00] px-4 py-2 text-sm font-bold text-zinc-950 hover:bg-[#c9ff2a]"
+              className="mt-3 block w-full rounded-full bg-[#beff00] px-4 py-2 text-center text-sm font-bold text-zinc-950 hover:bg-[#c9ff2a]"
             >
               Посмотреть в будущее
             </Link>
@@ -202,7 +202,7 @@ export default function HomePage() {
               </div>
               <Link
                 to="/trends"
-                className="pointer-events-auto w-fit rounded-full bg-[#beff00] px-4 py-2 text-center text-sm font-bold text-zinc-950 hover:bg-[#c9ff2a]"
+                className="pointer-events-auto block w-[192px] rounded-full bg-[#beff00] px-4 py-2 text-center text-sm font-bold text-zinc-950 hover:bg-[#c9ff2a]"
               >
                 Посмотреть в будущее
               </Link>
