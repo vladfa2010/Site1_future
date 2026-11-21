@@ -132,7 +132,7 @@ export default function HomePage() {
                 items={trends.trends.map((t) => ({
                   src: t.coverUrl ?? '',
                   label: t.name,
-                  description: t.description ? t.description.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 160) : undefined,
+                  description: t.description ? t.description.replace(/<(script|style|noscript)[\s\S]*?<\/\1>/gi, ' ').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 160) : undefined,
                   href: `/trend/${t.slug}`,
                 }))}
                 imageWidth={240}
