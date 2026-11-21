@@ -198,7 +198,9 @@ async function composeCardCanvas(
     ctx.fillStyle = g;
     ctx.fillRect(0, H * 0.45, W, H * 0.55);
 
-    const pad = Math.round(W * 0.06);
+    // запас слева/справа больше максимального сдвига UV при параллаксе (~6% ширины),
+    // иначе текст на крайних плоскостях обрезался эффектом глубины
+    const pad = Math.round(W * 0.13);
     const font = (px: number, weight: number) =>
       `${weight} ${Math.round(px)}px Inter, -apple-system, 'Segoe UI', Roboto, sans-serif`;
 
