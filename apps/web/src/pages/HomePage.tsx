@@ -202,7 +202,7 @@ export default function HomePage() {
               </div>
               <Link
                 to="/trends"
-                className="pointer-events-auto block w-[192px] rounded-full bg-[#beff00] px-4 py-2 text-center text-sm font-bold text-zinc-950 hover:bg-[#c9ff2a]"
+                className="pointer-events-auto mb-6 block w-[154px] rounded-full bg-[#beff00] px-3 py-1.5 text-center text-[11px] font-bold text-zinc-950 hover:bg-[#c9ff2a]"
               >
                 Посмотреть в будущее
               </Link>
