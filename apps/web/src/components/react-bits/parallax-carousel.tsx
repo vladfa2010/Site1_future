@@ -30,6 +30,8 @@ export interface ParallaxCarouselProps {
   onItemClick?: (index: number) => void;
   /** Пауза рендера/автоплея (секция вне вьюпорта) — экономия батареи. */
   paused?: boolean;
+  /** Первая плоскость собрала текстуры — пора убирать скелетон-заглушку. */
+  onReady?: () => void;
   /** Plane width in CSS pixels. */
   imageWidth?: number;
   /** Plane height in CSS pixels. */
@@ -300,6 +302,7 @@ interface PlaneProps {
   /** вертикальное смещение плоскости — «лесенка» вместо конвейера */
   yOffset: number;
   onItemClick?: (index: number) => void;
+  onReady?: () => void;
   imageWidth: number;
   imageHeight: number;
   gap: number;
@@ -315,6 +318,7 @@ const Plane: React.FC<PlaneProps> = ({
   src,
   index,
   caption,
+  onReady,
   variance,
   yOffset,
   onItemClick,
@@ -370,6 +374,10 @@ const Plane: React.FC<PlaneProps> = ({
   // caption — inline-объект от родителя: сравниваем по содержимому, иначе текстуры
   // всех плоскостей пересоздаются на каждый ре-рендер HomePage
   const capKey = `${caption?.title ?? ""}|${caption?.text ?? ""}`;
+  const onReadyRef = useRef(onReady);
+  useEffect(() => {
+    onReadyRef.current = onReady;
+  }, [onReady]);
 
   useEffect(() => {
     // ДВА слоя: изображение (параллаксится через UV-сдвиг в шейдере) и подпись
@@ -396,6 +404,7 @@ const Plane: React.FC<PlaneProps> = ({
       textureRef.current = makeTex(imgCanvas);
       capTextureRef.current = makeTex(capCanvas);
       setCapTex(capTextureRef.current);
+      onReadyRef.current?.(); // скелетон можно убирать — первые карточки готовы
     })().catch(() => {
       if (!cancelled) {
         textureRef.current = null;
@@ -540,6 +549,7 @@ const ParallaxCarousel = React.forwardRef<
       onActiveChange,
       onItemClick,
       paused = false,
+      onReady,
       imageWidth = 420,
       imageHeight = 560,
       gap = 32,
@@ -833,6 +843,7 @@ const ParallaxCarousel = React.forwardRef<
               variance={0.75 + 0.5 * (((i * 7919) % 97) / 97)}
               yOffset={0}
               caption={resolvedItems[i] ? { title: resolvedItems[i].label, text: resolvedItems[i].description } : undefined}
+              onReady={onReady}
               totalCount={resolvedImages.length}
               scrollRef={scrollRef}
             />

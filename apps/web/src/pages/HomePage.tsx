@@ -81,6 +81,7 @@ export default function HomePage() {
   // пауза рендера карусели вне вьюпорта (батарея/вентилятор)
   const carouselWrapRef = useRef<HTMLDivElement>(null);
   const [carouselInView, setCarouselInView] = useState(true);
+  const [carouselReady, setCarouselReady] = useState(false); // скелетон пока текстуры не собрались
   useEffect(() => {
     const el = carouselWrapRef.current;
     if (!el || typeof IntersectionObserver === 'undefined') return;
@@ -206,6 +207,14 @@ export default function HomePage() {
                 Посмотреть в будущее
               </Link>
             </div>
+            {/* скелетон: стильные карточки-заглушки с бегущим бликом, пока собираются текстуры */}
+            {!carouselReady && (
+              <div className="absolute inset-0 z-10 flex items-center gap-5 overflow-hidden rounded-2xl px-1" aria-hidden="true">
+                {[0, 1, 2].map((i) => (
+                  <div key={i} className="skeleton-card h-[320px] w-[240px] shrink-0 rounded-2xl" />
+                ))}
+              </div>
+            )}
             <Suspense fallback={<div className="flex h-full items-center justify-center rounded-lg border border-[#2a2a2a] text-zinc-500">Загружаем карусель…</div>}>
               <CarouselBoundary fallback={<div className="h-full"><TrendsFallback trends={trends.trends} /></div>}>
               <ParallaxCarousel
@@ -220,6 +229,7 @@ export default function HomePage() {
                 autoplaySpeed={reduceMotion ? 0 : 18}
                 pauseOnHover
                 paused={!carouselInView}
+                onReady={() => setCarouselReady(true)}
                 showProgress={false}
                 onItemClick={(i) => {
                   const t = trends.trends[i];

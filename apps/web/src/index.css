@@ -60,3 +60,17 @@
 .loading-bar {
   animation: loading-bar-slide 1.1s ease-in-out infinite;
 }
+
+/* Скелетон карусели трендов: бегущий блик на карточках-заглушках во время загрузки текстур */
+.skeleton-card {
+  background: linear-gradient(100deg, #131316 40%, #202027 50%, #131316 60%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.4s linear infinite;
+}
+@keyframes skeleton-shimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-card { animation: none; background: #16161a; }
+}
