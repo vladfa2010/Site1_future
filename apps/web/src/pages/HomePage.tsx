@@ -203,7 +203,7 @@ export default function HomePage() {
               {/* кнопка на высоте заголовков карточек (~81% высоты плашки) */}
               <Link
                 to="/trends"
-                className="pointer-events-auto absolute bottom-5 left-5 block w-[154px] rounded-full bg-[#beff00] px-3 py-1.5 text-center text-[11px] font-bold text-zinc-950 hover:bg-[#c9ff2a]"
+                className="pointer-events-auto absolute bottom-[27px] left-5 block w-[154px] rounded-full bg-[#beff00] px-3 py-1.5 text-center text-[11px] font-bold text-zinc-950 hover:bg-[#c9ff2a]"
               >
                 Посмотреть в будущее
               </Link>
