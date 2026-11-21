@@ -111,16 +111,18 @@ export default function HomePage() {
             <Link to="/trends" className="text-sm">все →</Link>
           </div>
           <div className="relative h-[340px] overflow-hidden rounded-2xl sm:h-[440px]">
-            {/* статичный интро-блок (был первым элементом карусели до WebGL): поверх canvas слева */}
-            <div className="absolute inset-y-0 left-0 z-10 flex w-[240px] flex-col rounded-l-2xl border border-[#beff00]/30 bg-gradient-to-br from-zinc-900 to-zinc-950 p-5 sm:w-[280px]">
-              <h3 className="text-xl font-bold uppercase tracking-wide text-[#c9ff2a]">Тренды</h3>
-              <p className="mt-3 text-sm leading-relaxed text-zinc-300">
-                То, что уже меняет мир. Великие идеи, инновации, новые сектора в экономике. То, о чем
-                большинство узнают в будущем… а ты сейчас!
-              </p>
+            {/* интро-блок слева: не карточка, а полоса с затемнением — тренды визуально уходят В НЕЁ */}
+            <div className="pointer-events-none absolute inset-y-0 left-0 z-10 flex w-[290px] flex-col justify-between bg-gradient-to-r from-zinc-950 via-zinc-950/85 to-transparent p-5 pr-12 sm:w-[350px]">
+              <div className="pointer-events-auto">
+                <h3 className="text-xl font-bold uppercase tracking-wide text-[#c9ff2a]">Тренды</h3>
+                <p className="mt-3 text-sm leading-relaxed text-zinc-300">
+                  То, что уже меняет мир. Великие идеи, инновации, новые сектора в экономике. То, о чем
+                  большинство узнают в будущем… а ты сейчас!
+                </p>
+              </div>
               <Link
                 to="/trends"
-                className="mt-auto rounded-full bg-[#beff00] px-4 py-2 text-center text-sm font-bold text-zinc-950 hover:bg-[#c9ff2a]"
+                className="pointer-events-auto w-fit rounded-full bg-[#beff00] px-4 py-2 text-center text-sm font-bold text-zinc-950 hover:bg-[#c9ff2a]"
               >
                 Посмотреть в будущее
               </Link>
