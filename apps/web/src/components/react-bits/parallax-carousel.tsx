@@ -659,7 +659,9 @@ const ParallaxCarousel = React.forwardRef<
         const settings = settingsRef.current;
 
         const last = lastFrameTsRef.current ?? now;
-        const dt = Math.max(0, (now - last) / 1000);
+        // кап 100 мс: после джанка загрузки/фоновой вкладки НЕ догоняем пропущенное —
+        // иначе автоплей телепортирует карусель вперёд одним скачком
+        const dt = Math.min(Math.max(0, (now - last) / 1000), 0.1);
         lastFrameTsRef.current = now;
 
         if (
