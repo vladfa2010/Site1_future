@@ -1,5 +1,9 @@
-import { Link } from 'react-router';
+import { Suspense, lazy, useState } from 'react';
+import { Link, useNavigate } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
+
+// Parallax-карусель трендов (reactbits pro, WebGL): three.js тяжёлый — грузим по требованию
+const ParallaxCarousel = lazy(() => import('../components/react-bits/parallax-carousel'));
 import { api } from '../api';
 import { ArticleCard, TYPE_LABELS } from '../components/ArticleCard';
 import { NewsCard } from '../components/NewsCard';
@@ -41,6 +45,8 @@ const KNOWLEDGE = [
 ];
 
 export default function HomePage() {
+  const navigate = useNavigate();
+  const [activeTrend, setActiveTrend] = useState(0);
   const q = {
     trends: useQuery({ queryKey: ['trends'], queryFn: () => api.trends() }),
     feed: useQuery({ queryKey: ['feed'], queryFn: () => api.articles() }), // лента событий: все типы, свежие сверху
@@ -97,45 +103,46 @@ export default function HomePage() {
       </section>
 
       {/* ТРЕНДЫ — спецкарточка «что такое тренд» + карточки трендов, как у донора */}
-      <Section title="Тренды" itemsCount={(trends?.trends.length ?? 0) + 1}>
-        <div className={CAROUSEL_ITEM}>
-          <div className="flex aspect-[3/4] w-full flex-col rounded-lg border border-[#beff00]/30 bg-gradient-to-br from-zinc-900 to-zinc-950 p-5">
-            <h3 className="text-xl font-bold uppercase tracking-wide text-[#c9ff2a]">Тренды</h3>
-            <p className="mt-3 text-sm leading-relaxed text-zinc-300">
-              То, что уже меняет мир. Великие идеи, инновации, новые сектора в экономике. То, о чем
-              большинство узнают в будущем… а ты сейчас!
-            </p>
-            <Link
-              to="/trends"
-              className="mt-auto rounded-full bg-[#beff00] px-4 py-2 text-center text-sm font-bold text-zinc-950 hover:bg-[#c9ff2a]"
-            >
-              Посмотреть в будущее
-            </Link>
+      {/* Тренды: WebGL Parallax-карусель (reactbits pro). Плоскость = обложка тренда,
+          клик — на лендинг тренда; подпись центральной плоскости — снизу слева. */}
+      {trends && trends.trends.length > 0 && (
+        <section>
+          <div className="mb-4 flex items-baseline justify-between">
+            <h2 className="text-lg font-semibold uppercase tracking-wide text-zinc-400">Тренды</h2>
+            <Link to="/trends" className="text-sm">все →</Link>
           </div>
-        </div>
-        {trends?.trends.slice(0, 12).map((t) => (
-          <Link key={t.slug} to={`/trend/${t.slug}`} className={`group ${CAROUSEL_ITEM}`}>
-            <div className="relative flex aspect-[3/4] w-full flex-col justify-end overflow-hidden rounded-lg border border-[#2a2a2a] bg-gradient-to-br from-zinc-800 to-zinc-900 p-4 transition-colors group-hover:border-[#beff00]/50">
-              {t.coverUrl && (
-                <img
-                  src={t.coverUrl}
-                  alt={t.name}
-                  loading="lazy"
-                  className="absolute inset-0 h-full w-full object-cover"
-                />
-              )}
-              <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/40 to-transparent" />
-              <div className="relative">
-                <span className="text-xs uppercase tracking-wide text-[#c9ff2a]">Тренд</span>
-                <h3 className="mt-1 text-xl font-bold">{t.name}</h3>
-                {t.description && (
-                  <p className="mt-2 line-clamp-3 text-sm text-zinc-400">{t.description.replace(/<[^>]*>/g, ' ')}</p>
-                )}
-              </div>
-            </div>
-          </Link>
-        ))}
-      </Section>
+          <div className="relative h-[380px] sm:h-[500px]">
+            <Suspense fallback={<div className="flex h-full items-center justify-center rounded-lg border border-[#2a2a2a] text-zinc-500">Загружаем карусель…</div>}>
+              <ParallaxCarousel
+                items={trends.trends.map((t) => ({ src: t.coverUrl ?? '', label: t.name, href: `/trend/${t.slug}` }))}
+                imageWidth={300}
+                imageHeight={400}
+                gap={24}
+                borderRadius={16}
+                loop
+                autoplaySpeed={18}
+                pauseOnHover
+                showProgress={false}
+                onActiveChange={(i) => setActiveTrend(i)}
+                onItemClick={(i) => {
+                  const t = trends.trends[i];
+                  if (t) navigate(`/trend/${t.slug}`);
+                }}
+              />
+            </Suspense>
+            {/* подпись центрального тренда — поверх canvas, не блокирует drag */}
+            {trends.trends[activeTrend] && (
+              <span className="pointer-events-none absolute bottom-3 left-3 rounded-full bg-zinc-950/80 px-3 py-1 text-sm font-bold uppercase tracking-wide text-[#c9ff2a] backdrop-blur-sm">
+                {trends.trends[activeTrend].name}
+              </span>
+            )}
+          </div>
+          <p className="mt-3 text-sm text-zinc-500">
+            То, что уже меняет мир. Великие идеи, инновации, новые сектора в экономике —{' '}
+            <Link to="/trends" className="text-[#c9ff2a] hover:underline">посмотреть в будущее →</Link>
+          </p>
+        </section>
+      )}
 
       {/* ЛЕНТА СОБЫТИЙ — компактная хронология всех типов, как у донора */}
       {(feed?.articles.length ?? 0) > 0 && (

@@ -11,18 +11,23 @@
   },
   "dependencies": {
     "@newinvest/db": "*",
+    "@react-three/fiber": "^9.8.2",
     "@tanstack/react-query": "^5.62.0",
+    "clsx": "^2.1.1",
     "framer-motion": "^14.10.0",
     "lucide-react": "^1.70.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "react-router": "^7.6.0",
-    "sanitize-html": "^2.18.1"
+    "sanitize-html": "^2.18.1",
+    "tailwind-merge": "^3.7.1",
+    "three": "^0.187.0"
   },
   "devDependencies": {
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
     "@types/sanitize-html": "^2.16.2",
+    "@types/three": "^0.187.0",
     "@vitejs/plugin-react": "^4.6.0",
     "autoprefixer": "^10.4.20",
     "postcss": "^8.5.0",
