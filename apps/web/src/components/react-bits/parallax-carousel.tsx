@@ -150,19 +150,12 @@ interface CardCaption {
   text?: string;
 }
 
-/** Canvas 3:4: обложка (cover) + нижний градиент + название/описание. */
+/** Canvas 3:4: только обложка (cover-fit) + тёмный фон-заглушка. Параллаксится. */
 async function composeCardCanvas(
   src: string,
-  caption: CardCaption | undefined,
   aspectW: number,
   aspectH: number,
 ): Promise<HTMLCanvasElement> {
-  // метрики шрифта без загруженного шрифта дают неверный перенос — дожидаемся
-  try {
-    await document.fonts.ready;
-  } catch {
-    /* старые браузеры — рисуем системным */
-  }
   const W = 720;
   const H = Math.round((W * aspectH) / aspectW);
   const canvas = document.createElement("canvas");
@@ -190,63 +183,85 @@ async function composeCardCanvas(
       img.src = src;
     });
   }
+  return canvas;
+}
 
-  if (caption?.title) {
-    const g = ctx.createLinearGradient(0, H * 0.45, 0, H);
-    g.addColorStop(0, "rgba(9,9,11,0)");
-    g.addColorStop(1, "rgba(9,9,11,0.94)");
-    ctx.fillStyle = g;
-    ctx.fillRect(0, H * 0.45, W, H * 0.55);
+/**
+ * Прозрачный canvas с градиентом + названием/описанием. НЕ параллаксится —
+ * кладётся вторым слоем поверх изображения (без UV-сдвига), текст статичен внутри карточки.
+ */
+async function composeCaptionCanvas(
+  caption: CardCaption | undefined,
+  aspectW: number,
+  aspectH: number,
+): Promise<HTMLCanvasElement> {
+  const W = 720;
+  const H = Math.round((W * aspectH) / aspectW);
+  const canvas = document.createElement("canvas");
+  canvas.width = W;
+  canvas.height = H;
+  const ctx = canvas.getContext("2d")!;
+  if (!caption?.title) return canvas;
 
-    // запас слева/справа больше максимального сдвига UV при параллаксе (~6% ширины),
-    // иначе текст на крайних плоскостях обрезался эффектом глубины
-    const pad = Math.round(W * 0.13);
-    const font = (px: number, weight: number) =>
-      `${weight} ${Math.round(px)}px Inter, -apple-system, 'Segoe UI', Roboto, sans-serif`;
+  // метрики шрифта без загруженного шрифта дают неверный перенос — дожидаемся
+  try {
+    await document.fonts.ready;
+  } catch {
+    /* старые браузеры — рисуем системным */
+  }
 
-    if (caption.text) {
-      ctx.fillStyle = "#d4d4d8";
-      ctx.font = font(W * 0.042, 400);
-      const maxW = W - pad * 2;
-      const words = caption.text.split(/\s+/).filter(Boolean);
-      const lines: string[] = [];
-      let cur = "";
-      for (const w of words) {
-        const t = cur ? `${cur} ${w}` : w;
-        if (ctx.measureText(t).width > maxW && cur) {
-          lines.push(cur);
-          cur = w;
-          if (lines.length === 2) {
-            cur = "";
-            break;
-          }
-        } else {
-          cur = t;
+  const g = ctx.createLinearGradient(0, H * 0.45, 0, H);
+  g.addColorStop(0, "rgba(9,9,11,0)");
+  g.addColorStop(1, "rgba(9,9,11,0.94)");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, H * 0.45, W, H * 0.55);
+
+  const pad = Math.round(W * 0.06);
+  const font = (px: number, weight: number) =>
+    `${weight} ${Math.round(px)}px Inter, -apple-system, 'Segoe UI', Roboto, sans-serif`;
+
+  if (caption.text) {
+    ctx.fillStyle = "#d4d4d8";
+    ctx.font = font(W * 0.042, 400);
+    const maxW = W - pad * 2;
+    const words = caption.text.split(/\s+/).filter(Boolean);
+    const lines: string[] = [];
+    let cur = "";
+    for (const w of words) {
+      const t = cur ? `${cur} ${w}` : w;
+      if (ctx.measureText(t).width > maxW && cur) {
+        lines.push(cur);
+        cur = w;
+        if (lines.length === 2) {
+          cur = "";
+          break;
         }
-      }
-      if (cur && lines.length < 2) lines.push(cur);
-      const truncated = lines.length === 2 && (cur === "" || words.join(" ").length > lines.join(" ").length + 1);
-      if (truncated && lines[1]) {
-        let last = `${lines[1]}…`;
-        while (ctx.measureText(last).width > maxW && last.length > 2) {
-          last = `${last.slice(0, -2)}…`;
-        }
-        lines[1] = last;
-      }
-      let y = H - pad - (lines.length - 1) * W * 0.056;
-      for (const line of lines) {
-        ctx.fillText(line, pad, y);
-        y += W * 0.056;
+      } else {
+        cur = t;
       }
     }
-
-    ctx.fillStyle = "#c9ff2a";
-    ctx.font = font(W * 0.058, 700);
-    const titleY = caption.text
-      ? H - pad - Math.min(2, caption.text.split(/\s+/).length > 0 ? 2 : 1) * W * 0.056 - W * 0.075
-      : H - pad;
-    ctx.fillText(caption.title.toUpperCase(), pad, Math.max(titleY, H * 0.6));
+    if (cur && lines.length < 2) lines.push(cur);
+    const truncated = lines.length === 2 && (cur === "" || words.join(" ").length > lines.join(" ").length + 1);
+    if (truncated && lines[1]) {
+      let last = `${lines[1]}…`;
+      while (ctx.measureText(last).width > maxW && last.length > 2) {
+        last = `${last.slice(0, -2)}…`;
+      }
+      lines[1] = last;
+    }
+    let y = H - pad - (lines.length - 1) * W * 0.056;
+    for (const line of lines) {
+      ctx.fillText(line, pad, y);
+      y += W * 0.056;
+    }
   }
+
+  ctx.fillStyle = "#c9ff2a";
+  ctx.font = font(W * 0.058, 700);
+  const titleY = caption.text
+    ? H - pad - 2 * W * 0.056 - W * 0.075
+    : H - pad;
+  ctx.fillText(caption.title.toUpperCase(), pad, Math.max(titleY, H * 0.6));
   return canvas;
 }
 
@@ -307,7 +322,11 @@ const Plane: React.FC<PlaneProps> = ({
   scrollRef,
 }) => {
   const meshRef = useRef<THREE.Mesh>(null);
+  const capMeshRef = useRef<THREE.Mesh>(null);
   const textureRef = useRef<THREE.Texture | null>(null);
+  const capTextureRef = useRef<THREE.Texture | null>(null);
+  // meshBasicMaterial берёт map из пропа — нужен ре-рендер, когда подпись готова
+  const [capTex, setCapTex] = React.useState<THREE.Texture | null>(null);
   const { size } = useThree();
 
   const [uniforms] = React.useState(buildUniforms);
@@ -342,12 +361,10 @@ const Plane: React.FC<PlaneProps> = ({
   ]);
 
   useEffect(() => {
-    // подпись всегда «внутри карточки»: рисуем обложку+текст на canvas, текстуру из него
+    // ДВА слоя: изображение (параллаксится через UV-сдвиг в шейдере) и подпись
+    // (отдельная полупрозрачная текстура БЕЗ сдвига — текст статичен внутри карточки)
     let cancelled = false;
-    void (async () => {
-      const pr = propsRef.current;
-      const canvas = await composeCardCanvas(src, caption, pr.imageWidth, pr.imageHeight);
-      if (cancelled) return;
+    const makeTex = (canvas: HTMLCanvasElement) => {
       const tex = new THREE.CanvasTexture(canvas);
       tex.colorSpace = THREE.SRGBColorSpace;
       // мипмапы: без них даунскейл 720×960 → 240×320 «резал» мелкий текст
@@ -356,16 +373,29 @@ const Plane: React.FC<PlaneProps> = ({
       tex.magFilter = THREE.LinearFilter;
       tex.wrapS = THREE.ClampToEdgeWrapping;
       tex.wrapT = THREE.ClampToEdgeWrapping;
-      textureRef.current = tex;
+      return tex;
+    };
+    void (async () => {
+      const pr = propsRef.current;
+      const [imgCanvas, capCanvas] = await Promise.all([
+        composeCardCanvas(src, pr.imageWidth, pr.imageHeight),
+        composeCaptionCanvas(caption, pr.imageWidth, pr.imageHeight),
+      ]);
+      if (cancelled) return;
+      textureRef.current = makeTex(imgCanvas);
+      capTextureRef.current = makeTex(capCanvas);
+      setCapTex(capTextureRef.current);
     })().catch(() => {
-      if (!cancelled) textureRef.current = null;
+      if (!cancelled) {
+        textureRef.current = null;
+        capTextureRef.current = null;
+      }
     });
     return () => {
       cancelled = true;
-      if (textureRef.current) {
-        textureRef.current.dispose();
-        textureRef.current = null;
-      }
+      for (const t of [textureRef.current, capTextureRef.current]) t?.dispose();
+      textureRef.current = null;
+      capTextureRef.current = null;
     };
   }, [src, caption]);
 
@@ -392,6 +422,13 @@ const Plane: React.FC<PlaneProps> = ({
     mesh.position.x = offsetPx;
     mesh.position.y = yOffset;
 
+    // слой подписи двигается ВМЕСТЕ с карточкой, но без UV-сдвига — текст не «плывёт»
+    const cap = capMeshRef.current;
+    if (cap) {
+      cap.position.x = offsetPx;
+      cap.position.y = yOffset;
+    }
+
     const viewport = Math.max(size.width, 1);
     const norm = clamp(offsetPx / viewport, -p.uvScale, p.uvScale);
     u.uShift.value = -norm;
@@ -401,6 +438,15 @@ const Plane: React.FC<PlaneProps> = ({
     // уклон в центр: крайние плоскости чуть меньше (до −8%)
     const scaleMul = 1 - 0.08 * Math.min(1, Math.abs(offsetPx) / viewport);
     mesh.scale.set(p.imageWidth * scaleMul, p.imageHeight * scaleMul, 1);
+    // подпись чуть меньше (внутри скруглённых углов)
+    if (cap) {
+      const inset = Math.min(10, p.borderRadius * 0.8) * scaleMul;
+      cap.scale.set(
+        Math.max(1, p.imageWidth * scaleMul - inset),
+        Math.max(1, p.imageHeight * scaleMul - inset),
+        1,
+      );
+    }
     u.uRadiusPx.value = p.borderRadius;
     (u.uPlanePx.value as THREE.Vector2).set(p.imageWidth, p.imageHeight);
 
@@ -418,21 +464,32 @@ const Plane: React.FC<PlaneProps> = ({
   });
 
   return (
-    <mesh
-      ref={meshRef}
-      onClick={(e) => {
-        e.stopPropagation();
-        onItemClick?.(index);
-      }}
-    >
-      <planeGeometry args={[1, 1, 1, 1]} />
-      <shaderMaterial
-        vertexShader={PLANE_VERTEX}
-        fragmentShader={PLANE_FRAGMENT}
-        uniforms={uniforms}
-        transparent
-      />
-    </mesh>
+    <>
+      <mesh
+        ref={meshRef}
+        onClick={(e) => {
+          e.stopPropagation();
+          onItemClick?.(index);
+        }}
+      >
+        <planeGeometry args={[1, 1, 1, 1]} />
+        <shaderMaterial
+          vertexShader={PLANE_VERTEX}
+          fragmentShader={PLANE_FRAGMENT}
+          uniforms={uniforms}
+          transparent
+        />
+      </mesh>
+      {/* слой подписи: обычный материал без параллакс-сдвига */}
+      <mesh ref={capMeshRef}>
+        <planeGeometry args={[1, 1, 1, 1]} />
+        <meshBasicMaterial
+          map={capTex ?? undefined}
+          transparent
+          depthWrite={false}
+        />
+      </mesh>
+    </>
   );
 };
 
