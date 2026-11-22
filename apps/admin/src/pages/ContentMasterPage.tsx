@@ -3,6 +3,7 @@ import { Link } from 'react-router';
 import { api, ApiError } from '../api';
 import { RichTextEditor } from '../components/RichTextEditor';
 import AiSlopPanel from '../components/AiSlopPanel';
+import MediaPickerModal from '../components/MediaPickerModal';
 import { sanitizeArticleHtml } from '../lib/sanitize';
 import { stripHtml } from '@newinvest/db/text-utils';
 
@@ -249,6 +250,7 @@ export default function ContentMasterPage() {
   const [coverPreview, setCoverPreview] = useState<string | null>(null);
   const [genPrompt, setGenPrompt] = useState('');
   const [coverMock, setCoverMock] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false); // выбор обложки из медиатеки
   // стартовая докрутка лайков/репостов (2026-11-17) — PATCH-ом после создания черновика
   const [likesBaseOffset, setLikesBaseOffset] = useState('0');
   const [sharesBaseOffset, setSharesBaseOffset] = useState('0');
@@ -1060,7 +1062,22 @@ export default function ContentMasterPage() {
                     <button type="button" className="btn" disabled={aiBusy === 'cover' || genPrompt.trim().length < 10} onClick={() => void genCover()}>
                       {aiBusy === 'cover' ? 'Рисуем…' : 'Сгенерировать (Kimi)'}
                     </button>
+                    <button type="button" className="btn-secondary" onClick={() => setPickerOpen(true)}>
+                      🖼 Из галереи
+                    </button>
                   </span>
+                  {pickerOpen && (
+                    <MediaPickerModal
+                      selectedId={coverMediaId}
+                      onClose={() => setPickerOpen(false)}
+                      onSelect={(item) => {
+                        setCoverMediaId(item.id);
+                        setCoverPreview(item.filePath.startsWith('/') ? `${window.location.origin}${item.filePath}` : item.filePath);
+                        setCoverMock(false);
+                        setPickerOpen(false);
+                      }}
+                    />
+                  )}
                 </span>
               </div>
             </div>
