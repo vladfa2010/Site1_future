@@ -27,11 +27,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
           <div className="loading-bar h-full w-1/3 bg-gradient-to-r from-[#beff00] to-[#c9ff2a]" />
         </div>
       )}
-      <header className="flex items-center justify-between border-b border-[#2a2a2a] py-4">
-        <Link to="/" className="text-lg font-bold text-zinc-100">
+      <header className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-[#2a2a2a] py-4">
+        <Link to="/" className="text-base font-bold text-zinc-100 sm:text-lg">
           Инвестиционно<span className="text-[#beff00]">.рф</span>
         </Link>
-        <nav className="flex items-center gap-5 text-sm">
+        <nav className="flex items-center gap-3 text-sm sm:gap-5">
           <Link to="/search" title="Поиск" className="text-zinc-400 hover:text-[#beff00]">
             <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <circle cx="11" cy="11" r="7" /><path strokeLinecap="round" d="m20 20-3.5-3.5" />
@@ -46,7 +46,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
               <Avatar avatar={user.avatar} name={user.displayName} size={34} />
             </Link>
           ) : (
-            <button onClick={() => open('login')} className="rounded-full bg-[#beff00] px-4 py-1.5 font-semibold text-zinc-950 hover:bg-[#c9ff2a]">
+            <button onClick={() => open('login')} className="rounded-full bg-[#beff00] px-3 py-1.5 text-sm font-semibold text-zinc-950 hover:bg-[#c9ff2a] sm:px-4">
               Войти
             </button>
           )}
