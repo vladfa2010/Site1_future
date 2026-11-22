@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router';
+import { Link, useNavigate } from 'react-router';
 import { useQueries } from '@tanstack/react-query';
 import {
   api,
@@ -253,7 +253,12 @@ export function AutoLoadNext({ current, relations }: AutoLoadNextProps) {
     if (intersectingRef.current) pumpRef.current();
   }, [results, items]);
 
-  // ---- URL/title: replaceState + setArticleTitle на последнюю успешно загруженную (ok) ----
+  // ---- URL/title: replace через роутер (тот же history.replaceState, но роутер
+  // остаётся в курсе текущего URL — иначе location desync: роутер «думает», что мы
+  // на изначальной статье, и в ряде сценариев сброс скролла/активные ссылки ломались).
+  // key location при replace НЕ меняется → ScrollToTop (зависит от key) не сработает
+  // и чтение с автоподгрузкой не будет дёргаться наверх.
+  const navigate = useNavigate();
   useEffect(() => {
     const okItems = items.filter((i) => i.status === 'ok');
     const last = okItems[okItems.length - 1];
@@ -261,9 +266,9 @@ export function AutoLoadNext({ current, relations }: AutoLoadNextProps) {
     const key = `${last.type}/${last.slug}`;
     if (lastOkKeyRef.current === key) return;
     lastOkKeyRef.current = key;
-    window.history.replaceState(null, '', `/${last.type}/${last.slug}`);
+    navigate(`/${last.type}/${last.slug}`, { replace: true });
     setArticleTitle(last.title); // полный заголовок, без обрезки
-  }, [items]);
+  }, [items, navigate]);
 
   const showSentinel = items.length < MAX_LOADED && (!candidatesLoaded || candidates.length > 0);
   const nextAfterLimit = items.length >= MAX_LOADED ? candidates[0] : undefined;
