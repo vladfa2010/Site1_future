@@ -11,6 +11,14 @@
   }
 }
 
+/* Поля ввода в стиле сайта. Класс использовался в разметке, но в web не был
+   определён — поле поиска показывалось браузерным дефолтным (белым). */
+@layer components {
+  .input {
+    @apply rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none transition-colors placeholder:text-zinc-500 focus:border-[#beff00]/60 focus:ring-1 focus:ring-[#beff00]/30;
+  }
+}
+
 /* карусель как у донора: скрыть скроллбар, плавный скролл */
 .carousel-scroll {
   scrollbar-width: none;
