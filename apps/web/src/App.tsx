@@ -21,12 +21,14 @@ import FeedPage from './pages/FeedPage';
 import StaticPage from './pages/StaticPage';
 import { RedirectHandler } from './components/RedirectHandler';
 import ScrollToTop from './components/ScrollToTop';
+import YandexMetrika from './components/YandexMetrika';
 
 export default function App() {
   return (
     <RedirectHandler>
       <Layout>
         <ScrollToTop />
+        <YandexMetrika />
         <Routes>
         <Route path="/" element={<HomePage />} />
         {/* статьи: /novost/slug, /ideya/slug, /analitika/slug, /interesnoe/slug, /sobytie/slug */}
