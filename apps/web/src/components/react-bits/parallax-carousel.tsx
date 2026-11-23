@@ -591,10 +591,13 @@ const ParallaxCarousel = React.forwardRef<
     const resolvedImages = resolvedItems.map((i) => i.src);
     const onActiveChangeRef = useRef(onActiveChange);
     const onItemClickRef = useRef(onItemClick);
+    // количество плоскостей — для клик-фолбэка (см. onPointerUp)
+    const countRef = useRef(resolvedImages.length);
     useEffect(() => {
       onActiveChangeRef.current = onActiveChange;
       onItemClickRef.current = onItemClick;
-    }, [onActiveChange, onItemClick]);
+      countRef.current = resolvedImages.length;
+    }, [onActiveChange, onItemClick, resolvedImages.length]);
 
     const containerRef = useRef<HTMLDivElement>(null);
     const rafRef = useRef<number | null>(null);
@@ -771,6 +774,7 @@ const ParallaxCarousel = React.forwardRef<
 
       const onPointerUp = (e: PointerEvent) => {
         if (!draggingRef.current) return;
+        const wasClick = !captured; // драга не было — это клик/тап по карточке
         draggingRef.current = false;
         if (captured) {
           try {
@@ -780,6 +784,34 @@ const ParallaxCarousel = React.forwardRef<
           }
           captured = false;
         }
+        node.style.cursor = "grab";
+        // DOM-фолбэк клика: raycast R3F у части окружений не доставляет onClick
+        // мешу (регресс «карусель не кликается»). Активируем карточку напрямую
+        // по той же раскладке, что и useFrame: центр плоскости i = i*stride − scroll.
+        // Клики по DOM-элементам поверх (кнопка интро, ссылки) пропускаем.
+        if (
+          wasClick &&
+          e.button === 0 &&
+          onItemClickRef.current &&
+          !((e.target as HTMLElement | null)?.closest?.("a,button,input"))
+        ) {
+          const rect = node.getBoundingClientRect();
+          const x = e.clientX - rect.left + scrollRef.current.current;
+          const stride = settingsRef.current.imageWidth + settingsRef.current.gap;
+          const total = countRef.current;
+          if (stride > 0 && total > 0) {
+            let idx = Math.round(x / stride);
+            if (settingsRef.current.loop) idx = ((idx % total) + total) % total;
+            else idx = Math.max(0, Math.min(total - 1, idx));
+            onItemClickRef.current(idx);
+          }
+        }
+      };
+
+      // увод курсора/отмена — просто сброс драга, БЕЗ активации клика
+      const onDragCancel = () => {
+        draggingRef.current = false;
+        captured = false;
         node.style.cursor = "grab";
       };
 
@@ -794,8 +826,8 @@ const ParallaxCarousel = React.forwardRef<
       node.addEventListener("pointerdown", onPointerDown);
       node.addEventListener("pointermove", onPointerMove);
       node.addEventListener("pointerup", onPointerUp);
-      node.addEventListener("pointercancel", onPointerUp);
-      node.addEventListener("pointerleave", onPointerUp);
+      node.addEventListener("pointercancel", onDragCancel);
+      node.addEventListener("pointerleave", onDragCancel);
       node.addEventListener("mouseenter", onEnter);
       node.addEventListener("mouseleave", onLeave);
 
@@ -804,8 +836,8 @@ const ParallaxCarousel = React.forwardRef<
         node.removeEventListener("pointerdown", onPointerDown);
         node.removeEventListener("pointermove", onPointerMove);
         node.removeEventListener("pointerup", onPointerUp);
-        node.removeEventListener("pointercancel", onPointerUp);
-        node.removeEventListener("pointerleave", onPointerUp);
+        node.removeEventListener("pointercancel", onDragCancel);
+        node.removeEventListener("pointerleave", onDragCancel);
         node.removeEventListener("mouseenter", onEnter);
         node.removeEventListener("mouseleave", onLeave);
       };
