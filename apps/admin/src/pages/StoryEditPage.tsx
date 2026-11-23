@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'react-router';
 import { api } from '../api';
 import { RichTextEditor } from '../components/RichTextEditor';
+import { stripHtml } from '@newinvest/db/text-utils';
 
 interface StoryArticle { articleId: number; title: string; publishedAt: string | null; isPrimary: boolean; sortOrder: number }
 interface Story { id: number; slug: string; name: string; description: string | null; status: string; primaryArticleId: number | null }
@@ -17,6 +18,8 @@ export default function StoryEditPage() {
   const [primary, setPrimary] = useState<number | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [aiBusy, setAiBusy] = useState<'name' | 'desc' | null>(null);
+  const [nameVariants, setNameVariants] = useState<string[] | null>(null);
 
   useEffect(() => {
     void (async () => {
@@ -78,6 +81,81 @@ export default function StoryEditPage() {
   const selectedTypes = selected.map((id) => allArticles.find((a) => a.id === id)?.type);
   const isPlaylistPreview = selected.length > 0 && selectedTypes.every((t) => t === 'video');
 
+  // ---- ИИ-заполнение (паритет с ContentMaster): название и описание сюжета ----
+  const selectedTitles = selected
+    .map((id) => allArticles.find((a) => a.id === id)?.title)
+    .filter((t): t is string => Boolean(t));
+
+  /** ✨ Название: 3 варианта из описания и материалов сюжета, клик применяет. */
+  const genName = async () => {
+    setError(null); setNotice(null); setNameVariants(null);
+    const plainDesc = stripHtml(form.description);
+    if (plainDesc.length < 30 && selectedTitles.length === 0) {
+      setError('Нужен текст описания или выбранные материалы сюжета');
+      return;
+    }
+    setAiBusy('name');
+    try {
+      const prompt = [
+        'Предложи 3 варианта названия для сюжета (тематической подборки материалов) инвестиционного медиа.',
+        form.name ? `ТЕКУЩЕЕ НАЗВАНИЕ (можно улучшить, не копировать): ${form.name}` : '',
+        plainDesc ? `ОПИСАНИЕ СЮЖЕТА: ${plainDesc.slice(0, 2000)}` : '',
+        selectedTitles.length ? `МАТЕРИАЛЫ СЮЖЕТА: ${selectedTitles.slice(0, 20).join('; ')}` : '',
+        'ТРЕБОВАНИЯ: каждый вариант до 80 символов, ёмко и конкретно, без кликбейта; ответь ТОЛЬКО тремя строками — по одному варианту на строку, без нумерации и кавычек.',
+      ].filter(Boolean).join('\n');
+      const res = await api<{ text: string; mock: boolean }>('/media/generate-text', {
+        method: 'POST',
+        body: JSON.stringify({ prompt, maxChars: 300 }),
+      });
+      const variants = res.text
+        .split(/\n/)
+        .map((t) => t.replace(/^\s*[-–—\d.)]+\s*|^["«]+|["»]+\s*$/g, '').trim())
+        .filter((t) => t.length > 3)
+        .slice(0, 3);
+      setNameVariants(variants.length > 0 ? variants : [res.text.trim()]);
+      if (res.mock) setNotice('Название собрано из текста (mock — без ключа LLM)');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Ошибка генерации');
+    } finally {
+      setAiBusy(null);
+    }
+  };
+
+  /** ✨ Описание: 2–3 абзаца из названия и материалов сюжета (HTML для редактора). */
+  const genDesc = async () => {
+    setError(null); setNotice(null);
+    const plainDesc = stripHtml(form.description);
+    if (!form.name.trim() && selectedTitles.length === 0) {
+      setError('Нужно название или выбранные материалы сюжета');
+      return;
+    }
+    if (selectedTitles.length === 0 && plainDesc.length < 30) {
+      setError('Нужны выбранные материалы сюжета или текст описания');
+      return;
+    }
+    setAiBusy('desc');
+    try {
+      const prompt = [
+        'Напиши описание (анонс) сюжета — тематической подборки материалов инвестиционного медиа. Оно стоит над списком материалов на странице сюжета.',
+        form.name ? `НАЗВАНИЕ СЮЖЕТА: ${form.name}` : '',
+        selectedTitles.length ? `МАТЕРИАЛЫ СЮЖЕТА: ${selectedTitles.slice(0, 20).join('; ')}` : '',
+        plainDesc ? `ТЕКУЩЕЕ ОПИСАНИЕ (можно улучшить, не копировать): ${plainDesc.slice(0, 1000)}` : '',
+        'ТРЕБОВАНИЯ: 2–3 коротких абзаца, информативно, без воды и без «в этом сюжете мы расскажем», на русском. Ответь ТОЛЬКО текстом абзацев (по одному на строку).',
+      ].filter(Boolean).join('\n');
+      const res = await api<{ text: string; mock: boolean }>('/media/generate-text', {
+        method: 'POST',
+        body: JSON.stringify({ prompt, maxChars: 900 }),
+      });
+      const paras = res.text.trim().split(/\n+/).map((p) => p.trim()).filter(Boolean);
+      setForm((f) => ({ ...f, description: paras.map((p) => `<p>${p}</p>`).join('') }));
+      if (res.mock) setNotice('Описание собрано из текста (mock — без ключа LLM)');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Ошибка генерации');
+    } finally {
+      setAiBusy(null);
+    }
+  };
+
   if (error && !story) return <p className="text-red-400">{error}</p>;
   if (!story) return <p className="text-zinc-400">Загрузка…</p>;
 
@@ -90,7 +168,24 @@ export default function StoryEditPage() {
       <div className="card grid gap-4 sm:grid-cols-3">
         <div>
           <label className="label">Название</label>
-          <input className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+          <input className="input" value={form.name} onChange={(e) => { setForm({ ...form, name: e.target.value }); setNameVariants(null); }} />
+          <button type="button" className="btn-secondary mt-1 py-1 text-xs" disabled={aiBusy === 'name'} onClick={() => void genName()}>
+            {aiBusy === 'name' ? 'Генерируем…' : '✨ Название (3 варианта)'}
+          </button>
+          {nameVariants && (
+            <div className="mt-2 space-y-1">
+              {nameVariants.map((v) => (
+                <button
+                  key={v}
+                  type="button"
+                  onClick={() => { setForm((f) => ({ ...f, name: v })); setNameVariants(null); setNotice('Название применено ✓'); }}
+                  className="block w-full rounded-lg border border-zinc-700 px-3 py-2 text-left text-sm hover:border-[#beff00]/60 hover:bg-zinc-800"
+                >
+                  {v}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
         <div>
           <label className="label">Slug → /syuzhet/{form.slug}</label>
@@ -108,7 +203,12 @@ export default function StoryEditPage() {
       <div className="card">
         <label className="label">Описание (визуальный редактор)</label>
         <RichTextEditor value={form.description} onChange={(html) => setForm({ ...form, description: html })} />
-        <button className="btn mt-3" onClick={() => void saveMeta()}>Сохранить</button>
+        <div className="mt-3 flex gap-2">
+          <button className="btn" onClick={() => void saveMeta()}>Сохранить</button>
+          <button type="button" className="btn-secondary" disabled={aiBusy === 'desc'} onClick={() => void genDesc()}>
+            {aiBusy === 'desc' ? 'Генерируем…' : '✨ Описание из материалов сюжета'}
+          </button>
+        </div>
       </div>
 
       <div className="card space-y-3">

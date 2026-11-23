@@ -42,6 +42,7 @@ export default function ArticleEditPage() {
   const [genPrompt, setGenPrompt] = useState('');
   const [genBusy, setGenBusy] = useState(false);
   const [excerptBusy, setExcerptBusy] = useState(false);
+  const [thesisBusy, setThesisBusy] = useState(false);
   const [excerptSize, setExcerptSize] = useState(250);
   const [excerptMock, setExcerptMock] = useState(false);
   const [metaBusy, setMetaBusy] = useState(false);
@@ -323,6 +324,38 @@ export default function ArticleEditPage() {
       setError(e instanceof Error ? e.message : 'Ошибка генерации');
     } finally {
       setExcerptBusy(false);
+    }
+  };
+
+  // ---- ИИ-тезис (как в ContentMaster): инвестиционный тезис идеи из текста ----
+  const genThesis = async () => {
+    setThesisBusy(true);
+    setError(null);
+    try {
+      const plain = stripHtml(form.contentHtml);
+      if (plain.length < 50) {
+        setError('Сначала заполните текст статьи — генерация читает его целиком');
+        return;
+      }
+      const prompt = [
+        'Сформулируй инвестиционный тезис идеи одним абзацем: что покупаем/во что верим, почему сейчас, какой катализатор.',
+        `ЗАГОЛОВОК: ${form.title}`,
+        form.thesis ? `ТЕКУЩИЙ ТЕЗИС (можно улучшить, не копировать): ${form.thesis}` : '',
+        form.excerpt ? `ЛИД: ${form.excerpt}` : '',
+        `ТИП МАТЕРИАЛА: инвестиционная идея`,
+        'ТРЕБОВАНИЯ: до 300 знаков, конкретика вместо общих слов, без обещаний доходности, на русском.',
+        `ТЕКСТ: ${plain.slice(0, 6000)}`,
+      ].filter(Boolean).join('\n');
+      const res = await api<{ text: string; mock: boolean }>('/media/generate-text', {
+        method: 'POST',
+        body: JSON.stringify({ prompt, maxChars: 300 }),
+      });
+      setForm((f) => ({ ...f, thesis: res.text.trim() }));
+      setNotice(res.mock ? 'Тезис собран из текста (mock — без ключа LLM)' : 'Тезис сгенерирован ✓');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Ошибка генерации');
+    } finally {
+      setThesisBusy(false);
     }
   };
 
@@ -655,6 +688,9 @@ export default function ArticleEditPage() {
         <div>
           <label className="label">Тезис идеи (для type=ideya)</label>
           <textarea className="input" rows={2} value={form.thesis} onChange={set('thesis')} />
+          <button type="button" className="btn-secondary mt-1 py-1 text-xs" disabled={thesisBusy} onClick={() => void genThesis()}>
+            {thesisBusy ? 'Генерируем…' : '✨ Тезис из текста'}
+          </button>
         </div>
         {form.type === 'video' && (
           <div>

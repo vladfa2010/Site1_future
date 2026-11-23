@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'react-router';
 import { api } from '../api';
 import { RichTextEditor } from '../components/RichTextEditor';
+import { stripHtml } from '@newinvest/db/text-utils';
 
 interface Industry { id: number; name: string }
 
@@ -54,6 +55,37 @@ export default function CompanyEditPage() {
   const toggleIndustry = (id: number) =>
     setSelectedIndustries((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
 
+  /** ✨ One-liner: строка для карточки портфеля из описания компании. */
+  const [oneLinerBusy, setOneLinerBusy] = useState(false);
+  const genOneLiner = async () => {
+    setError(null); setNotice(null);
+    const plain = stripHtml(form.description);
+    if (plain.length < 50) {
+      setError('Сначала заполните описание компании — генерация читает его');
+      return;
+    }
+    setOneLinerBusy(true);
+    try {
+      const prompt = [
+        'Напиши one-liner — короткую строку-питч для карточки компании в портфеле инвестиционного медиа.',
+        `НАЗВАНИЕ КОМПАНИИ: ${form.name}`,
+        form.oneLiner ? `ТЕКУЩИЙ ONE-LINER (можно улучшить, не копировать): ${form.oneLiner}` : '',
+        'ТРЕБОВАНИЯ: до 120 знаков, одно предложение: чем компания занимается и чем примечательна, конкретика вместо общих слов, без кликбейта, на русском.',
+        `ТЕКСТ ОПИСАНИЯ: ${plain.slice(0, 3000)}`,
+      ].filter(Boolean).join('\n');
+      const res = await api<{ text: string; mock: boolean }>('/media/generate-text', {
+        method: 'POST',
+        body: JSON.stringify({ prompt, maxChars: 150 }),
+      });
+      setForm((f) => ({ ...f, oneLiner: res.text.trim() }));
+      if (res.mock) setNotice('One-liner собран из текста (mock — без ключа LLM)');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Ошибка генерации');
+    } finally {
+      setOneLinerBusy(false);
+    }
+  };
+
   return (
     <div className="space-y-4">
       <h1 className="text-xl font-bold">Карточка компании</h1>
@@ -68,6 +100,9 @@ export default function CompanyEditPage() {
         <div>
           <label className="label">One-liner (строка для карточки портфеля)</label>
           <input className="input" value={form.oneLiner} onChange={(e) => setForm({ ...form, oneLiner: e.target.value })} />
+          <button type="button" className="btn-secondary mt-1 py-1 text-xs" disabled={oneLinerBusy} onClick={() => void genOneLiner()}>
+            {oneLinerBusy ? 'Генерируем…' : '✨ One-liner из описания'}
+          </button>
         </div>
         <div>
           <label className="label">Сайт</label>
