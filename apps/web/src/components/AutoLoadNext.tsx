@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link, useNavigate } from 'react-router';
+import { Link } from 'react-router';
 import { useQueries } from '@tanstack/react-query';
 import {
   api,
@@ -253,12 +253,13 @@ export function AutoLoadNext({ current, relations }: AutoLoadNextProps) {
     if (intersectingRef.current) pumpRef.current();
   }, [results, items]);
 
-  // ---- URL/title: replace через роутер (тот же history.replaceState, но роутер
-  // остаётся в курсе текущего URL — иначе location desync: роутер «думает», что мы
-  // на изначальной статье, и в ряде сценариев сброс скролла/активные ссылки ломались).
-  // key location при replace НЕ меняется → ScrollToTop (зависит от key) не сработает
-  // и чтение с автоподгрузкой не будет дёргаться наверх.
-  const navigate = useNavigate();
+  // ---- URL/title: СЛЕПОЙ replaceState — роутер НЕ уведомляется намеренно.
+  // В react-router v7 replace ГЕНЕРИРУЕТ НОВЫЙ location.key (createLocation:
+  // key: to.key || key || createKey()) — из-за этого: (1) ScrollToTop сбрасывал
+  // скролл наверх, (2) useParams() отдавал slug следующей статьи и ArticlePage
+  // ПОЛНОСТЬЮ заменял контент, хотя задумано «следующая статья прибавляется ниже,
+  // текущая остаётся» (инцидент 2026-11-24, регресс коммита 8c54152b). Слепой
+  // replaceState: params не меняются → контент не трогается, скролл не сбрасывается.
   useEffect(() => {
     const okItems = items.filter((i) => i.status === 'ok');
     const last = okItems[okItems.length - 1];
@@ -266,9 +267,9 @@ export function AutoLoadNext({ current, relations }: AutoLoadNextProps) {
     const key = `${last.type}/${last.slug}`;
     if (lastOkKeyRef.current === key) return;
     lastOkKeyRef.current = key;
-    navigate(`/${last.type}/${last.slug}`, { replace: true });
+    window.history.replaceState(null, '', `/${last.type}/${last.slug}`);
     setArticleTitle(last.title); // полный заголовок, без обрезки
-  }, [items, navigate]);
+  }, [items]);
 
   const showSentinel = items.length < MAX_LOADED && (!candidatesLoaded || candidates.length > 0);
   const nextAfterLimit = items.length >= MAX_LOADED ? candidates[0] : undefined;
