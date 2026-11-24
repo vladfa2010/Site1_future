@@ -180,6 +180,28 @@ docker compose -f infra/docker-compose.yml -f infra/docker-compose.local.yml dow
 4. `docker compose -f infra/docker-compose.yml up -d --build`
 5. HTTPS-версии: https://инвестиционно.рф и https://admin.инвестиционно.рф
 
+**Адресная схема прод-сервера (фактическая, 2026-11-24):**
+
+| Адрес | Что | TLS |
+|---|---|---|
+| https://инвестиционно.рф | сайт | Let's Encrypt (авто) |
+| https://217.114.10.164 | тот же сайт, fallback по IP | самоподписной (`infra/certs/`, только на VDS) |
+| https://217-114-10-164.sslip.io:8443 | **админка (основной адрес)** | Let's Encrypt на sslip.io |
+| https://217.114.10.164:8080 | админка, запасной | самоподписной |
+| admin.инвестиционно.рф | зарезервировано (DNS-записи пока нет — сайт в Caddyfile готов, сертификат выпустится после заведения A-записи) | — |
+
+- Перед админками стоит Caddy; сертификаты: LE-хранилище — volume `caddy_data`,
+  самоподписной — `infra/certs/{cert,key}.pem` (в gitignore, есть только на VDS).
+- CSP: сайт (домен и IP-fallback) разрешает домены Яндекс.Метрики (`mc.yandex.ru`,
+  `yastatic.net`), админки — базовый CSP. Передаётся аргументом импорта:
+  `import security "<CSP>"` — отдельным `header` сниппет НЕ переопределяется.
+- Серверный оверлей `infra/docker-compose.server.yml` **живёт только на VDS**
+  (в репо не коммитится): Caddyfile.ip вместо Caddyfile, порт админки 8080,
+  mount `infra/certs` → `/certs`, сид админа из `.env`. Без него Caddy
+  поднимется на штатном Caddyfile (без IP/8080-сайтов) и **без сертификатов
+  внутри контейнера** — IP-fallback и :8080 молча умрут (LE-адреса при этом
+  работают, поэтому поломку не видно по домену).
+
 **После перехода контейнера на non-root (USER node, uid 1000):** если генерация
 обложек падает с `EACCES: permission denied, open '/app/uploads/...'` — папке uploads
 на хосте нужен владелец 1000:1000:
@@ -188,6 +210,94 @@ docker compose -f infra/docker-compose.yml stop api
 chown -R 1000:1000 /var/lib/docker/volumes/<проект>_uploads/_data
 docker compose -f infra/docker-compose.yml start api
 ```
+
+---
+
+## Обновление прод-сервера (runbook)
+
+Штатный цикл, который выполняется при каждом «обнови VDS». Окно: любое,
+недоступность — на время пересборки (минуты).
+
+### 1. Подтянуть код
+
+```bash
+cd /opt/investicionno
+git fetch -q origin && git status -sb        # убедиться, что ветка чистая и на origin/main
+git pull --ff-only
+git log --oneline -1                          # запомнить/проверить коммит
+```
+
+### 2. (Опционально, при пакете с миграциями) Бэкап
+
+```bash
+cd infra
+docker compose -f docker-compose.yml -f docker-compose.server.yml exec -T db \
+  pg_dump -U newinvest newinvest | gzip > /root/backup-$(date +%F-%H%M).sql.gz
+docker compose -f docker-compose.yml -f docker-compose.server.yml exec -T api \
+  tar czf - -C /app/uploads . > /root/uploads-$(date +%F-%H%M).tgz
+```
+
+### 3. Пересборка
+
+```bash
+cd infra
+docker compose -f docker-compose.yml -f docker-compose.server.yml up -d --build
+```
+
+**Обязательно `--force-recreate` (весь стек или затронутый сервис), если:**
+- менялся `infra/Caddyfile.ip` — compose по хэшу конфигурации его изменение
+  не видит (bind-mount), без force-recreate Caddy останется на старом конфиге;
+- контейнер подозревается в потерянных mount'ах (симптом вчерашнего инцидента:
+  внутри контейнера нет `/certs`, IP-fallback и :8080 отвечают 000, а домен
+  работает);
+- после `git pull` проверьте `docker compose ... ps` — если сервис с
+  изменённым кодом показывает старое время аптайма, пересоберите его явно:
+  `... up -d --build --force-recreate web|api|admin`.
+
+**Миграции** накатываются сами при старте api (drizzle-kit migrate в CMD).
+В логах после старта должно быть: `migrations applied successfully` +
+`API: http://localhost:1003`. Ошибки миграций — стоп, разбор, не продолжать.
+Нюанс из практики: drizzle-kit migrate может «проскочить» миграцию из-за
+наследия `__drizzle_migrations` в восстановленном дампе — проверять схему
+фактически (`\d users`), при расхождении применить SQL вручную и вставить
+запись с sha256 файла миграции.
+
+### 4. Постпроверки (приёмка обновления)
+
+```bash
+D=https://xn--b1aghca0aeahc1am7c.xn--p1ai
+curl -s -o /dev/null -w '%{http_code}' $D/                 # 200
+curl -s -o /dev/null -w '%{http_code}' $D/api/health       # 200
+curl -s -o /dev/null -w '%{http_code}' -X POST $D/api/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"<admin>","password":"<пароль>"}'           # 200
+curl -sk -o /dev/null -w '%{http_code}' --resolve 217-114-10-164.sslip.io:8443:<IP> \
+  https://217-114-10-164.sslip.io:8443/                    # 200 (админка)
+curl -sk -o /dev/null -w '%{http_code}' https://<IP>/      # 200 (IP-fallback)
+curl -sk -o /dev/null -w '%{http_code}' https://<IP>:8080/ # 200 (админка self-signed)
+curl -sI $D | grep -c 'strict-transport\|content-security' # 2 (HSTS + CSP)
+```
+
+Плюс при изменениях админки — логин через её API (другой origin, проверяет CORS):
+`curl -sk -X POST https://<IP>:8080/api/auth/login ...`
+
+### 5. Откат
+
+```bash
+git revert <коммит>    # или git reset --hard <коммит>
+docker compose -f docker-compose.yml -f docker-compose.server.yml up -d --build
+```
+
+Миграции add-only (новые колонки/таблицы) совместимы со старым кодом — откат
+кода без отката миграций безопасен. Деструктивные миграции — сначала бэкап
+п. 2 и ручной откат схемы из дампа.
+
+### 6. Секреты (fail fast)
+
+API не стартует с `JWT_SECRET` короче 32 символов или равным дефолту из репо;
+`POSTGRES_PASSWORD=newinvest-local` запрещён. Симптом «после обновления ничего
+не поднимается» — в первую очередь `docker compose logs api` и проверка `.env`,
+а не откат.
 
 Отличия прод-композа от локального: TLS в `infra/Caddyfile`, секреты из `.env`,
 `CORS_ORIGINS` указывает на https-домены.
