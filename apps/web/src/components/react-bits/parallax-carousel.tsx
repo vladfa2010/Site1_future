@@ -787,8 +787,9 @@ const ParallaxCarousel = React.forwardRef<
         node.style.cursor = "grab";
         // DOM-фолбэк клика: raycast R3F у части окружений не доставляет onClick
         // мешу (регресс «карусель не кликается»). Активируем карточку напрямую
-        // по той же раскладке, что и useFrame: центр плоскости i = i*stride − scroll.
-        // Клики по DOM-элементам поверх (кнопка интро, ссылки) пропускаем.
+        // по той же раскладке, что и useFrame: центр плоскости i = i·stride − scroll,
+        // отсчёт position.x — от ЦЕНТРА контейнера (камера в нуле). Клики по
+        // DOM-элементам поверх (кнопка интро, ссылки) пропускаем.
         if (
           wasClick &&
           e.button === 0 &&
@@ -796,7 +797,8 @@ const ParallaxCarousel = React.forwardRef<
           !((e.target as HTMLElement | null)?.closest?.("a,button,input"))
         ) {
           const rect = node.getBoundingClientRect();
-          const x = e.clientX - rect.left + scrollRef.current.current;
+          const x =
+            e.clientX - rect.left - rect.width / 2 + scrollRef.current.current;
           const stride = settingsRef.current.imageWidth + settingsRef.current.gap;
           const total = countRef.current;
           if (stride > 0 && total > 0) {
