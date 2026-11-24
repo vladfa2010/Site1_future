@@ -198,7 +198,8 @@ function renderHtml(page: PageData, origin: string): string {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>${e(page.title)} — ${SITE_TITLE}</title>
+  <!-- title ЕДИНЫЙ формат с клиентом (lib/pageTitle.ts): «{title}» — инвестиционно.рф (agent-64) -->
+  <title>${e(`«${page.title}» — ${SITE_TITLE}`)}</title>
   ${meta.join('\n  ')}
   ${jsonLdBlocks}
 </head>

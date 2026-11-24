@@ -275,7 +275,8 @@ export function AutoLoadNext({ current, relations }: AutoLoadNextProps) {
   const nextAfterLimit = items.length >= MAX_LOADED ? candidates[0] : undefined;
 
   return (
-    <div className="mt-12">
+    // aria-live: дозагрузка следующей статьи анонсируется скринридерам (agent-64)
+    <div className="mt-12" aria-live="polite">
       {items.map((it, idx) => {
         // error-вариант: секция не рендерится вовсе (скрытый блок, место не оставляем)
         if (it.status === 'error') return null;
