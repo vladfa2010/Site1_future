@@ -714,6 +714,13 @@ const ParallaxCarousel = React.forwardRef<
         // активная (центральная) плоскость — для подписи/ссылки над каруселью
         const stride = settings.imageWidth + settings.gap;
         let active = stride > 0 ? Math.round(s.current / stride) : 0;
+        // дебаг-интроспекция: текущий скролл в data-атрибуте — для e2e-тестов
+        // клика и разбора инцидентов «клик открыл не ту карточку»
+        const dbg = Math.round(s.current);
+        const cNode = containerRef.current;
+        if (cNode && cNode.dataset.scroll !== String(dbg)) {
+          cNode.dataset.scroll = String(dbg);
+        }
         if (settings.count > 0) {
           active = ((active % settings.count) + settings.count) % settings.count;
           if (active !== lastActiveRef.current) {
