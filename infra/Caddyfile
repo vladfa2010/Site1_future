@@ -12,7 +12,9 @@
     # CSP (аудит 2026-11-14): JWT в localStorage — любой XSS = кража токена.
     # Скрипты — только same-origin (сборки Vite без инлайна); стили допускают
     # инлайн (style-атрибуты React); srcDoc-iframe превью — под frame-src 'self'.
-    Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'"
+    # CSP передаётся аргументом импорта (import security "<CSP>") — переопределение
+    # отдельным header НЕ работает: сниппетный header применяется после сайтового.
+    Content-Security-Policy "{args.0}"
     # HSTS (prod, публичный TLS)
     Strict-Transport-Security "max-age=31536000; includeSubDomains"
     -Server
@@ -21,17 +23,11 @@
 
 # Основной сайт (API и uploads — тот же origin, фронт ходит на /api относительно)
 xn--b1aghca0aeahc1am7c.xn--p1ai {
-  import security
+  import security "default-src 'self'; script-src 'self' https://mc.yandex.ru https://yastatic.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://mc.yandex.ru; font-src 'self' data:; connect-src 'self' https://mc.yandex.ru; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'"
 
   # Яндекс.Метрика (счётчик 104473798): CSP из (security) режет загрузчик tag.js
   # и хиты (script-src 'self'; connect-src/img-src 'self'). Переопределяем CSP
   # ТОЛЬКО для основного сайта — админка остаётся на строгом CSP (security).
-  # БЛОЧНАЯ форма обязательна: одиночная строка `header Content-Security-Policy`
-  # после `import security` не переопределяет CSP из блочного header сниппета
-  # (проверено на проде 2026-11-24 — отдавался базовый CSP).
-  header {
-    Content-Security-Policy "default-src 'self'; script-src 'self' https://mc.yandex.ru https://yastatic.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://mc.yandex.ru; font-src 'self' data:; connect-src 'self' https://mc.yandex.ru; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'"
-  }
 
   # ТЗ-10: sitemap.xml + robots.txt — динамическая генерация на API.
   # Порядок важен: ДО @bots, чтобы краулер получил XML, а не HTML-рендер.
@@ -78,7 +74,7 @@ xn--b1aghca0aeahc1am7c.xn--p1ai {
 
 # Админка — отдельный поддомен
 admin.xn--b1aghca0aeahc1am7c.xn--p1ai {
-  import security
+  import security "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'"
 
   # ТЗ-10: админка не должна попасть в индекс — статичный noindex-robots
   handle /robots.txt {
@@ -103,7 +99,7 @@ Disallow: /
 # Админка по IP:8080 — доступ до переключения DNS и как запасной адрес.
 # Держим НЕ в git-игноре: блок статичный, секретов нет. Сертификат — внутренний Caddy (предупреждение в браузере).
 :8080 {
-  import security
+  import security "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'"
 
   handle /robots.txt {
       respond 200 {
@@ -128,7 +124,7 @@ Disallow: /
 # Сайт остаётся на домене :443, админка доступна как https://217-114-10-164.sslip.io:8443
 # (сертификат Let's Encrypt выпускается на это имя автоматически).
 https://217-114-10-164.sslip.io:8443 {
-  import security
+  import security "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'"
 
   handle /robots.txt {
       respond 200 {
