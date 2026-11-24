@@ -86,7 +86,7 @@ Disallow: /
 # === Fallback по IP: самоподписной сертификат ===
 https://217.114.10.164 {
   tls /certs/cert.pem /certs/key.pem
-  import security "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'"
+  import security "default-src 'self'; script-src 'self' https://mc.yandex.ru https://yastatic.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://mc.yandex.ru; font-src 'self' data:; connect-src 'self' https://mc.yandex.ru; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'"
 
   handle /sitemap.xml {
       reverse_proxy api:1003
