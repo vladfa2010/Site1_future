@@ -26,7 +26,12 @@ xn--b1aghca0aeahc1am7c.xn--p1ai {
   # Яндекс.Метрика (счётчик 104473798): CSP из (security) режет загрузчик tag.js
   # и хиты (script-src 'self'; connect-src/img-src 'self'). Переопределяем CSP
   # ТОЛЬКО для основного сайта — админка остаётся на строгом CSP (security).
-  header Content-Security-Policy "default-src 'self'; script-src 'self' https://mc.yandex.ru https://yastatic.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://mc.yandex.ru; font-src 'self' data:; connect-src 'self' https://mc.yandex.ru; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'"
+  # БЛОЧНАЯ форма обязательна: одиночная строка `header Content-Security-Policy`
+  # после `import security` не переопределяет CSP из блочного header сниппета
+  # (проверено на проде 2026-11-24 — отдавался базовый CSP).
+  header {
+    Content-Security-Policy "default-src 'self'; script-src 'self' https://mc.yandex.ru https://yastatic.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://mc.yandex.ru; font-src 'self' data:; connect-src 'self' https://mc.yandex.ru; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'"
+  }
 
   # ТЗ-10: sitemap.xml + robots.txt — динамическая генерация на API.
   # Порядок важен: ДО @bots, чтобы краулер получил XML, а не HTML-рендер.
