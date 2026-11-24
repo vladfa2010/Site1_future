@@ -3,7 +3,7 @@
  * Формат: «{title}» — инвестиционно.рф (для статей; заголовок ПОЛНЫЙ, без обрезки).
  */
 
-export const SITE_TITLE = 'инвестиционно.рф';
+export const SITE_TITLE = 'Инвестиционно.рф';
 
 export const articleTitle = (title: string) => `«${title}» — ${SITE_TITLE}`;
 
