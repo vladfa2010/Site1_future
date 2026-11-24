@@ -28,6 +28,11 @@ export interface ParallaxCarouselProps {
   onActiveChange?: (index: number) => void;
   /** Клик по плоскости (навигация). */
   onItemClick?: (index: number) => void;
+  /** Мёртвая зона слева от края контейнера, px — клики там игнорируются
+   * (HomePage: интро-плашка поверх карусели на десктопе). */
+  deadZoneLeft?: number;
+  /** Мёртвая зона справа от края контейнера, px — симметрично deadZoneLeft. */
+  deadZoneRight?: number;
   /** Пауза рендера/автоплея (секция вне вьюпорта) — экономия батареи. */
   paused?: boolean;
   /** Первая плоскость собрала текстуры — пора убирать скелетон-заглушку. */
@@ -176,6 +181,9 @@ async function composeCardCanvas(
     await new Promise<void>((resolve) => {
       const img = new Image();
       const timer = setTimeout(() => resolve(), 8000); // зависший запрос — тёмная заглушка, не вечное ожидание
+      // CORS обязателен: без него canvas тainted и texImage2D упадёт с SecurityError.
+      // Обложки должны быть same-origin (или с Access-Control-Allow-Origin) —
+      // иначе загрузка молча оборвётся и карточка останется тёмной.
       img.crossOrigin = "anonymous";
       img.onload = () => {
         clearTimeout(timer);
@@ -301,7 +309,6 @@ interface PlaneProps {
   variance: number;
   /** вертикальное смещение плоскости — «лесенка» вместо конвейера */
   yOffset: number;
-  onItemClick?: (index: number) => void;
   onReady?: () => void;
   imageWidth: number;
   imageHeight: number;
@@ -321,7 +328,6 @@ const Plane: React.FC<PlaneProps> = ({
   onReady,
   variance,
   yOffset,
-  onItemClick,
   imageWidth,
   imageHeight,
   gap,
@@ -503,13 +509,9 @@ const Plane: React.FC<PlaneProps> = ({
 
   return (
     <>
-      <mesh
-        ref={meshRef}
-        onClick={(e) => {
-          e.stopPropagation();
-          onItemClick?.(index);
-        }}
-      >
+      {/* onClick на меше не используем: R3F-raycast молча не доставляет события
+          (инцидент 2026-11-23) — клик обрабатывается DOM-фолбэком на контейнере */}
+      <mesh ref={meshRef}>
         <planeGeometry args={[1, 1, 1, 1]} />
         <shaderMaterial
           vertexShader={PLANE_VERTEX}
@@ -565,6 +567,8 @@ const ParallaxCarousel = React.forwardRef<
       items,
       onActiveChange,
       onItemClick,
+      deadZoneLeft = 0,
+      deadZoneRight = 0,
       paused = false,
       onReady,
       imageWidth = 420,
@@ -591,13 +595,17 @@ const ParallaxCarousel = React.forwardRef<
     const resolvedImages = resolvedItems.map((i) => i.src);
     const onActiveChangeRef = useRef(onActiveChange);
     const onItemClickRef = useRef(onItemClick);
+    const deadZoneLeftRef = useRef(deadZoneLeft);
+    const deadZoneRightRef = useRef(deadZoneRight);
     // количество плоскостей — для клик-фолбэка (см. onPointerUp)
     const countRef = useRef(resolvedImages.length);
     useEffect(() => {
       onActiveChangeRef.current = onActiveChange;
       onItemClickRef.current = onItemClick;
+      deadZoneLeftRef.current = deadZoneLeft;
+      deadZoneRightRef.current = deadZoneRight;
       countRef.current = resolvedImages.length;
-    }, [onActiveChange, onItemClick, resolvedImages.length]);
+    }, [onActiveChange, onItemClick, deadZoneLeft, deadZoneRight, resolvedImages.length]);
 
     const containerRef = useRef<HTMLDivElement>(null);
     const rafRef = useRef<number | null>(null);
@@ -756,19 +764,21 @@ const ParallaxCarousel = React.forwardRef<
 
       let captured = false;
       let downX = 0;
+      let downY = 0;
       const onPointerDown = (e: PointerEvent) => {
-        if (e.button !== 0) return; // правый клик — не драг
+        if (e.button !== 0 || !e.isPrimary) return; // правый клик/второй палец — не драг
         draggingRef.current = true;
         captured = false;
         downX = e.clientX;
+        downY = e.clientY;
         lastPointerXRef.current = e.clientX;
         node.style.cursor = "grabbing";
       };
 
       const onPointerMove = (e: PointerEvent) => {
-        if (!draggingRef.current) return;
+        if (!draggingRef.current || !e.isPrimary) return;
         // захват пойнтера только когда реально начался драг — иначе capture ретаргетит
-        // click на контейнер и onItemClick плоскости (клик по карточке) не срабатывает
+        // click на контейнер и активацию карточки (клик по карточке) не сработает
         if (!captured && Math.abs(e.clientX - downX) > 4) {
           captured = true;
           node.setPointerCapture(e.pointerId);
@@ -781,7 +791,12 @@ const ParallaxCarousel = React.forwardRef<
 
       const onPointerUp = (e: PointerEvent) => {
         if (!draggingRef.current) return;
-        const wasClick = !captured; // драга не было — это клик/тап по карточке
+        // драга не было (и пальец не съехал тачем без pointermove) — это клик/тап
+        const wasClick =
+          !captured &&
+          e.isPrimary &&
+          Math.abs(e.clientX - downX) <= 4 &&
+          Math.abs(e.clientY - downY) <= 4;
         draggingRef.current = false;
         if (captured) {
           try {
@@ -795,7 +810,9 @@ const ParallaxCarousel = React.forwardRef<
         // DOM-фолбэк клика: raycast R3F у части окружений не доставляет onClick
         // мешу (регресс «карусель не кликается»). Активируем карточку напрямую
         // по той же раскладке, что и useFrame: центр плоскости i = i·stride − scroll,
-        // отсчёт position.x — от ЦЕНТРА контейнера (камера в нуле). Клики по
+        // отсчёт position.x — от ЦЕНТРА контейнера (камера в нуле).
+        // HIT-TEST: клик вне границ карточки (пустоты между карточками, края
+        // контейнера, зона интро-плашки) НЕ активирует ничего. Клики по
         // DOM-элементам поверх (кнопка интро, ссылки) пропускаем.
         if (
           wasClick &&
@@ -804,15 +821,35 @@ const ParallaxCarousel = React.forwardRef<
           !((e.target as HTMLElement | null)?.closest?.("a,button,input"))
         ) {
           const rect = node.getBoundingClientRect();
-          const x =
-            e.clientX - rect.left - rect.width / 2 + scrollRef.current.current;
-          const stride = settingsRef.current.imageWidth + settingsRef.current.gap;
+          const settings = settingsRef.current;
+          // мёртвая зона слева (интро-плашка HomePage на десктопе), px
+          const deadLeft = deadZoneLeftRef.current;
+          const localX = e.clientX - rect.left;
+          const localY = e.clientY - rect.top;
+          if (localX < deadLeft || localX > rect.width - deadZoneRightRef.current) {
+            return;
+          }
+          const x = localX - rect.width / 2 + scrollRef.current.current;
+          const y = localY - rect.height / 2;
+          const stride = settings.imageWidth + settings.gap;
           const total = countRef.current;
           if (stride > 0 && total > 0) {
             let idx = Math.round(x / stride);
-            if (settingsRef.current.loop) idx = ((idx % total) + total) % total;
+            if (settings.loop) idx = ((idx % total) + total) % total;
             else idx = Math.max(0, Math.min(total - 1, idx));
-            onItemClickRef.current(idx);
+            // расстояние от точки клика до центра БЛИЖАЙШЕЙ копии плоскости
+            // (loop: копий несколько по модулю длины ленты)
+            const strip = total * stride;
+            let dCenter = x - idx * stride; // = click − центр плоскости idx
+            if (settings.loop && strip > 0) {
+              dCenter =
+                ((((dCenter + strip / 2) % strip) + strip) % strip) - strip / 2;
+            }
+            const halfW = settings.imageWidth / 2 + 2; // +2px — поправка на scaleMul
+            const halfH = settings.imageHeight / 2 + 2;
+            if (Math.abs(dCenter) <= halfW && Math.abs(y) <= halfH) {
+              onItemClickRef.current(idx);
+            }
           }
         }
       };

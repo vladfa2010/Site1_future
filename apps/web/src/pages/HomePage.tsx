@@ -90,6 +90,17 @@ export default function HomePage() {
     return () => io.disconnect();
   }, []);
 
+  // мёртвая зона клика слева — ширина интро-плашки на десктопе (sm+); на мобильной
+  // вёрстке плашка над каруселью, зона 0. Зависит от breakpoint, не от ресайза окна.
+  const [introDeadZone, setIntroDeadZone] = useState(0);
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 640px)');
+    const apply = () => setIntroDeadZone(mq.matches ? 248 : 0);
+    apply();
+    mq.addEventListener('change', apply);
+    return () => mq.removeEventListener('change', apply);
+  }, []);
+
   const q = {
     trends: useQuery({ queryKey: ['trends'], queryFn: () => api.trends() }),
     feed: useQuery({ queryKey: ['feed'], queryFn: () => api.articles() }), // лента событий: все типы, свежие сверху
@@ -232,6 +243,7 @@ export default function HomePage() {
                 paused={!carouselInView}
                 onReady={() => setCarouselReady(true)}
                 showProgress={false}
+                deadZoneLeft={introDeadZone}
                 onItemClick={(i) => {
                   const t = trends.trends[i];
                   if (t) navigate(`/trend/${t.slug}`);
