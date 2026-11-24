@@ -807,6 +807,13 @@ const ParallaxCarousel = React.forwardRef<
           captured = false;
         }
         node.style.cursor = "grab";
+        // ВРЕМЕННЫЙ ДЕБАГ: фиксируем wasClick до внешнего if (инцидент 2026-11-24)
+        (window as unknown as { __carDbg2?: unknown }).__carDbg2 = {
+          wasClick, captured, isPrim: e.isPrimary,
+          dx: Math.abs(e.clientX - downX), dy: Math.abs(e.clientY - downY),
+          btn: e.button, hasCb: !!onItemClickRef.current,
+          targetOk: !((e.target as HTMLElement | null)?.closest?.("a,button,input")),
+        };
         // DOM-фолбэк клика: raycast R3F у части окружений не доставляет onClick
         // мешу (регресс «карусель не кликается»). Активируем карточку напрямую
         // по той же раскладке, что и useFrame: центр плоскости i = i·stride − scroll,
@@ -847,6 +854,13 @@ const ParallaxCarousel = React.forwardRef<
             }
             const halfW = settings.imageWidth / 2 + 2; // +2px — поправка на scaleMul
             const halfH = settings.imageHeight / 2 + 2;
+            // ВРЕМЕННЫЙ ДЕБАГ (инцидент «клик не навигация») — убрать после разбора
+            (window as unknown as { __carDbg?: unknown }).__carDbg = {
+              wasClick, btn: e.button, isPrim: e.isPrimary,
+              hasCb: !!onItemClickRef.current, dCenter, y,
+              halfW, halfH, idx, willFire:
+                Math.abs(dCenter) <= halfW && Math.abs(y) <= halfH,
+            };
             if (Math.abs(dCenter) <= halfW && Math.abs(y) <= halfH) {
               onItemClickRef.current(idx);
             }
