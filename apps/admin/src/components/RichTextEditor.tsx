@@ -79,6 +79,12 @@ export function RichTextEditor({
   const lastApplied = useRef<string | null>(null);
   const editorRef = useRef<Editor | null>(null); // для handlePaste (async-вставка после загрузки)
   const editor = useEditor({
+    // v3: по умолчанию НЕ перерендеривается на транзакциях — без этого
+    // isActive('image')/панель ImageMenu и подсветка тулбара мертвы (ревью agent-69)
+    shouldRerenderOnTransaction: true,
+    onDestroy: () => {
+      editorRef.current = null; // async-вставка после ухода со страницы — не трогаем редактор
+    },
     extensions: [
       StarterKit.configure({ heading: { levels: [2, 3, 4] } }),
       ResizableImage,
@@ -170,8 +176,8 @@ function ImageMenu({ editor }: { editor: Editor }) {
   const src = String(editor.getAttributes('image').src ?? '');
   const width = String(editor.getAttributes('image').width ?? '100');
   const [alt, setAlt] = useState(String(editor.getAttributes('image').alt ?? ''));
-  const [mediaId, setMediaId] = useState<number | null>(null);
-  const [usage, setUsage] = useState<{ covers: UsageItem[]; inline: UsageItem[] } | null>(null);
+  const [lookup, setLookup] = useState<{ mediaId: number | null; usage: { covers: UsageItem[]; inline: UsageItem[] } | null }>({ mediaId: null, usage: null });
+  const [loaded, setLoaded] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
@@ -183,27 +189,26 @@ function ImageMenu({ editor }: { editor: Editor }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [src]);
 
-  // ищем файл в медиатеке → грузим, где используется (обложки + внутри текстов)
+  // где используется: серверный lookup по пути (ревью agent-69 — не гонять список медиатеки)
   useEffect(() => {
     let cancelled = false;
-    setMediaId(null);
-    setUsage(null);
+    setLookup({ mediaId: null, usage: null });
+    setLoaded(false);
     const token = localStorage.getItem('token');
-    const base = src.split('/').pop() ?? '';
-    if (!base) return;
+    if (!src) return;
     void (async () => {
       try {
-        const r = await fetch('/api/media', { headers: token ? { Authorization: `Bearer ${token}` } : {} });
-        if (!r.ok) return;
-        const d = (await r.json()) as { media: { id: number; filePath: string }[] };
+        const r = await fetch(`/api/media/usage-by-path?path=${encodeURIComponent(src)}`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
+        if (!r.ok || cancelled) return;
+        const d = (await r.json()) as { media: { id: number } | null; covers: UsageItem[]; inline: UsageItem[] };
         if (cancelled) return;
-        const found = d.media.find((m) => m.filePath.endsWith(base));
-        if (!found) return;
-        setMediaId(found.id);
-        const ru = await fetch(`/api/media/${found.id}/usage`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
-        if (ru.ok && !cancelled) setUsage(await ru.json());
+        setLookup({ mediaId: d.media?.id ?? null, usage: { covers: d.covers, inline: d.inline } });
       } catch {
         /* usage — подсказка, молчим */
+      } finally {
+        if (!cancelled) setLoaded(true);
       }
     })();
     return () => { cancelled = true; };
@@ -212,10 +217,10 @@ function ImageMenu({ editor }: { editor: Editor }) {
   const saveAlt = async () => {
     setErr(null); setNotice(null);
     editor.chain().focus().updateAttributes('image', { alt }).run();
-    if (!mediaId) { setNotice('Подпись обновлена в тексте'); return; }
+    if (!lookup.mediaId) { setNotice('Подпись обновлена в тексте'); return; }
     try {
       const token = localStorage.getItem('token');
-      const r = await fetch(`/api/media/${mediaId}`, {
+      const r = await fetch(`/api/media/${lookup.mediaId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
         body: JSON.stringify({ alt }),
@@ -227,6 +232,10 @@ function ImageMenu({ editor }: { editor: Editor }) {
     }
   };
 
+  // mousedown гасим у всех кнопок: иначе фокус уходит из contentEditable,
+  // ProseMirror теряет NodeSelection и панель размонтируется до onClick (ревью agent-69)
+  const keepSelection = (e: React.MouseEvent) => e.preventDefault();
+
   return (
     <div className="space-y-2 border-b border-zinc-800 bg-zinc-900/60 px-3 py-2 text-xs">
       <div className="flex flex-wrap items-center gap-2">
@@ -237,38 +246,41 @@ function ImageMenu({ editor }: { editor: Editor }) {
           onChange={(e) => setAlt(e.target.value)}
           placeholder="подпись (alt) — видна в галерее и для скринридеров"
         />
-        <button type="button" className="btn-secondary py-1 text-xs" onClick={() => void saveAlt()}>💾 Сохранить</button>
+        <button type="button" className="btn-secondary py-1 text-xs" onMouseDown={keepSelection} onClick={() => void saveAlt()}>💾 Сохранить</button>
         <span className="mx-1 h-4 w-px bg-zinc-700" />
         {([['100', 'Ширина 100%'], ['75', 'Ширина 75%'], ['50', 'Ширина 50%']] as const).map(([w, title]) => (
           <button
             key={w}
             type="button"
             title={title}
+            onMouseDown={keepSelection}
             onClick={() => editor.chain().focus().updateAttributes('image', { width: w === '100' ? null : w }).run()}
             className={`rounded px-2 py-1 font-semibold ${width === w ? 'bg-orange-500 text-zinc-950' : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'}`}
           >
             {w}%
           </button>
         ))}
-        <button type="button" title="Удалить картинку" onClick={() => editor.chain().focus().deleteSelection().run()} className="rounded bg-zinc-800 px-2 py-1 hover:bg-red-500/20">🗑</button>
+        <button type="button" title="Удалить картинку" onMouseDown={keepSelection} onClick={() => editor.chain().focus().deleteSelection().run()} className="rounded bg-zinc-800 px-2 py-1 hover:bg-red-500/20">🗑</button>
       </div>
       {(notice || err) && <p className={err ? 'text-red-400' : 'text-green-400'}>{err ?? notice}</p>}
-      {usage && (
+      {loaded && lookup.usage && (
         <div className="flex flex-wrap gap-x-4 gap-y-1 text-zinc-400">
           <span>
             🖼 Обложка у:{' '}
-            {usage.covers.length === 0
+            {lookup.usage.covers.length === 0
               ? <span className="text-zinc-600">никого</span>
-              : usage.covers.map((c) => <span key={`c${c.entity}${c.id}`} className="mr-2">{usageLabel(c.entity)} «{c.title}»</span>)}
+              : lookup.usage.covers.map((c) => <span key={`c${c.entity}${c.id}`} className="mr-2">{usageLabel(c.entity)} «{c.title}»</span>)}
           </span>
           <span>
             📄 Внутри текстов:{' '}
-            {usage.inline.length === 0
+            {lookup.usage.inline.length === 0
               ? <span className="text-zinc-600">нигде</span>
-              : usage.inline.map((c) => <span key={`i${c.entity}${c.id}`} className="mr-2">{usageLabel(c.entity)} «{c.title}»</span>)}
+              : lookup.usage.inline.map((c) => <span key={`i${c.entity}${c.id}`} className="mr-2">{usageLabel(c.entity)} «{c.title}»</span>)}
           </span>
-          {mediaId === null && <span className="text-zinc-600">(файл не из медиатеки — внешняя картинка)</span>}
         </div>
+      )}
+      {loaded && lookup.mediaId === null && (
+        <p className="text-zinc-600">Файл не из медиатеки (внешняя картинка) — подпись сохранится только в тексте.</p>
       )}
     </div>
   );

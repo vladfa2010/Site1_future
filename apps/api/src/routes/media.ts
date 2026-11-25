@@ -187,12 +187,7 @@ mediaRouter.patch('/media/:id', authRequired, requireRole('admin', 'super_admin'
 
 /** Где используется картинка: обложками каких сущностей и внутри каких текстов.
  *  Нужно меню картинки в редакторе (2026-11-26): «вставлена внутрь / обложкой у …». */
-mediaRouter.get('/media/:id/usage', authRequired, requireRole('admin', 'super_admin'), async (req, res) => {
-  const id = Number(req.params.id);
-  if (!Number.isInteger(id)) {
-    res.status(400).json({ error: 'validation' });
-    return;
-  }
+async function usageFor(id: number): Promise<{ covers: { entity: string; id: number; slug: string | null; title: string }[]; inline: { entity: string; id: number; slug: string | null; title: string }[] }> {
   const covers: { entity: string; id: number; slug: string | null; title: string }[] = [];
   for (const a of await db.select({ id: articles.id, slug: articles.slug, title: articles.title }).from(articles).where(eq(articles.coverMediaId, id))) {
     covers.push({ entity: 'article', ...a });
@@ -224,5 +219,28 @@ mediaRouter.get('/media/:id/usage', authRequired, requireRole('admin', 'super_ad
       inline.push({ entity: 'company', id: c.id, slug: c.slug, title: c.title });
     }
   }
-  res.json({ covers, inline });
+  return { covers, inline };
+}
+
+mediaRouter.get('/media/:id/usage', authRequired, requireRole('admin', 'super_admin'), async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) {
+    res.status(400).json({ error: 'validation' });
+    return;
+  }
+  res.json(await usageFor(id));
+});
+
+/** Тот же usage, но по пути файла — клиент по клику на картинку знает src,
+ *  а не media.id (ревью agent-69: не гонять список медиатеки целиком). */
+mediaRouter.get('/media/usage-by-path', authRequired, requireRole('admin', 'super_admin'), async (req, res) => {
+  const raw = String(req.query.path ?? '');
+  const pathOnly = raw.startsWith('http') ? new URL(raw).pathname : raw;
+  const [m] = await db.select({ id: media.id }).from(media).where(eq(media.filePath, pathOnly)).limit(1);
+  if (!m) {
+    res.json({ media: null, covers: [], inline: [] });
+    return;
+  }
+  const u = await usageFor(m.id);
+  res.json({ media: { id: m.id }, covers: u.covers, inline: u.inline });
 });
