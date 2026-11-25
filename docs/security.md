@@ -238,8 +238,8 @@ adminPlans/entities). Все high/critical закрыты; остаются 4 mo
 **аудит-лог админов** (`admin_audit_log` — кто/что/над чем/IP; записи в users.patch,
 redirects.create/delete, notifications.send; просмотр `GET /api/admin/audit-log`
 только супер-админом, 200 последних). Проверка: auth-smoke 5/5 (включая чужой audience
-→ 401), reset-smoke 8/8, tz43-smoke 7/7 (повторный resetToken → 401, аудит-запись
-присутствует, доступ не-супер-админа → 403).
+→ 401), tz43-smoke 9/9 (восстановлен 2026-11-25; повторный resetToken → 401, аудит-запись
+присутствует, доступ не-супер-админа → 403; reset-сценарии forgot→verify→reset входят в tz43-smoke).
 **4.4 (2026-11-15, локально):** вычистка SVG из /uploads — `scripts/clean-svg-covers.mjs`
 (dry-run по умолчанию, `--apply`): 2 привязанных к статьям SVG конвертированы в PNG
 через sips с обновлением `media.file_path`, 88 сирот удалены (файл + строка media);
@@ -273,7 +273,7 @@ root.** API и Caddy под `user=app` (Caddy — с `cap_net_bind_service`), AP
 
 **Проверка:** typecheck, 15/15 unit-тестов; против живой БД — refresh-smoke 5/5
 (сессия до смены пароля после reset → 401; refresh её → 401; свежая сессия
-обновляется; токен старше 72 ч → отказ), auth-smoke 5/5, reset-smoke 8/8.
+обновляется; токен старше 72 ч → отказ), auth-smoke 5/5, tz43-smoke 9/9.
 
 ### 2026-11-20 (вторая партия) — энумерация email по таймингу, SQL-инъекция в api.sh, CORS
 
@@ -293,7 +293,7 @@ CREATE/ALTER ROLE идут отдельными heredoc'ами stdin; прове
 добавлены оба origin'а с точным форматом (схема+порт). **Проверить сам .env на VDS
 нельзя отсюда (нет доступа) — проверка вынесена в чек-лист деплоя.**
 
-**Проверка:** typecheck, reset-smoke 8/8 (verify-code с dummy-сравнением), замер
+**Проверка:** typecheck, tz43-smoke 9/9 (verify-code с dummy-сравнением), замер
 тайминга, SQL-блок api.sh против локальной БД с кавычкой в пароле.
 
 ### 2026-11-20 (ревью тимлидом) — major: потолок 72ч был скользящим + устранение замечаний
@@ -318,7 +318,7 @@ URI-encoded (`pg-connection-string` декодирует — проверено 
 
 **Проверка:** refresh-smoke 9/9 (включая: свежий токен со старым origIat 73 ч →
 отказ; origIat копируется через цепочку; fallback для токенов без origIat),
-auth-smoke 5/5, reset-smoke 8/8, sh -n api.sh, decode пароля pg-connection-string.
+auth-smoke 5/5, tz43-smoke 9/9, sh -n api.sh, decode пароля pg-connection-string.
 
 **Деплой (ТЗ `tz-deploy-2026-11.md`): VDS (прод) — 2026-11-15.** Коммит `193c456` (main).
 Миграции 0020/0021 накатаны (0020/0021 drizzle-kit migrate проскочил из-за

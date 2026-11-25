@@ -530,8 +530,11 @@ investicionno_rf/
 │   ├── docker-compose.yml    # PostgreSQL + pgvector (для сервера; локально — Homebrew PG)
 │   └── docker/               # Dockerfile для api/web/admin
 ├── scripts/
-│   └── e2e.sh                # E2E-сьют (123 проверки: auth, админка, юзер-сценарии, поиск,
-│                             # безопасность) — API_URL=http://localhost:4000 bash scripts/e2e.sh
+│   ├── e2e.sh                # E2E-сьют (356 проверок: auth, админка, юзер-сценарии, поиск,
+│   │                         # безопасность) — API_URL=http://localhost:1003 bash scripts/e2e.sh
+│   ├── auth-smoke.mjs        # смоук JWT (iss/aud, подделанный payload)
+│   ├── tz43-smoke.mjs        # смоук ТЗ 4.2/4.3 (resetToken, аудит-лог)
+│   └── ai-slop-golden.mjs    # golden set аудита ИИ-штампов
 ├── reference/                # локальные копии репозиториев PULSE (в .gitignore)
 ├── docs/
 │   └── newinvesticionno.md   # этот документ
@@ -557,7 +560,7 @@ investicionno_rf/
 | миграция контента | 306 статей, 73 компании, 24 тикера, 26 индустрий, 16 трендов, связи (383/118/366/334) | ✅ |
 | `apps/web` | Главная как у донора (палитра чёрный #000 + лайм #beff00), статья (thesis, чипсы, график MOEX при «Торги на бирже», breadcrumbs), тренд-лендинг, сюжет-хронология, скринер, **/search** (гибридный, бейдж «векторный+текстовый»), /pricing (тарифы из БД), /cabinet (избранное, подписки→лента, настройки уведомлений email/TG, удаление аккаунта), AuthModal 1:1 PULSE, «Предложить идею» | ✅ |
 | `apps/admin` | Все экраны: статьи (TipTap, авто-slug, обложка — генерация/загрузка/выбор из медиатеки, привязки EntityCloud с созданием по Enter, генерация лида и SEO-description, превью десктоп/планшет/мобайл, публикация/возврат в черновик, paywall-уровни), компании, тренды, индустрии, тикеры, сюжеты, медиатека, редиректы, пользователи (роли), тарифы, фичи, аналитика, **настройки Kimi API** (/kimi) | ✅ |
-| E2E | scripts/e2e.sh — 123 проверки (реестр механик — раздел 6.6), зелёные | ✅ |
+| E2E | scripts/e2e.sh — 356 проверок (реестр механик — раздел 6.6), зелёные | ✅ |
 
 **Запуск с нуля:**
 
@@ -570,7 +573,7 @@ npm run seed -w @newinvest/api          # супер-админ admin@local.dev 
 npm run seed:test -w @newinvest/api     # тестовый админ test@test.ru / test
 npm run db:migrate:wp                   # контент с донора (опционально, ~30 с)
 npm run dev                             # api :4000 + web :5173 + admin :5174
-API_URL=http://localhost:4000 bash scripts/e2e.sh   # E2E-регрессия (123 проверки)
+API_URL=http://localhost:1003 bash scripts/e2e.sh   # E2E-регрессия (356 проверок)
 # векторный поиск после ввода ключа в /kimi:
 MOONSHOT_API_KEY=… MOONSHOT_EMBED_MODEL=… npm run embed -w @newinvest/db
 ```

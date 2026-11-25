@@ -34,7 +34,8 @@ echo "════════════════════════�
 T=$(curl -s -X POST $B/api/auth/login -H "$J" -d '{"email":"test@test.ru","password":"test"}' | jqget "d['token']")
 [ -n "$T" ] && ok || bad "login admin"
 A="Authorization: Bearer $T"
-check "login: неверный пароль → 401" curl -s -o /dev/null -w "%{http_code}" -X POST $B/api/auth/login -H "$J" -d '{"email":"test@test.ru","password":"wrong"}' | grep -q 401
+# NB: helper check() редиректит stdout curl в /dev/null — с пайпом в grep не работает,
+# поэтому весь сьют пишет проверки инлайн «... && ok || bad» (как строка ниже).
 curl -s -o /dev/null -w "%{http_code}" -X POST $B/api/auth/login -H "$J" -d '{"email":"test@test.ru","password":"wrong"}' | grep -q 401 && ok || bad "login: 401 на неверный пароль"
 SA=$(curl -s -X POST $B/api/auth/login -H "$J" -d '{"email":"admin@local.dev","password":"admin123"}' | jqget "d['token']")
 [ -n "$SA" ] && ok || bad "login super_admin"
@@ -732,6 +733,149 @@ if [ -n "$ART" ]; then
   psql -d newinvest -q -c "DELETE FROM article_views WHERE article_id=$ART; UPDATE articles SET status='published', access_level='auth' WHERE id=$ART;" 2>/dev/null
 fi
 
+# Pacing: к концу сьюта (security/кабинет/авторы/плейлисты/bot-render/trending) снова набрано
+# ~250 запросов к общему apiLimiter (300/60с на IP) — пауза сбрасывает окно перед новыми блоками.
+echo "  … pacing 60с (rate-limit window)…"
+sleep 60
+
+echo "════════════════════════════════════════"
+echo "  E2E: УДАЛЕНИЕ ЕДИНИЦ КОНТЕНТА (2026-11-15)"
+echo "════════════════════════════════════════"
+# журнал 2026-11-15: DELETE /articles|stories|companies|trends|tickers|industries/:id,
+# DELETE /media/:id, DELETE /admin/features/:id — везде {ok:true} / повторный 404 / anon 401
+DLA=$(curl -s -X POST "$B/api/articles" -H "$A" -H "$J" -d '{"type":"novost","slug":"e2e-del-art","title":"E2E на удаление","contentHtml":"<p>Текст</p>","status":"draft"}' | jqget "d['article']['id']")
+[ -n "$DLA" ] && ok || bad "delete: статья-жертва создана"
+DLS=$(curl -s -X POST "$B/api/stories" -H "$A" -H "$J" -d '{"slug":"e2e-del-story","name":"E2E Сюжет на удаление"}' | jqget "d['story']['id']")
+[ -n "$DLS" ] && ok || bad "delete: сюжет-жертва создан"
+curl -s -X PUT "$B/api/articles/$DLA/relations" -H "$A" -H "$J" -d '{"tickerIds":[1]}' > /dev/null
+curl -s -X PUT "$B/api/stories/$DLS/articles" -H "$A" -H "$J" -d "{\"articleIds\":[$DLA],\"primaryArticleId\":$DLA}" > /dev/null
+curl -s -o /dev/null -w "%{http_code}" -X DELETE "$B/api/articles/$DLA" | grep -q 401 && ok || bad "delete: anon DELETE /articles 401"
+curl -s -o /dev/null -w "%{http_code}" -X DELETE "$B/api/articles/$DLA" -H "$UA" | grep -q 403 && ok || bad "delete: не-admin DELETE статьи 403"
+curl -s -X DELETE "$B/api/articles/$DLA" -H "$A" | grep -q '"ok":true' && ok || bad "delete: DELETE статьи {ok:true}"
+curl -s -o /dev/null -w "%{http_code}" -X DELETE "$B/api/articles/$DLA" -H "$A" | grep -q 404 && ok || bad "delete: повторный DELETE статьи 404"
+curl -s -o /dev/null -w "%{http_code}" "$B/api/articles/novost/e2e-del-art" | grep -q 404 && ok || bad "delete: статья исчезла из публичного просмотра"
+psql -d newinvest -tAc "SELECT count(*) FROM articles WHERE id=$DLA" 2>/dev/null | grep -q ^0$ && ok || bad "delete: строка статьи удалена из БД"
+psql -d newinvest -tAc "SELECT count(*) FROM article_tickers WHERE article_id=$DLA" 2>/dev/null | grep -q ^0$ && ok || bad "delete: привязки к тикерам удалены каскадом"
+psql -d newinvest -tAc "SELECT primary_article_id IS NULL FROM stories WHERE id=$DLS" 2>/dev/null | grep -q t && ok || bad "delete: primaryArticleId сюжета обнулён"
+DLC=$(curl -s -X POST "$B/api/companies" -H "$A" -H "$J" -d '{"slug":"e2e-del-corp","name":"E2E Del Corp","industryIds":[1]}' | jqget "d['company']['id']")
+[ -n "$DLC" ] && ok || bad "delete: компания-жертва создана"
+curl -s -X DELETE "$B/api/companies/$DLC" -H "$A" | grep -q '"ok":true' && ok || bad "delete: DELETE компании {ok:true}"
+curl -s -o /dev/null -w "%{http_code}" "$B/api/companies/e2e-del-corp" | grep -q 404 && ok || bad "delete: компания исчезла (GET 404)"
+DLT=$(curl -s -X POST "$B/api/trends" -H "$A" -H "$J" -d '{"slug":"e2e-del-trend","name":"E2E Тренд на удаление"}' | jqget "d['trend']['id']")
+[ -n "$DLT" ] && ok || bad "delete: тренд-жертва создан"
+curl -s -o /dev/null -w "%{http_code}" -X POST "$B/api/trends" -H "$A" -H "$J" -d '{"slug":"e2e-del-trend","name":"Дубль"}' | grep -q 409 && ok || bad "trends: дубль slug → 409 (не 500)"
+curl -s -X DELETE "$B/api/trends/$DLT" -H "$A" | grep -q '"ok":true' && ok || bad "delete: DELETE тренда {ok:true}"
+DLK=$(curl -s -X POST "$B/api/tickers" -H "$A" -H "$J" -d '{"slug":"e2e-del","symbol":"E2EDEL","companyId":1}' | jqget "d['ticker']['id']")
+[ -n "$DLK" ] && ok || bad "delete: тикер-жертва создан"
+curl -s -X DELETE "$B/api/tickers/$DLK" -H "$A" | grep -q '"ok":true' && ok || bad "delete: DELETE тикера {ok:true}"
+DLI=$(curl -s -X POST "$B/api/industries" -H "$A" -H "$J" -d '{"slug":"e2e-del-ind","name":"E2E Отрасль на удаление"}' | jqget "d['industry']['id']")
+[ -n "$DLI" ] && ok || bad "delete: отрасль-жертва создана"
+curl -s -X DELETE "$B/api/industries/$DLI" -H "$A" | grep -q '"ok":true' && ok || bad "delete: DELETE отрасли {ok:true}"
+curl -s -X DELETE "$B/api/stories/$DLS" -H "$A" | grep -q '"ok":true' && ok || bad "delete: DELETE сюжета {ok:true}"
+curl -s -o /dev/null -w "%{http_code}" -X DELETE "$B/api/stories/$DLS" -H "$A" | grep -q 404 && ok || bad "delete: повторный DELETE сюжета 404"
+curl -s -o /dev/null -w "%{http_code}" -X POST "$B/api/admin/features" -H "$A" -H "$J" -d '{"id":"e2e_feature","label":"E2E фича"}' | grep -q 201 && ok || bad "features: создание для удаления 201"
+curl -s -X DELETE "$B/api/admin/features/e2e_feature" -H "$A" | grep -q '"ok":true' && ok || bad "features: DELETE {ok:true}"
+curl -s -o /dev/null -w "%{http_code}" -X DELETE "$B/api/admin/features/e2e_feature" -H "$A" | grep -q 404 && ok || bad "features: повторный DELETE 404"
+
+echo "════════════════════════════════════════"
+echo "  E2E: ОБЛОЖКА / МЕДИАТЕКА (PATCH coverMediaId:null, PATCH/DELETE /media/:id)"
+echo "════════════════════════════════════════"
+# журнал 2026-11-15/16: PATCH /articles/:id принимает coverMediaId:null (обложку можно
+# снять), PATCH /media/:id {alt} — переименование, DELETE /media/:id — {ok:true}/404
+printf '\x89PNG\r\n\x1a\n' > /tmp/e2e-cover.png; head -c 200 /dev/urandom >> /tmp/e2e-cover.png
+COVUP=$(curl -s -X POST "$B/api/media/upload" -H "$A" -F "file=@/tmp/e2e-cover.png;type=image/png")
+rm -f /tmp/e2e-cover.png
+COVM=$(echo "$COVUP" | jqget "d['media']['id']")
+[ -n "$COVM" ] && ok || bad "cover: upload картинки обложки"
+CVA=$(curl -s -X POST "$B/api/articles" -H "$A" -H "$J" -d '{"type":"novost","slug":"e2e-cover-art","title":"E2E обложка","contentHtml":"<p>Текст</p>","status":"draft"}' | jqget "d['article']['id']")
+[ -n "$CVA" ] && ok || bad "cover: статья для обложки создана"
+curl -s -X PATCH "$B/api/articles/$CVA" -H "$A" -H "$J" -d "{\"coverMediaId\":$COVM}" > /dev/null
+curl -s "$B/api/articles/novost/e2e-cover-art" -H "$A" | grep -q '"coverUrl":"/uploads/' && ok || bad "cover: coverUrl после назначения обложки"
+curl -s -X PATCH "$B/api/articles/$CVA" -H "$A" -H "$J" -d '{"coverMediaId":null}' | grep -q '"coverMediaId":null' && ok || bad "cover: PATCH coverMediaId:null принят"
+curl -s "$B/api/articles/novost/e2e-cover-art" -H "$A" | grep -q '"coverUrl":null' && ok || bad "cover: coverUrl null после снятия обложки"
+curl -s -X PATCH "$B/api/media/$COVM" -H "$A" -H "$J" -d '{"alt":"E2E подпись"}' | grep -q '"alt":"E2E подпись"' && ok || bad "media: PATCH alt (переименование)"
+curl -s -o /dev/null -w "%{http_code}" -X PATCH "$B/api/media/999999999" -H "$A" -H "$J" -d '{"alt":"x"}' | grep -q 404 && ok || bad "media: PATCH несуществующего 404"
+curl -s -X DELETE "$B/api/media/$COVM" -H "$A" | grep -q '"ok":true' && ok || bad "media: DELETE {ok:true}"
+curl -s -o /dev/null -w "%{http_code}" -X DELETE "$B/api/media/$COVM" -H "$A" | grep -q 404 && ok || bad "media: повторный DELETE 404"
+psql -d newinvest -tAc "SELECT count(*) FROM media WHERE id=$COVM" 2>/dev/null | grep -q ^0$ && ok || bad "media: запись удалена из БД"
+
+echo "════════════════════════════════════════"
+echo "  E2E: ФАЗЫ ПОРТФЕЛЯ (PUT /articles/:id/phases, 2026-11-18)"
+echo "════════════════════════════════════════"
+# журнал 2026-11-18: зеркало стадий — junction article_deal_phases драйвил скринер,
+# но задать фазу можно было только напрямую в БД. PUT admin, detail отдаёт phaseIds
+PHS=$(curl -s "$B/api/deal-phases" | jqget "d['phases'][0]['id']")
+[ -n "$PHS" ] && ok || bad "phases: deal-phases отдаёт список"
+curl -s -X PUT "$B/api/articles/$ART/phases" -H "$A" -H "$J" -d "{\"phaseIds\":[$PHS]}" | grep -q '"ok":true' && ok || bad "phases: PUT admin"
+curl -s "$B/api/articles/novost/e2e-novost" -H "$A" | PHS=$PHS python3 -c "import json,sys,os; d=json.load(sys.stdin); assert int(os.environ['PHS']) in (d.get('phaseIds') or []), d.get('phaseIds'); print('ok')" > /dev/null 2>&1 && ok || bad "phases: phaseIds в detail"
+curl -s -o /dev/null -w "%{http_code}" -X PUT "$B/api/articles/$ART/phases" -H "$UA" -H "$J" -d '{"phaseIds":[]}' | grep -q 403 && ok || bad "phases: не-admin 403"
+
+echo "════════════════════════════════════════"
+echo "  E2E: AI-SLOP АУДИТ ИИ-ШТАМПОВ (/admin/ai-slop, 2026-11-20)"
+echo "════════════════════════════════════════"
+# журнал 2026-11-20: {html} → {score, issues[]}; <300 слов → отказ text_too_short;
+# дубли абзацев ловятся детерминированно (mock тоже); {fix:true} → исправленный html
+SLOPSHORT='<p>Короткий текст для проверки отказа аудита по длине.</p>'
+curl -s -o /dev/null -w "%{http_code}" -X POST "$B/api/admin/ai-slop" -H "$J" -d "{\"html\":\"$SLOPSHORT\"}" | grep -q 401 && ok || bad "aislop: anon 401"
+curl -s -o /dev/null -w "%{http_code}" -X POST "$B/api/admin/ai-slop" -H "$UA" -H "$J" -d "{\"html\":\"$SLOPSHORT\"}" | grep -q 403 && ok || bad "aislop: не-admin 403"
+curl -s -X POST "$B/api/admin/ai-slop" -H "$A" -H "$J" -d "{\"html\":\"$SLOPSHORT\"}" | grep -q '"reason":"text_too_short"' && ok || bad "aislop: <300 слов → text_too_short"
+SLOPHTML=$(python3 -c "import json;p='Спутниковый интернет меняет экономику связи и открывает новые ниши для инвесторов. '*40;print(json.dumps('<p>'+p+'</p><p>'+p+'</p>'))")
+curl -s -m 120 -X POST "$B/api/admin/ai-slop" -H "$A" -H "$J" -d "{\"html\":$SLOPHTML}" | grep -q duplicated_passage && ok || bad "aislop: дубли абзацев → duplicated_passage"
+curl -s -m 120 -X POST "$B/api/admin/ai-slop" -H "$A" -H "$J" -d "{\"html\":\"$SLOPSHORT\",\"fix\":true}" | grep -q '"html"' && ok || bad "aislop: fix возвращает html"
+
+echo "════════════════════════════════════════"
+echo "  E2E: СКОЛЬЗЯЩЕЕ ПРОДЛЕНИЕ СЕССИИ (POST /auth/refresh, 2026-11-18)"
+echo "════════════════════════════════════════"
+# журнал 2026-11-18: refresh принимает действующий токен (протухшие отсекает authRequired),
+# выдаёт новый полный TTL; мусорный токен → 401
+RFT=$(curl -s -X POST "$B/api/auth/refresh" -H "$UA" | jqget "d['token']")
+[ -n "$RFT" ] && ok || bad "refresh: новый токен выдан"
+curl -s "$B/api/auth/me" -H "Authorization: Bearer $RFT" | grep -q displayName && ok || bad "refresh: новый токен принимается /me"
+curl -s -o /dev/null -w "%{http_code}" -X POST "$B/api/auth/refresh" -H "Authorization: Bearer garbage" | grep -q 401 && ok || bad "refresh: мусорный токен 401"
+
+echo "════════════════════════════════════════"
+echo "  E2E: SLUG-EXISTS (коллизия при смене типа, 2026-11-17)"
+echo "════════════════════════════════════════"
+# журнал 2026-11-17: GET /articles/slug-exists?type&slug&excludeId (author+) —
+# редактор показывает красное предупреждение до сохранения, а не 409 после
+curl -s "$B/api/articles/slug-exists?type=novost&slug=e2e-novost" -H "$A" | grep -q '"exists":true' && ok || bad "slug-exists: занятый slug"
+curl -s "$B/api/articles/slug-exists?type=novost&slug=e2e-no-such-slug-xyz" -H "$A" | grep -q '"exists":false' && ok || bad "slug-exists: свободный slug"
+curl -s -o /dev/null -w "%{http_code}" "$B/api/articles/slug-exists?type=bogus&slug=x" -H "$A" | grep -q 400 && ok || bad "slug-exists: невалидный тип 400"
+curl -s -o /dev/null -w "%{http_code}" "$B/api/articles/slug-exists?type=novost&slug=x" | grep -q 401 && ok || bad "slug-exists: anon 401"
+
+echo "════════════════════════════════════════"
+echo "  E2E: ДОКРУТКА ЛАЙКОВ/РЕПОСТОВ (likesBaseOffset/sharesBaseOffset, 2026-11-17)"
+echo "════════════════════════════════════════"
+# журнал 2026-11-17: та же модель, что viewsBaseOffset (ТЗ-03) — только PATCH, только
+# admin; не-админу поля молча вырезаются из updates (403 нет, значение не меняется)
+curl -s -X PATCH "$B/api/articles/$ART" -H "$A" -H "$J" -d '{"likesBaseOffset":7,"sharesBaseOffset":3}' | grep -q '"likesBaseOffset":7' && ok || bad "offsets: admin PATCH likes/shares"
+curl -s "$B/api/articles/novost/e2e-novost" -H "$A" | python3 -c "import json,sys; d=json.load(sys.stdin); assert d['likesCount']>=7 and d['sharesCount']>=3, (d['likesCount'],d['sharesCount']); print('ok')" > /dev/null 2>&1 && ok || bad "offsets: виртуальные суммы в detail"
+OFA=$(curl -s -X POST "$B/api/articles/propose" -H "$UA" -H "$J" -d '{"type":"ideya","title":"E2E идея докрутки лайков","text":"Текст идеи более двадцати символов для валидации"}' | jqget "d['article']['id']")
+[ -n "$OFA" ] && ok || bad "offsets: черновик автора создан"
+curl -s -o /dev/null -w "%{http_code}" -X PATCH "$B/api/articles/$OFA" -H "$UA" -H "$J" -d '{"likesBaseOffset":999}' | grep -q 200 && ok || bad "offsets: author PATCH без 403 (поле игнорируется)"
+psql -d newinvest -tAc "SELECT likes_base_offset FROM articles WHERE id=$OFA" 2>/dev/null | grep -q ^0$ && ok || bad "offsets: автор не изменил likes_base_offset"
+
+echo "════════════════════════════════════════"
+echo "  E2E: ЛИМИТЕР РЕГИСТРАЦИИ (REGISTER_LIMIT/час на IP)"
+echo "  БЛОК ИДЁТ ПОСЛЕДНИМ: выжирает бакет /register, после него регистраций нет"
+echo "════════════════════════════════════════"
+# журнал 2026-11-16: лимитер регистрации → env REGISTER_LIMIT (сьют регистрирует ~7
+# юзеров/прогон, бакет in-memory копится между прогонами). Динамическая проверка,
+# как у share-anon (ТЗ-11): при капе ≤ 12 ждём 429 внутри прогона, иначе только потолок.
+REG_CAP=${REGISTER_LIMIT:-$(grep '^REGISTER_LIMIT=' "$(dirname "$0")/../apps/api/.env" 2>/dev/null | cut -d= -f2)}
+REG_CAP=${REG_CAP:-10}
+R_OK=0; R_429=0
+for i in $(seq 1 12); do
+  code=$(curl -s -o /dev/null -w "%{http_code}" -X POST $B/api/auth/register -H "$J" -d "{\"username\":\"RegLimit$i\",\"email\":\"reglimit-$i@e2e-test.ru\",\"password\":\"E2ePass123\"}")
+  [ "$code" = "201" ] && R_OK=$((R_OK+1))
+  [ "$code" = "429" ] && R_429=$((R_429+1))
+done
+if [ "$REG_CAP" -le 12 ] 2>/dev/null; then
+  [ "$R_OK" -le "$REG_CAP" ] && [ "$R_429" -ge 1 ] 2>/dev/null && ok || bad "register: лимит $REG_CAP/час (ok=$R_OK 429=$R_429)"
+else
+  [ "$R_OK" -le "$REG_CAP" ] && ok || bad "register: лимит $REG_CAP/час (ok=$R_OK, превышен кап)"
+fi
+
 echo ""
 echo "════════════════════════════════════════"
 echo "  ИТОГ: PASS=$PASS FAIL=$FAIL"
@@ -740,12 +884,14 @@ echo "════════════════════════�
 
 # очистка e2e-данных
 psql -d newinvest -q -c "
-DELETE FROM articles WHERE slug IN ('e2e-novost','e2e-insider','e2e-video','e2e-seo','e2e-author-tariff','e2e-pl-1','e2e-pl-2','e2e-pl-3') OR title LIKE 'E2E идея%' OR title LIKE 'E2E просмотры%';
-DELETE FROM stories WHERE slug IN ('e2e-story','e2e-playlist');
-DELETE FROM companies WHERE slug='e2e-corp';
-DELETE FROM trends WHERE slug='e2e-trend';
-DELETE FROM industries WHERE slug='e2e-ind';
-DELETE FROM tickers WHERE slug='e2e';
+DELETE FROM articles WHERE slug IN ('e2e-novost','e2e-insider','e2e-video','e2e-seo','e2e-author-tariff','e2e-pl-1','e2e-pl-2','e2e-pl-3','e2e-cover-art') OR title LIKE 'E2E идея%' OR title LIKE 'E2E просмотры%';
+DELETE FROM stories WHERE slug IN ('e2e-story','e2e-playlist','e2e-del-story');
+DELETE FROM companies WHERE slug IN ('e2e-corp','e2e-del-corp');
+DELETE FROM trends WHERE slug IN ('e2e-trend','e2e-del-trend');
+DELETE FROM industries WHERE slug IN ('e2e-ind','e2e-del-ind');
+DELETE FROM tickers WHERE slug IN ('e2e','e2e-del');
+DELETE FROM features_registry WHERE id IN ('e2e_feature') OR id LIKE 'e2e%';
+DELETE FROM users WHERE email LIKE 'reglimit-%@e2e-test.ru';
 DELETE FROM tariff_plans WHERE slug='e2e-tariff';
 DELETE FROM subscription_plans WHERE id IN ('e2e-subplan','e2e-subpop','e2e-subpop2','e2e-yr');
 DELETE FROM users WHERE email='plans-e2e@test.ru';
