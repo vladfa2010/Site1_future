@@ -2,9 +2,32 @@ import { useEffect, useRef, useState } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Image from '@tiptap/extension-image';
+import { NodeSelection } from '@tiptap/pm/state';
 import { Table, TableRow, TableCell, TableHeader } from '@tiptap/extension-table';
 import type { Editor } from '@tiptap/react';
 import { MdImportModal } from './MdImportModal';
+
+/**
+ * Image с поддержкой width (в % от ширины колонки). Ширина хранится
+ * инлайн-стилем width:N% — санитизер сайта (web/lib/sanitize) разрешает
+ * style для img, но только width в процентах (allowedStyles, без произвольного CSS).
+ */
+const ResizableImage = Image.extend({
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      width: {
+        default: null,
+        parseHTML: (el: HTMLElement) => {
+          const m = /^(\d{1,3})%$/.exec(el.style.width ?? '');
+          return m ? m[1] : null;
+        },
+        renderHTML: (attrs: Record<string, string | null>) =>
+          attrs.width ? { style: `width:${attrs.width}%` } : {},
+      },
+    };
+  },
+});
 
 /**
  * TipTap-редактор контента статьи (решение раздела 6.2).
@@ -37,7 +60,7 @@ export function RichTextEditor({
   const editor = useEditor({
     extensions: [
       StarterKit.configure({ heading: { levels: [2, 3, 4] } }),
-      Image,
+      ResizableImage,
       Table.configure({ resizable: false }),
       TableRow,
       TableHeader,
@@ -49,8 +72,21 @@ export function RichTextEditor({
       onChange(editor.getHTML());
     },
     editorProps: {
+      // клик по картинке → NodeSelection: в этом билде ProseMirror не выделяет
+      // атомарный узел сам (баг «картинку нельзя выделить кликом»), поэтому
+      // выставляем выделение явно. Backspace/Delete с активным NodeSelection
+      // удаляют узел штатно (baseKeymap → deleteSelection).
+      handleClick: (view, _pos, event) => {
+        const target = event.target as HTMLElement | null;
+        if (target?.tagName !== 'IMG') return false;
+        const p = view.posAtDOM(target, 0);
+        const node = view.state.doc.nodeAt(p);
+        if (node?.type.name !== 'image') return false;
+        view.dispatch(view.state.tr.setSelection(NodeSelection.create(view.state.doc, p)));
+        return true;
+      },
       attributes: {
-        class: 'prose-invert min-h-[320px] max-w-none px-4 py-3 text-sm leading-relaxed focus:outline-none [&_h2]:mt-4 [&_h2]:text-lg [&_h2]:font-bold [&_h3]:mt-3 [&_h3]:font-bold [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_blockquote]:border-l-2 [&_blockquote]:border-zinc-600 [&_blockquote]:pl-3 [&_blockquote]:italic [&_a]:text-orange-400 [&_img]:max-w-full [&_img]:rounded-lg [&_td]:border [&_td]:border-zinc-700 [&_td]:px-2 [&_td]:py-1 [&_th]:border [&_th]:border-zinc-700 [&_th]:px-2 [&_th]:py-1',
+        class: 'prose-invert min-h-[320px] max-w-none px-4 py-3 text-sm leading-relaxed focus:outline-none [&_h2]:mt-4 [&_h2]:text-lg [&_h2]:font-bold [&_h3]:mt-3 [&_h3]:font-bold [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_blockquote]:border-l-2 [&_blockquote]:border-zinc-600 [&_blockquote]:pl-3 [&_blockquote]:italic [&_a]:text-orange-400 [&_img]:max-w-full [&_img]:rounded-lg [&_td]:border [&_td]:border-zinc-700 [&_td]:px-2 [&_td]:py-1 [&_th]:border [&_th]:border-zinc-700 [&_th]:px-2 [&_th]:py-1 [&_.ProseMirror-selectednode]:rounded-lg [&_.ProseMirror-selectednode]:ring-2 [&_.ProseMirror-selectednode]:ring-[#beff00]',
       },
     },
   });
@@ -176,6 +212,25 @@ function Toolbar({
       <ToolbarButton title="Загрузить картинку с компьютера" onClick={() => fileRef.current?.click()}>{uploadBusy ? '…' : '📤'}</ToolbarButton>
       <ToolbarButton title="Выбрать картинку из медиатеки" onClick={() => setPickerOpen(true)}>🗂</ToolbarButton>
       <ToolbarButton title="Вставить картинку по URL" onClick={addImage}>🖼</ToolbarButton>
+      {/* ТЗ-16 ресайз: ширина картинки — кнопки работают, когда картинка выделена
+          (клик по ней выделяет — см. handleClick в useEditor); ширина уходит
+          в style="width:N%" и переживает санитизер сайта */}
+      {editor.isActive('image') && (
+        <>
+          <span className="mx-1 h-4 w-px bg-zinc-700" />
+          {([['100', 'Ширина 100%'], ['75', 'Ширина 75%'], ['50', 'Ширина 50%']] as const).map(([w, title]) => (
+            <ToolbarButton
+              key={w}
+              title={title}
+              active={String(editor.getAttributes('image').width ?? '100') === w}
+              onClick={() => editor.chain().focus().updateAttributes('image', { width: w === '100' ? null : w }).run()}
+            >
+              {w}%
+            </ToolbarButton>
+          ))}
+          <ToolbarButton title="Удалить картинку" onClick={() => editor.chain().focus().deleteSelection().run()}>🗑</ToolbarButton>
+        </>
+      )}
       <span className="mx-1 h-4 w-px bg-zinc-700" />
       <ToolbarButton title="Импорт Markdown (ТЗ-16): MD с картинками base64 → текст + медиатека" onClick={() => setMdImportOpen(true)}>⬇ MD</ToolbarButton>
       <span className="mx-1 h-4 w-px bg-zinc-700" />

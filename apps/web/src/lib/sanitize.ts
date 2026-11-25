@@ -13,10 +13,18 @@ const OPTIONS: sanitizeHtml.IOptions = {
     'code', 'pre'],
   allowedAttributes: {
     a: ['href', 'target'],
-    img: ['src', 'alt'],
+    // style для img — только width в процентах (см. allowedStyles): редактор
+    // хранит там ширину картинки, произвольный CSS не пропускаем
+    img: ['src', 'alt', 'style'],
     th: ['colspan', 'rowspan'],
     td: ['colspan', 'rowspan'],
     col: ['span'],
+  },
+  // ресайз картинок в редакторе админки: style="width:N%" и ничего больше
+  allowedStyles: {
+    img: {
+      width: [/^\d{1,3}%$/],
+    },
   },
   allowedSchemes: ['http', 'https'],
   // внешние ссылки — только с noopener
