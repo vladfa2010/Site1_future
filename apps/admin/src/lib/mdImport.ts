@@ -174,6 +174,16 @@ export function previewMd(markdown: string): MdImportPreview {
   return base;
 }
 
+/** 401 при загрузке картинок — сессия админа истекла (TTL 12ч, аудит 2026-11-08).
+ * Пробрасываем наверх, чтобы модал показал понятное сообщение вместо
+ * молчаливого «не загрузились» (инцидент 2026-11-25). */
+export class SessionExpiredError extends Error {
+  constructor() {
+    super('Сессия истекла (токен админа живёт 12 часов). Перелогиньтесь и повторите импорт — картинки base64 догрузятся заново.');
+    this.name = 'SessionExpiredError';
+  }
+}
+
 async function uploadImage(dataUri: string): Promise<string | null> {
   const m = dataUri.match(/^data:image\/([a-z0-9.+-]+);base64,(.+)$/i);
   if (!m) return null;
@@ -189,10 +199,11 @@ async function uploadImage(dataUri: string): Promise<string | null> {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
     body: fd,
   });
-  if (res.status === 401 && token) {
+  if (res.status === 401) {
+    // редирект на /login НЕ делаем: beforeunload-предупреждение грязной формы
+    // может его отменить, а молчаливый обрыв хуже явного сообщения
     localStorage.removeItem('token');
-    window.location.href = '/login';
-    return null;
+    throw new SessionExpiredError();
   }
   if (!res.ok) return null;
   const data = (await res.json()) as { filePath?: string; url?: string };
@@ -221,7 +232,8 @@ export async function importMarkdown(markdown: string): Promise<MdImportResult> 
   for (const img of imgs) {
     const src = img.getAttribute('src') ?? '';
     if (src.startsWith('data:image')) {
-      // последовательно: одна за раз, падение не роняет остальные (ТЗ-16 §3.2)
+      // последовательно: одна за раз, падение не роняет остальные (ТЗ-16 §3.2);
+      // 401 — отдельный случай: прерываем весь импорт картинок понятной ошибкой
       try {
         const url = await uploadImage(src);
         if (url) {
@@ -230,7 +242,8 @@ export async function importMarkdown(markdown: string): Promise<MdImportResult> 
         } else {
           failedImages++;
         }
-      } catch {
+      } catch (e) {
+        if (e instanceof SessionExpiredError) throw e;
         failedImages++;
       }
     } else if (/^https?:\/\//.test(src)) {
