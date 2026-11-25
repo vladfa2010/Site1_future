@@ -26,7 +26,7 @@ const NAV = [
 function formatBytes(bytes: number): string {
   if (bytes >= 1 << 30) return `${(bytes / (1 << 30)).toFixed(1)} ГБ`;
   if (bytes >= 1 << 20) return `${(bytes / (1 << 20)).toFixed(1)} МБ`;
-  if (bytes >= 1 << 10) return `${Math.round(bytes / (1 << 10))} КБ`;
+  if (bytes >= 1 << 10) return `${(bytes / (1 << 10)).toFixed(1)} КБ`;
   return `${bytes} Б`;
 }
 

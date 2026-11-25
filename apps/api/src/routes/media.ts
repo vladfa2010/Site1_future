@@ -24,10 +24,25 @@ export const mediaRouter = Router();
 
 // ---------- Медиатека ----------
 
-/** Сводка галереи для главного меню админки: число файлов и общий размер. */
+/** Сводка галереи для главного меню админки: число файлов и общий размер.
+ *  Должен стоять выше любых /media/:id роутов (зависит от порядка регистрации). */
 mediaRouter.get('/media/stats', authRequired, requireRole('admin', 'super_admin'), async (_req, res) => {
   const dir = path.resolve(config.uploadDir);
-  const entries: Dirent[] = await readdir(dir, { withFileTypes: true }).catch(() => []);
+  let entries: Dirent[];
+  try {
+    entries = await readdir(dir, { withFileTypes: true });
+  } catch (e) {
+    // ENOENT — легитимно: ни одного файла ещё не загружено, volume пуст.
+    // Остальное (EACCES, отвал volume) — 500, чтобы клиент не показывал
+    // ложные «0 файлов · 0 Б» вместо диагностики (ревью agent-70).
+    if ((e as NodeJS.ErrnoException).code === 'ENOENT') {
+      res.json({ count: 0, bytes: 0 });
+      return;
+    }
+    console.error('[media/stats]', e);
+    res.status(500).json({ error: 'uploads unavailable' });
+    return;
+  }
   let count = 0;
   let bytes = 0;
   for (const e of entries) {
