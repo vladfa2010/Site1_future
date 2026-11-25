@@ -5,6 +5,7 @@
  */
 import { Router } from 'express';
 import { mkdir, readdir, stat, unlink, writeFile } from 'node:fs/promises';
+import type { Dirent } from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import multer from 'multer';
@@ -26,7 +27,7 @@ export const mediaRouter = Router();
 /** Сводка галереи для главного меню админки: число файлов и общий размер. */
 mediaRouter.get('/media/stats', authRequired, requireRole('admin', 'super_admin'), async (_req, res) => {
   const dir = path.resolve(config.uploadDir);
-  const entries = await readdir(dir, { withFileTypes: true }).catch(() => [] as Awaited<ReturnType<typeof readdir>>);
+  const entries: Dirent[] = await readdir(dir, { withFileTypes: true }).catch(() => []);
   let count = 0;
   let bytes = 0;
   for (const e of entries) {
