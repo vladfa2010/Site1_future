@@ -29,6 +29,26 @@ const ResizableImage = Image.extend({
   },
 });
 
+/** Загрузка файла в медиатекуру (автопережатие sharp на сервере) → url для вставки. */
+async function uploadImageToMedia(file: File): Promise<string> {
+  const fd = new FormData();
+  fd.append('file', file);
+  const token = localStorage.getItem('token');
+  const res = await fetch('/api/media/upload', {
+    method: 'POST',
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: fd,
+  });
+  if (res.status === 401 && token) {
+    localStorage.removeItem('token');
+    window.location.href = '/login';
+    throw new Error('Сессия истекла');
+  }
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.message ?? `HTTP ${res.status}`);
+  return body.url as string;
+}
+
 /**
  * TipTap-редактор контента статьи (решение раздела 6.2).
  * Работает с HTML (content_html): открывает мигрированный контент и LLM-HTML,
@@ -57,6 +77,7 @@ export function RichTextEditor({
   importFields?: { title: string; thesis: string };
 }) {
   const lastApplied = useRef<string | null>(null);
+  const editorRef = useRef<Editor | null>(null); // для handlePaste (async-вставка после загрузки)
   const editor = useEditor({
     extensions: [
       StarterKit.configure({ heading: { levels: [2, 3, 4] } }),
@@ -67,11 +88,36 @@ export function RichTextEditor({
       TableCell,
     ],
     content: value,
+    onCreate: ({ editor: e }) => {
+      editorRef.current = e;
+    },
     onUpdate: ({ editor }) => {
       lastApplied.current = editor.getHTML(); // печать пользователя — не затирать из effect
       onChange(editor.getHTML());
     },
     editorProps: {
+      // Ctrl+V картинкой: файлы из буфера → медиатека → вставка в позицию курсора.
+      // Раньше срабатывало случайно (браузер вставлял data-URI, в HTML уходили
+      // мегабайты base64) — теперь осознанно: тот же путь, что и кнопка 📤.
+      handlePaste: (_view, event) => {
+        const files = Array.from(event.clipboardData?.files ?? []).filter((f) =>
+          f.type.startsWith('image/'),
+        );
+        if (files.length === 0) return false; // не картинка — стандартная вставка
+        event.preventDefault();
+        void (async () => {
+          const ed = editorRef.current;
+          for (const f of files) {
+            try {
+              const url = await uploadImageToMedia(f);
+              ed?.chain().focus().setImage({ src: url }).run();
+            } catch (e) {
+              console.error('[paste-image]', e); // ошибка видна в консоли; тулбар 📤 даёт текст ошибки
+            }
+          }
+        })();
+        return true;
+      },
       // клик по картинке → NodeSelection: в этом билде ProseMirror не выделяет
       // атомарный узел сам (баг «картинку нельзя выделить кликом»), поэтому
       // выставляем выделение явно. Backspace/Delete с активным NodeSelection
@@ -149,22 +195,8 @@ function Toolbar({
     setUploadBusy(true);
     setErr(null);
     try {
-      const fd = new FormData();
-      fd.append('file', file);
-      const token = localStorage.getItem('token');
-      const res = await fetch('/api/media/upload', {
-        method: 'POST',
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-        body: fd,
-      });
-      if (res.status === 401 && token) {
-        localStorage.removeItem('token');
-        window.location.href = '/login';
-        return;
-      }
-      const body = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(body.message ?? JSON.stringify(body));
-      insertImage(body.url, body.media?.alt ?? '');
+      const url = await uploadImageToMedia(file);
+      insertImage(url);
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Ошибка загрузки');
     } finally {
