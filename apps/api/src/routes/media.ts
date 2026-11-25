@@ -9,8 +9,8 @@ import path from 'node:path';
 import { createHash } from 'node:crypto';
 import multer from 'multer';
 import { z } from 'zod';
-import { desc, eq } from 'drizzle-orm';
-import { db, media, articles, companies, trends, industries } from '@newinvest/db';
+import { desc, eq, like } from 'drizzle-orm';
+import { db, media, articles, companies, trends, industries, stories } from '@newinvest/db';
 import { authRequired, requireRole } from '../middleware/auth.js';
 import { generateImage } from '../services/mediaGen.js';
 import { generateText } from '../services/textGen.js';
@@ -183,4 +183,46 @@ mediaRouter.patch('/media/:id', authRequired, requireRole('admin', 'super_admin'
     return;
   }
   res.json({ media: row });
+});
+
+/** Где используется картинка: обложками каких сущностей и внутри каких текстов.
+ *  Нужно меню картинки в редакторе (2026-11-26): «вставлена внутрь / обложкой у …». */
+mediaRouter.get('/media/:id/usage', authRequired, requireRole('admin', 'super_admin'), async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) {
+    res.status(400).json({ error: 'validation' });
+    return;
+  }
+  const covers: { entity: string; id: number; slug: string | null; title: string }[] = [];
+  for (const a of await db.select({ id: articles.id, slug: articles.slug, title: articles.title }).from(articles).where(eq(articles.coverMediaId, id))) {
+    covers.push({ entity: 'article', ...a });
+  }
+  for (const t of await db.select({ id: trends.id, slug: trends.slug, title: trends.name }).from(trends).where(eq(trends.coverMediaId, id))) {
+    covers.push({ entity: 'trend', ...t });
+  }
+  for (const c of await db.select({ id: companies.id, slug: companies.slug, title: companies.name }).from(companies).where(eq(companies.coverMediaId, id))) {
+    covers.push({ entity: 'company', ...c });
+  }
+  for (const i of await db.select({ id: industries.id, slug: industries.slug, title: industries.name }).from(industries).where(eq(industries.coverMediaId, id))) {
+    covers.push({ entity: 'industry', ...i });
+  }
+
+  const [m] = await db.select({ filePath: media.filePath }).from(media).where(eq(media.id, id)).limit(1);
+  const inline: { entity: string; id: number; slug: string | null; title: string }[] = [];
+  if (m) {
+    const pat = `%${m.filePath}%`;
+    for (const a of await db.select({ id: articles.id, type: articles.type, slug: articles.slug, title: articles.title }).from(articles).where(like(articles.contentHtml, pat))) {
+      inline.push({ entity: `article:${a.type}`, id: a.id, slug: a.slug, title: a.title });
+    }
+    for (const t of await db.select({ id: trends.id, slug: trends.slug, title: trends.name }).from(trends).where(like(trends.description, pat))) {
+      inline.push({ entity: 'trend', id: t.id, slug: t.slug, title: t.title });
+    }
+    for (const s of await db.select({ id: stories.id, slug: stories.slug, title: stories.name }).from(stories).where(like(stories.description, pat))) {
+      inline.push({ entity: 'story', id: s.id, slug: s.slug, title: s.title });
+    }
+    for (const c of await db.select({ id: companies.id, slug: companies.slug, title: companies.name }).from(companies).where(like(companies.description, pat))) {
+      inline.push({ entity: 'company', id: c.id, slug: c.slug, title: c.title });
+    }
+  }
+  res.json({ covers, inline });
 });

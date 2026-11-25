@@ -152,7 +152,124 @@ export function RichTextEditor({
   return (
     <div className="overflow-hidden rounded-lg border border-zinc-700 bg-zinc-950">
       <Toolbar editor={editor} onImportedMeta={onImportedMeta} importFields={importFields} />
+      {/* меню выделенной картинки: название (alt), ширина, удаление, где используется */}
+      {editor.isActive('image') && <ImageMenu editor={editor} />}
       <EditorContent editor={editor} />
+    </div>
+  );
+}
+
+interface UsageItem { entity: string; id: number; slug: string | null; title: string }
+const USAGE_LABEL: Record<string, string> = {
+  article: 'материал', trend: 'тренд', company: 'компания', industry: 'отрасль', story: 'сюжет',
+};
+const usageLabel = (e: string) => USAGE_LABEL[e.split(':')[0]] ?? e;
+
+/** Меню картинки (показывается, когда картинка в редакторе выделена кликом). */
+function ImageMenu({ editor }: { editor: Editor }) {
+  const src = String(editor.getAttributes('image').src ?? '');
+  const width = String(editor.getAttributes('image').width ?? '100');
+  const [alt, setAlt] = useState(String(editor.getAttributes('image').alt ?? ''));
+  const [mediaId, setMediaId] = useState<number | null>(null);
+  const [usage, setUsage] = useState<{ covers: UsageItem[]; inline: UsageItem[] } | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  // alt в поле — из выделенной картинки (при смене выделения)
+  useEffect(() => {
+    setAlt(String(editor.getAttributes('image').alt ?? ''));
+    setNotice(null);
+    setErr(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [src]);
+
+  // ищем файл в медиатеке → грузим, где используется (обложки + внутри текстов)
+  useEffect(() => {
+    let cancelled = false;
+    setMediaId(null);
+    setUsage(null);
+    const token = localStorage.getItem('token');
+    const base = src.split('/').pop() ?? '';
+    if (!base) return;
+    void (async () => {
+      try {
+        const r = await fetch('/api/media', { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+        if (!r.ok) return;
+        const d = (await r.json()) as { media: { id: number; filePath: string }[] };
+        if (cancelled) return;
+        const found = d.media.find((m) => m.filePath.endsWith(base));
+        if (!found) return;
+        setMediaId(found.id);
+        const ru = await fetch(`/api/media/${found.id}/usage`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+        if (ru.ok && !cancelled) setUsage(await ru.json());
+      } catch {
+        /* usage — подсказка, молчим */
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [src]);
+
+  const saveAlt = async () => {
+    setErr(null); setNotice(null);
+    editor.chain().focus().updateAttributes('image', { alt }).run();
+    if (!mediaId) { setNotice('Подпись обновлена в тексте'); return; }
+    try {
+      const token = localStorage.getItem('token');
+      const r = await fetch(`/api/media/${mediaId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ alt }),
+      });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      setNotice('Подпись сохранена в медиатеке ✓');
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Ошибка сохранения');
+    }
+  };
+
+  return (
+    <div className="space-y-2 border-b border-zinc-800 bg-zinc-900/60 px-3 py-2 text-xs">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-zinc-500">Картинка:</span>
+        <input
+          className="input min-w-0 flex-1 py-1 text-xs"
+          value={alt}
+          onChange={(e) => setAlt(e.target.value)}
+          placeholder="подпись (alt) — видна в галерее и для скринридеров"
+        />
+        <button type="button" className="btn-secondary py-1 text-xs" onClick={() => void saveAlt()}>💾 Сохранить</button>
+        <span className="mx-1 h-4 w-px bg-zinc-700" />
+        {([['100', 'Ширина 100%'], ['75', 'Ширина 75%'], ['50', 'Ширина 50%']] as const).map(([w, title]) => (
+          <button
+            key={w}
+            type="button"
+            title={title}
+            onClick={() => editor.chain().focus().updateAttributes('image', { width: w === '100' ? null : w }).run()}
+            className={`rounded px-2 py-1 font-semibold ${width === w ? 'bg-orange-500 text-zinc-950' : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'}`}
+          >
+            {w}%
+          </button>
+        ))}
+        <button type="button" title="Удалить картинку" onClick={() => editor.chain().focus().deleteSelection().run()} className="rounded bg-zinc-800 px-2 py-1 hover:bg-red-500/20">🗑</button>
+      </div>
+      {(notice || err) && <p className={err ? 'text-red-400' : 'text-green-400'}>{err ?? notice}</p>}
+      {usage && (
+        <div className="flex flex-wrap gap-x-4 gap-y-1 text-zinc-400">
+          <span>
+            🖼 Обложка у:{' '}
+            {usage.covers.length === 0
+              ? <span className="text-zinc-600">никого</span>
+              : usage.covers.map((c) => <span key={`c${c.entity}${c.id}`} className="mr-2">{usageLabel(c.entity)} «{c.title}»</span>)}
+          </span>
+          <span>
+            📄 Внутри текстов:{' '}
+            {usage.inline.length === 0
+              ? <span className="text-zinc-600">нигде</span>
+              : usage.inline.map((c) => <span key={`i${c.entity}${c.id}`} className="mr-2">{usageLabel(c.entity)} «{c.title}»</span>)}
+          </span>
+          {mediaId === null && <span className="text-zinc-600">(файл не из медиатеки — внешняя картинка)</span>}
+        </div>
+      )}
     </div>
   );
 }
@@ -244,25 +361,6 @@ function Toolbar({
       <ToolbarButton title="Загрузить картинку с компьютера" onClick={() => fileRef.current?.click()}>{uploadBusy ? '…' : '📤'}</ToolbarButton>
       <ToolbarButton title="Выбрать картинку из медиатеки" onClick={() => setPickerOpen(true)}>🗂</ToolbarButton>
       <ToolbarButton title="Вставить картинку по URL" onClick={addImage}>🖼</ToolbarButton>
-      {/* ТЗ-16 ресайз: ширина картинки — кнопки работают, когда картинка выделена
-          (клик по ней выделяет — см. handleClick в useEditor); ширина уходит
-          в style="width:N%" и переживает санитизер сайта */}
-      {editor.isActive('image') && (
-        <>
-          <span className="mx-1 h-4 w-px bg-zinc-700" />
-          {([['100', 'Ширина 100%'], ['75', 'Ширина 75%'], ['50', 'Ширина 50%']] as const).map(([w, title]) => (
-            <ToolbarButton
-              key={w}
-              title={title}
-              active={String(editor.getAttributes('image').width ?? '100') === w}
-              onClick={() => editor.chain().focus().updateAttributes('image', { width: w === '100' ? null : w }).run()}
-            >
-              {w}%
-            </ToolbarButton>
-          ))}
-          <ToolbarButton title="Удалить картинку" onClick={() => editor.chain().focus().deleteSelection().run()}>🗑</ToolbarButton>
-        </>
-      )}
       <span className="mx-1 h-4 w-px bg-zinc-700" />
       <ToolbarButton title="Импорт Markdown (ТЗ-16): MD с картинками base64 → текст + медиатека" onClick={() => setMdImportOpen(true)}>⬇ MD</ToolbarButton>
       <span className="mx-1 h-4 w-px bg-zinc-700" />
