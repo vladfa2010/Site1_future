@@ -4,7 +4,7 @@
  * сохраняет в uploadDir, создаёт media-запись, при articleId ставит обложку статье.
  */
 import { Router } from 'express';
-import { mkdir, unlink, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, stat, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import multer from 'multer';
@@ -22,6 +22,21 @@ import { optimizeImage } from '../utils/imageOptimize.js';
 export const mediaRouter = Router();
 
 // ---------- Медиатека ----------
+
+/** Сводка галереи для главного меню админки: число файлов и общий размер. */
+mediaRouter.get('/media/stats', authRequired, requireRole('admin', 'super_admin'), async (_req, res) => {
+  const dir = path.resolve(config.uploadDir);
+  const entries = await readdir(dir, { withFileTypes: true }).catch(() => [] as Awaited<ReturnType<typeof readdir>>);
+  let count = 0;
+  let bytes = 0;
+  for (const e of entries) {
+    if (!e.isFile()) continue;
+    count++;
+    const st = await stat(path.join(dir, e.name)).catch(() => null);
+    bytes += st?.size ?? 0;
+  }
+  res.json({ count, bytes });
+});
 
 mediaRouter.get('/media', authRequired, requireRole('admin', 'super_admin'), async (_req, res) => {
   const rows = await db.select().from(media).orderBy(desc(media.createdAt)).limit(200);

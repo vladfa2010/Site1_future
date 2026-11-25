@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { NavLink, Link } from 'react-router';
 import { useAuth } from '../auth';
 
@@ -22,8 +23,29 @@ const NAV = [
   { to: '/stats', label: 'Аналитика' },
 ];
 
+function formatBytes(bytes: number): string {
+  if (bytes >= 1 << 30) return `${(bytes / (1 << 30)).toFixed(1)} ГБ`;
+  if (bytes >= 1 << 20) return `${(bytes / (1 << 20)).toFixed(1)} МБ`;
+  if (bytes >= 1 << 10) return `${Math.round(bytes / (1 << 10))} КБ`;
+  return `${bytes} Б`;
+}
+
 export function Layout({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuth();
+  const [gallery, setGallery] = useState<{ count: number; bytes: number } | null>(null);
+
+  // сводка галереи под пунктом «Медиатека» в главном меню
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (!token) return;
+    let cancelled = false;
+    fetch('/api/media/stats', { headers: { Authorization: `Bearer ${token}` } })
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then((d: { count: number; bytes: number }) => { if (!cancelled) setGallery(d); })
+      .catch(() => { /* меню без сводки — не критично */ });
+    return () => { cancelled = true; };
+  }, []);
+
   return (
     <div className="flex min-h-screen">
       <aside className="w-56 shrink-0 border-r border-zinc-800 bg-zinc-900">
@@ -33,15 +55,21 @@ export function Layout({ children }: { children: React.ReactNode }) {
         </div>
         <nav className="space-y-1 p-3">
           {NAV.map((n) => (
-            <NavLink
-              key={n.to}
-              to={n.to}
-              className={({ isActive }) =>
-                `block rounded-lg px-3 py-2 text-sm ${isActive ? 'bg-orange-500/10 font-semibold text-orange-400' : 'text-zinc-400 hover:bg-zinc-800'}`
-              }
-            >
-              {n.label}
-            </NavLink>
+            <div key={n.to}>
+              <NavLink
+                to={n.to}
+                className={({ isActive }) =>
+                  `block rounded-lg px-3 py-2 text-sm ${isActive ? 'bg-orange-500/10 font-semibold text-orange-400' : 'text-zinc-400 hover:bg-zinc-800'}`
+                }
+              >
+                {n.label}
+              </NavLink>
+              {n.to === '/media' && gallery && (
+                <div className="px-3 pb-1 text-[11px] leading-tight text-zinc-600">
+                  {gallery.count} файлов · {formatBytes(gallery.bytes)}
+                </div>
+              )}
+            </div>
           ))}
         </nav>
       </aside>
