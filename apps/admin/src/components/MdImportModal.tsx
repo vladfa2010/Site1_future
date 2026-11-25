@@ -11,6 +11,8 @@ export function MdImportModal({
   onApply,
   onMeta,
   docEmpty,
+  currentTitle = '',
+  currentThesis = '',
 }: {
   onClose: () => void;
   /** HTML для вставки в редактор (setContent) */
@@ -19,14 +21,19 @@ export function MdImportModal({
   onMeta: (meta: { title: string | null; thesis: string | null; useTitle: boolean; useThesis: boolean }) => void;
   /** документ редактора пуст — подтверждение замены не нужно */
   docEmpty: boolean;
+  /** текущие поля формы — дефолт чекбоксов и подписи (ТЗ-16 §4: занятое поле не затираем молча) */
+  currentTitle?: string;
+  currentThesis?: string;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [text, setText] = useState('');
   const [preview, setPreview] = useState<MdImportPreview | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const [useTitle, setUseTitle] = useState(true);
-  const [useThesis, setUseThesis] = useState(true);
+  const titleOccupied = currentTitle.trim() !== '';
+  const thesisOccupied = currentThesis.trim() !== '';
+  const [useTitle, setUseTitle] = useState(!titleOccupied);
+  const [useThesis, setUseThesis] = useState(!thesisOccupied);
   const [done, setDone] = useState<MdImportResult | null>(null);
 
   const runPreview = (content: string) => {
@@ -39,11 +46,14 @@ export function MdImportModal({
   const onFile = (f: File | undefined) => {
     if (!f) return;
     if (f.size > 2 * 1024 * 1024) {
-      setPreview({ ok: false, error: `Файл больше 2 МБ (${Math.round(f.size / 1024)} КБ). Разбейте на части.`, textTooBig: true, title: null, sections: 0, images: 0, base64Images: 0, externalImages: 0, tables: 0, frontMatter: false });
+      setPreview({ ok: false, error: `Файл больше 2 МБ (${Math.round(f.size / 1024)} КБ). Разбейте на части.`, textTooBig: true, title: null, sections: 0, images: 0, base64Images: 0, externalImages: 0, tables: 0, frontMatter: false, footnoteDefs: 0 });
       return;
     }
     const reader = new FileReader();
-    reader.onload = () => runPreview(String(reader.result ?? ''));
+    reader.onload = () => {
+      runPreview(String(reader.result ?? ''));
+      if (fileRef.current) fileRef.current.value = ''; // повторный выбор того же файла
+    };
     reader.onerror = () => setErr('Не удалось прочитать файл');
     reader.readAsText(f);
   };
@@ -66,7 +76,7 @@ export function MdImportModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={() => !busy && onClose()}>
       <div
         className="max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-xl border border-zinc-700 bg-zinc-950 p-4"
         onClick={(e) => e.stopPropagation()}
@@ -115,10 +125,16 @@ export function MdImportModal({
                     </p>
                     {preview.frontMatter && <p className="mt-1 text-amber-400">⚠ Front matter (--- блок) не поддерживается — импортируется как текст.</p>}
                     {preview.title && (
-                      <label className="mt-2 block text-zinc-400">
-                        <input type="checkbox" checked={useTitle} onChange={(e) => setUseTitle(e.target.checked)} className="mr-1" />
-                        Подставить заголовок и тезис в поля статьи
-                      </label>
+                      <div className="mt-2 space-y-1 text-zinc-400">
+                        <label className="block">
+                          <input type="checkbox" checked={useTitle} onChange={(e) => setUseTitle(e.target.checked)} className="mr-1" />
+                          Подставить заголовок{titleOccupied && <span className="text-amber-400"> (поле заполнено — будет заменено)</span>}
+                        </label>
+                        <label className="block">
+                          <input type="checkbox" checked={useThesis} onChange={(e) => setUseThesis(e.target.checked)} className="mr-1" />
+                          Подставить тезис{thesisOccupied && <span className="text-amber-400"> (поле заполнено — будет заменено)</span>}
+                        </label>
+                      </div>
                     )}
                   </>
                 )}

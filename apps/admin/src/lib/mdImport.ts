@@ -100,10 +100,8 @@ const FN_DEF_RE = /^\[\^([^\]]+)\]:\s*(.+?)\s*$/;
 
 /**
  * Сноски CommonMark: определения `[^id]: текст` вырезаем из тела (не рендерятся
- * как абзацы), а инлайн-ссылки `[^id]` после рендера заменяем на [N] со ссылкой
- * на концевой блок «Источники и примечания». Многострочные определения не
- * поддерживаем (поставщики шлют однострочные). Одиночный grep-фолбэк — если id
- * нет в defs, ссылка остаётся как есть.
+ * как абзацы), инлайн-ссылки `[^id]` после рендера заменяет renderFootnotes.
+ * Многострочные определения не поддерживаем (поставщики шлют однострочные).
  */
 export function extractFootnoteDefs(markdown: string): { body: string; defs: Map<string, string> } {
   const defs = new Map<string, string>();
@@ -121,19 +119,21 @@ export function extractFootnoteDefs(markdown: string): { body: string; defs: Map
   return { body: kept.join('\n'), defs };
 }
 
-/** заменить инлайн `[^id]` на <sup>[N]</sup> и дописать концевой список */
+/** заменить инлайн `[^id]` на текстовый номер [N] и дописать концевой список
+ * «Источники и примечания». Теги sup/a/li[id] НЕ используем: TipTap (без
+ * расширений) и sanitize при рендере сайта их всё равно съедают — честный
+ * текстовый номер проходит пайплайн как есть (тимлид-ревью agent-68). */
 export function renderFootnotes(html: string, defs: Map<string, string>): { html: string; used: number } {
   if (defs.size === 0) return { html, used: 0 };
   const numById = new Map<string, number>();
   const html2 = html.replace(/\[\^([^\]]+)\]/g, (whole, id: string) => {
     if (!defs.has(id)) return whole; // ссылка без определения — оставляем как есть
     if (!numById.has(id)) numById.set(id, numById.size + 1);
-    const n = numById.get(id)!;
-    return `<sup><a href="#fn-${n}">[${n}]</a></sup>`;
+    return `[${numById.get(id)!}]`;
   });
   if (numById.size === 0) return { html: html2, used: 0 };
   const items = [...numById.entries()]
-    .map(([id, n]) => `<li id="fn-${n}">${md.renderInline(defs.get(id)!)}</li>`)
+    .map(([id]) => `<li>${md.renderInline(defs.get(id)!)}</li>`)
     .join('');
   return {
     html: html2 + `<h2>Источники и примечания</h2><ol>${items}</ol>`,

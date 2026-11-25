@@ -1005,9 +1005,10 @@ export default function ContentMasterPage() {
               <RichTextEditor
                 value={contentHtml}
                 onChange={setContentHtml}
-                onImportedMeta={({ title, thesis }) => {
-                  if (title) setTitle(title);
-                  if (thesis) setThesis(thesis);
+                importFields={{ title, thesis }}
+                onImportedMeta={({ title: t, thesis: th }) => {
+                  if (t) setTitle(t);
+                  if (th) setThesis(th);
                 }}
               />
               {/* Аудит готового текста на ИИ-штампы (2026-11-20) */}

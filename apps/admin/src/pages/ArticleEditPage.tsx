@@ -742,16 +742,21 @@ export default function ArticleEditPage() {
             {/* ТЗ-16: импорт MD подставляет H1 в заголовок и первый абзац в тезис (по чекбоксу) */}
             <RichTextEditor
               value={form.contentHtml}
-              onChange={(html) => setForm((f) => ({ ...f, contentHtml: html }))}
-              onImportedMeta={({ title, thesis }) =>
+              onChange={(html) => {
+                setDirty(true); // agent-68: без этого автосохранение пропускало и печать, и импорт
+                setForm((f) => ({ ...f, contentHtml: html }));
+              }}
+              importFields={{ title: form.title, thesis: form.thesis }}
+              onImportedMeta={({ title, thesis }) => {
+                setDirty(true);
                 setForm((f) => ({
                   ...f,
                   title: title ?? f.title,
                   thesis: thesis ?? f.thesis,
                   // slug пересобираем только если он пуст или был авто-сгенерирован из старого заголовка
                   slug: title && (f.slug === '' || f.slug === slugify(f.title)) ? slugify(title) : f.slug,
-                }))
-              }
+                }));
+              }}
             />
           </Suspense>
         </div>

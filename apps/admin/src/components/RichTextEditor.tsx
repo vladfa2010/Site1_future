@@ -24,11 +24,14 @@ export function RichTextEditor({
   value,
   onChange,
   onImportedMeta,
+  importFields,
 }: {
   value: string;
   onChange: (html: string) => void;
   /** ТЗ-16: H1 и первый абзац из импортированного MD (по чекбоксу юзера) */
   onImportedMeta?: (meta: { title: string | null; thesis: string | null }) => void;
+  /** ТЗ-16: текущие поля формы — модал импорта не затирает заполненные молча */
+  importFields?: { title: string; thesis: string };
 }) {
   const lastApplied = useRef<string | null>(null);
   const editor = useEditor({
@@ -66,7 +69,7 @@ export function RichTextEditor({
 
   return (
     <div className="overflow-hidden rounded-lg border border-zinc-700 bg-zinc-950">
-      <Toolbar editor={editor} onImportedMeta={onImportedMeta} />
+      <Toolbar editor={editor} onImportedMeta={onImportedMeta} importFields={importFields} />
       <EditorContent editor={editor} />
     </div>
   );
@@ -86,7 +89,15 @@ function ToolbarButton({ active, onClick, children, title }: { active?: boolean;
   );
 }
 
-function Toolbar({ editor, onImportedMeta }: { editor: Editor; onImportedMeta?: (meta: { title: string | null; thesis: string | null }) => void }) {
+function Toolbar({
+  editor,
+  onImportedMeta,
+  importFields,
+}: {
+  editor: Editor;
+  onImportedMeta?: (meta: { title: string | null; thesis: string | null }) => void;
+  importFields?: { title: string; thesis: string };
+}) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [mdImportOpen, setMdImportOpen] = useState(false);
@@ -173,6 +184,8 @@ function Toolbar({ editor, onImportedMeta }: { editor: Editor; onImportedMeta?: 
       {mdImportOpen && (
         <MdImportModal
           docEmpty={editor.getText().trim() === ''}
+          currentTitle={importFields?.title ?? ''}
+          currentThesis={importFields?.thesis ?? ''}
           onClose={() => setMdImportOpen(false)}
           onApply={(html) => editor.commands.setContent(html, { emitUpdate: true })}
           onMeta={({ title, thesis, useTitle, useThesis }) => {
