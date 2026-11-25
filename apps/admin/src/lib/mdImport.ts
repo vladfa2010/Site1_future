@@ -29,6 +29,8 @@ export interface MdImportResult {
   frontMatter: boolean;
   sections: number;
   tables: number;
+  /** сноски [^id] → концевые «Источники и примечания» */
+  footnotes: number;
 }
 
 export interface MdImportPreview {
@@ -43,6 +45,7 @@ export interface MdImportPreview {
   frontMatter: boolean;
   /** чекбоксы «заменить заголовок/тезис» доступны, только если поле пусто */
   textTooBig: boolean;
+  footnoteDefs: number;
 }
 
 const md = new MarkdownIt({
@@ -93,6 +96,51 @@ function detectFrontMatter(markdown: string): boolean {
   return /^---\r?\n[\s\S]*?\r?\n---\r?\n/.test(markdown);
 }
 
+const FN_DEF_RE = /^\[\^([^\]]+)\]:\s*(.+?)\s*$/;
+
+/**
+ * Сноски CommonMark: определения `[^id]: текст` вырезаем из тела (не рендерятся
+ * как абзацы), а инлайн-ссылки `[^id]` после рендера заменяем на [N] со ссылкой
+ * на концевой блок «Источники и примечания». Многострочные определения не
+ * поддерживаем (поставщики шлют однострочные). Одиночный grep-фолбэк — если id
+ * нет в defs, ссылка остаётся как есть.
+ */
+export function extractFootnoteDefs(markdown: string): { body: string; defs: Map<string, string> } {
+  const defs = new Map<string, string>();
+  const kept: string[] = [];
+  for (const line of markdown.split('\n')) {
+    const m = line.match(FN_DEF_RE);
+    if (m) {
+      if (!defs.has(m[1])) defs.set(m[1], m[2]);
+      continue;
+    }
+    kept.push(line);
+  }
+  // схлопываем хвостовые пустые строки, оставшиеся после вырезанного блока
+  while (kept.length > 0 && kept[kept.length - 1].trim() === '') kept.pop();
+  return { body: kept.join('\n'), defs };
+}
+
+/** заменить инлайн `[^id]` на <sup>[N]</sup> и дописать концевой список */
+export function renderFootnotes(html: string, defs: Map<string, string>): { html: string; used: number } {
+  if (defs.size === 0) return { html, used: 0 };
+  const numById = new Map<string, number>();
+  const html2 = html.replace(/\[\^([^\]]+)\]/g, (whole, id: string) => {
+    if (!defs.has(id)) return whole; // ссылка без определения — оставляем как есть
+    if (!numById.has(id)) numById.set(id, numById.size + 1);
+    const n = numById.get(id)!;
+    return `<sup><a href="#fn-${n}">[${n}]</a></sup>`;
+  });
+  if (numById.size === 0) return { html: html2, used: 0 };
+  const items = [...numById.entries()]
+    .map(([id, n]) => `<li id="fn-${n}">${md.renderInline(defs.get(id)!)}</li>`)
+    .join('');
+  return {
+    html: html2 + `<h2>Источники и примечания</h2><ol>${items}</ol>`,
+    used: numById.size,
+  };
+}
+
 /** превью для модала: статистика до подтверждения импорта */
 export function previewMd(markdown: string): MdImportPreview {
   const textTooBig = byteLength(markdown) > MAX_TEXT_BYTES;
@@ -106,20 +154,23 @@ export function previewMd(markdown: string): MdImportPreview {
     externalImages: 0,
     tables: 0,
     frontMatter: detectFrontMatter(markdown),
+    footnoteDefs: 0,
   };
   if (textTooBig) {
     return { ...base, error: `Файл больше 2 МБ (${Math.round(byteLength(markdown) / 1024)} КБ). Разбейте на части.` };
   }
   const { title, body } = extractTitleAndThesis(markdown);
   base.title = title;
-  base.sections = (body.match(/^#{2,6}\s/gm) || []).length;
+  const { body: bodyNoFns, defs } = extractFootnoteDefs(body);
+  base.footnoteDefs = defs.size;
+  base.sections = (bodyNoFns.match(/^#{2,6}\s/gm) || []).length;
   const imgRe = /!\[[^\]]*\]\([^)]+\)/g;
-  const imgs = body.match(imgRe) || [];
+  const imgs = bodyNoFns.match(imgRe) || [];
   base.images = imgs.length;
   base.base64Images = imgs.filter((i) => i.includes('data:image')).length;
   base.externalImages = imgs.filter((i) => /!\[[^\]]*\]\(https?:\/\//.test(i)).length;
   // таблицы: строки с | подряд
-  base.tables = (body.match(/^\|.+\|\s*$/gm) || []).length >= 2 ? (body.match(/^\|[\s:|-]+\|\s*$/gm) || []).length : 0;
+  base.tables = (bodyNoFns.match(/^\|.+\|\s*$/gm) || []).length >= 2 ? (bodyNoFns.match(/^\|[\s:|-]+\|\s*$/gm) || []).length : 0;
   return base;
 }
 
@@ -155,7 +206,9 @@ async function uploadImage(dataUri: string): Promise<string | null> {
 export async function importMarkdown(markdown: string): Promise<MdImportResult> {
   const { title, thesis, body } = extractTitleAndThesis(markdown);
   const frontMatter = detectFrontMatter(markdown);
-  let html = md.render(body);
+  // сноски: определения вырезаем ДО рендера, ссылки заменяем ПОСЛЕ
+  const { body: bodyNoFns, defs } = extractFootnoteDefs(body);
+  let html = md.render(bodyNoFns);
 
   const doc = new DOMParser().parseFromString(`<div>${html}</div>`, 'text/html');
   const root = doc.body.firstElementChild as HTMLElement;
@@ -186,6 +239,8 @@ export async function importMarkdown(markdown: string): Promise<MdImportResult> 
   }
 
   html = root.innerHTML;
+  const foot = renderFootnotes(html, defs);
+  html = foot.html;
   return {
     html,
     title,
@@ -194,7 +249,8 @@ export async function importMarkdown(markdown: string): Promise<MdImportResult> 
     failedImages,
     externalImages,
     frontMatter,
-    sections: (body.match(/^#{2,6}\s/gm) || []).length,
-    tables: (body.match(/^\|[\s:|-]+\|\s*$/gm) || []).length,
+    sections: (bodyNoFns.match(/^#{2,6}\s/gm) || []).length,
+    tables: (bodyNoFns.match(/^\|[\s:|-]+\|\s*$/gm) || []).length,
+    footnotes: foot.used,
   };
 }

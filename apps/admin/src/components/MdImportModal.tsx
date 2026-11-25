@@ -111,6 +111,7 @@ export function MdImportModal({
                       {preview.base64Images > 0 && <> ({preview.base64Images} из base64 → в медиатеку)</>}
                       {preview.externalImages > 0 && <> · внешние: {preview.externalImages} (останутся ссылками)</>}
                       {' · '}Таблиц: {preview.tables}
+                      {preview.footnoteDefs > 0 && <> · Сносок: {preview.footnoteDefs} → «Источники и примечания»</>}
                     </p>
                     {preview.frontMatter && <p className="mt-1 text-amber-400">⚠ Front matter (--- блок) не поддерживается — импортируется как текст.</p>}
                     {preview.title && (
@@ -132,7 +133,7 @@ export function MdImportModal({
 
         {done && (
           <div className="rounded-lg bg-zinc-900 p-3 text-sm text-zinc-300">
-            <p>✅ Импортировано: разделов {done.sections}, таблиц {done.tables}.</p>
+            <p>✅ Импортировано: разделов {done.sections}, таблиц {done.tables}{done.footnotes > 0 && <>, сносок {done.footnotes} → «Источники и примечания»</>}.</p>
             <p className="mt-1">
               Картинки: {done.uploadedImages} → медиатека
               {done.failedImages > 0 && <span className="text-amber-400">, {done.failedImages} не загрузились (остались base64)</span>}
