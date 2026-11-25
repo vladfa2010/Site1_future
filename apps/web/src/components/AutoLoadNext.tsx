@@ -101,7 +101,7 @@ function LoadedArticle({ data }: { data: ArticleQueryResult }) {
         </div>
       )}
       <div
-        className="prose-invert mt-6 space-y-4 leading-relaxed [&_h2]:mt-8 [&_h2]:text-xl [&_h2]:font-bold [&_a]:text-[#c9ff2a] [&_p]:text-zinc-300 [&_ul]:list-disc [&_ul]:pl-6"
+        className="prose-invert mt-6 space-y-4 leading-relaxed [&_h2]:mt-8 [&_h2]:text-xl [&_h2]:font-bold [&_h3]:mt-6 [&_h3]:text-lg [&_h3]:font-semibold [&_a]:text-[#c9ff2a] [&_p]:text-zinc-300 [&_ul]:list-disc [&_ul]:pl-6"
         dangerouslySetInnerHTML={{ __html: sanitizeArticleHtml(article.contentHtml) }}
       />
       {article.sourceUrl && (

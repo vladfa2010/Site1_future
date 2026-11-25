@@ -739,7 +739,20 @@ export default function ArticleEditPage() {
         <div>
           <label className="label">Контент</label>
           <Suspense fallback={<div className="input min-h-[320px] animate-pulse text-zinc-500">Загружаем редактор…</div>}>
-            <RichTextEditor value={form.contentHtml} onChange={(html) => setForm((f) => ({ ...f, contentHtml: html }))} />
+            {/* ТЗ-16: импорт MD подставляет H1 в заголовок и первый абзац в тезис (по чекбоксу) */}
+            <RichTextEditor
+              value={form.contentHtml}
+              onChange={(html) => setForm((f) => ({ ...f, contentHtml: html }))}
+              onImportedMeta={({ title, thesis }) =>
+                setForm((f) => ({
+                  ...f,
+                  title: title ?? f.title,
+                  thesis: thesis ?? f.thesis,
+                  // slug пересобираем только если он пуст или был авто-сгенерирован из старого заголовка
+                  slug: title && (f.slug === '' || f.slug === slugify(f.title)) ? slugify(title) : f.slug,
+                }))
+              }
+            />
           </Suspense>
         </div>
       </div>

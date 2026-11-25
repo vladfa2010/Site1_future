@@ -1001,7 +1001,15 @@ export default function ContentMasterPage() {
             )}
             <div className="sm:col-span-2">
               <label className="label">Контент (то, что пойдёт в статью — можно править прямо здесь)</label>
-              <RichTextEditor value={contentHtml} onChange={setContentHtml} />
+              {/* ТЗ-16: импорт MD подставляет H1 в заголовок и первый абзац в тезис (по чекбоксу) */}
+              <RichTextEditor
+                value={contentHtml}
+                onChange={setContentHtml}
+                onImportedMeta={({ title, thesis }) => {
+                  if (title) setTitle(title);
+                  if (thesis) setThesis(thesis);
+                }}
+              />
               {/* Аудит готового текста на ИИ-штампы (2026-11-20) */}
               <div className="mt-3">
                 <AiSlopPanel getHtml={() => contentHtml} onApply={(html) => setContentHtml(html)} />

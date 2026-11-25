@@ -4,6 +4,7 @@ import StarterKit from '@tiptap/starter-kit';
 import Image from '@tiptap/extension-image';
 import { Table, TableRow, TableCell, TableHeader } from '@tiptap/extension-table';
 import type { Editor } from '@tiptap/react';
+import { MdImportModal } from './MdImportModal';
 
 /**
  * TipTap-редактор контента статьи (решение раздела 6.2).
@@ -14,8 +15,21 @@ import type { Editor } from '@tiptap/react';
  * меняет value родитель (новый результат AI, другая статья) → подставляем в редактор.
  * Без этого контент обновлялся только когда редактор был пуст (isEmpty) —
  * в ContentMaster после фактчека статья не подменяла в редакторе старый текст.
+ *
+ * ТЗ-16: кнопка «Импорт MD» живёт в тулбаре — доступна везде, где используется
+ * редактор (статьи всех типов, сюжеты, тренды, компании, ContentMaster).
+ * onImportedMeta — опциональный канал для полей формы (заголовок/тезис из H1).
  */
-export function RichTextEditor({ value, onChange }: { value: string; onChange: (html: string) => void }) {
+export function RichTextEditor({
+  value,
+  onChange,
+  onImportedMeta,
+}: {
+  value: string;
+  onChange: (html: string) => void;
+  /** ТЗ-16: H1 и первый абзац из импортированного MD (по чекбоксу юзера) */
+  onImportedMeta?: (meta: { title: string | null; thesis: string | null }) => void;
+}) {
   const lastApplied = useRef<string | null>(null);
   const editor = useEditor({
     extensions: [
@@ -52,7 +66,7 @@ export function RichTextEditor({ value, onChange }: { value: string; onChange: (
 
   return (
     <div className="overflow-hidden rounded-lg border border-zinc-700 bg-zinc-950">
-      <Toolbar editor={editor} />
+      <Toolbar editor={editor} onImportedMeta={onImportedMeta} />
       <EditorContent editor={editor} />
     </div>
   );
@@ -72,9 +86,10 @@ function ToolbarButton({ active, onClick, children, title }: { active?: boolean;
   );
 }
 
-function Toolbar({ editor }: { editor: Editor }) {
+function Toolbar({ editor, onImportedMeta }: { editor: Editor; onImportedMeta?: (meta: { title: string | null; thesis: string | null }) => void }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [mdImportOpen, setMdImportOpen] = useState(false);
   const [uploadBusy, setUploadBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -151,8 +166,21 @@ function Toolbar({ editor }: { editor: Editor }) {
       <ToolbarButton title="Выбрать картинку из медиатеки" onClick={() => setPickerOpen(true)}>🗂</ToolbarButton>
       <ToolbarButton title="Вставить картинку по URL" onClick={addImage}>🖼</ToolbarButton>
       <span className="mx-1 h-4 w-px bg-zinc-700" />
+      <ToolbarButton title="Импорт Markdown (ТЗ-16): MD с картинками base64 → текст + медиатека" onClick={() => setMdImportOpen(true)}>⬇ MD</ToolbarButton>
+      <span className="mx-1 h-4 w-px bg-zinc-700" />
       <ToolbarButton title="Отменить" onClick={() => editor.chain().focus().undo().run()}>↩</ToolbarButton>
       <ToolbarButton title="Повторить" onClick={() => editor.chain().focus().redo().run()}>↪</ToolbarButton>
+      {mdImportOpen && (
+        <MdImportModal
+          docEmpty={editor.getText().trim() === ''}
+          onClose={() => setMdImportOpen(false)}
+          onApply={(html) => editor.commands.setContent(html, { emitUpdate: true })}
+          onMeta={({ title, thesis, useTitle, useThesis }) => {
+            if (onImportedMeta && useTitle) onImportedMeta({ title, thesis: useThesis ? thesis : null });
+            else if (onImportedMeta && useThesis) onImportedMeta({ title: null, thesis });
+          }}
+        />
+      )}
       {pickerOpen && (
         <MediaPickerModal
           onClose={() => setPickerOpen(false)}
