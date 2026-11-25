@@ -104,11 +104,27 @@ entitiesRouter.post('/companies', authRequired, requireRole('admin', 'super_admi
     return;
   }
   const { industryIds, ...data } = parsed.data;
-  const [company] = await db.insert(companies).values(data).returning();
-  if (industryIds?.length) {
-    await db.insert(companyIndustries).values(industryIds.map((industryId) => ({ companyId: company.id, industryId })));
+  // 409 вместо ВЕЧНОГО зависания: без проверки уникальный конфликт slug улетал
+  // в unhandledRejection (Express 4 не ловит async-ошибки) — клиент крутил
+  // спинер бесконечно (баг «создаём… и ничего не происходит», 2026-11-26)
+  const [hit] = await db.select({ id: companies.id }).from(companies).where(eq(companies.slug, data.slug)).limit(1);
+  if (hit) {
+    res.status(409).json({ error: 'Такой slug уже есть у компании', code: 'SLUG_EXISTS' });
+    return;
   }
-  res.status(201).json({ company });
+  try {
+    const [company] = await db.insert(companies).values(data).returning();
+    if (industryIds?.length) {
+      await db.insert(companyIndustries).values(industryIds.map((industryId) => ({ companyId: company.id, industryId })));
+    }
+    res.status(201).json({ company });
+  } catch (e) {
+    if ((e as { code?: string }).code === '23505') {
+      res.status(409).json({ error: 'Запись с таким slug уже есть', code: 'SLUG_EXISTS' });
+      return;
+    }
+    throw e;
+  }
 });
 
 // PATCH /api/companies/:id — редактирование карточки (admin)
@@ -285,6 +301,11 @@ entitiesRouter.post('/tickers', authRequired, requireRole('admin', 'super_admin'
     res.status(400).json({ error: 'validation', details: parsed.error.flatten() });
     return;
   }
+  const [hit] = await db.select({ id: tickers.id }).from(tickers).where(eq(tickers.symbol, parsed.data.symbol)).limit(1);
+  if (hit) {
+    res.status(409).json({ error: 'Такой тикер уже есть', code: 'SYMBOL_EXISTS' });
+    return;
+  }
   const [ticker] = await db.insert(tickers).values(parsed.data).returning();
   res.status(201).json({ ticker });
 });
@@ -316,6 +337,11 @@ entitiesRouter.post('/industries', authRequired, requireRole('admin', 'super_adm
   const parsed = z.object({ slug: slugSchema, name: z.string().min(1), description: z.string().optional() }).safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: 'validation', details: parsed.error.flatten() });
+    return;
+  }
+  const [hit] = await db.select({ id: industries.id }).from(industries).where(eq(industries.slug, parsed.data.slug)).limit(1);
+  if (hit) {
+    res.status(409).json({ error: 'Такой slug уже есть у индустрии', code: 'SLUG_EXISTS' });
     return;
   }
   const [row] = await db.insert(industries).values(parsed.data).returning();

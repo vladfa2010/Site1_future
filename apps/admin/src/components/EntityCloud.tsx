@@ -46,6 +46,7 @@ export default function EntityCloud({
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
   const [highlight, setHighlight] = useState(0);
+  const [highlightMoved, setHighlightMoved] = useState(false); // Enter привязывает подсвеченное только после стрелок
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const boxRef = useRef<HTMLDivElement>(null);
@@ -95,16 +96,15 @@ export default function EntityCloud({
   };
 
   const onKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'ArrowDown') { e.preventDefault(); setOpen(true); setHighlight((h) => Math.min(h + 1, matches.length - 1)); }
-    else if (e.key === 'ArrowUp') { e.preventDefault(); setHighlight((h) => Math.max(h - 1, 0)); }
+    if (e.key === 'ArrowDown') { e.preventDefault(); setOpen(true); setHighlightMoved(true); setHighlight((h) => Math.min(h + 1, matches.length - 1)); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); setHighlightMoved(true); setHighlight((h) => Math.max(h - 1, 0)); }
     else if (e.key === 'Enter') {
       e.preventDefault();
-      if (open && matches[highlight] && !exactExists) {
-        onToggle(matches[highlight].id);
-        setQuery('');
-        setOpen(false);
-      } else if (open && matches[highlight] && exactExists) {
-        // точное совпадение есть, но подсвечен другой пункт — привязываем подсвеченный
+      // Приоритет: стрелки двигали выделение → привязываем подсвеченное;
+      // точное совпадение есть → привязываем его; иначе → создаём (подсказка
+      // в дроплисте обещает именно «Enter — создать», раньше Enter при любом
+      // фаззи-совпадении молча привязывал первый пункт — «ничего не происходит»)
+      if (open && matches[highlight] && (exactExists || highlightMoved)) {
         onToggle(matches[highlight].id);
         setQuery('');
         setOpen(false);
@@ -149,7 +149,7 @@ export default function EntityCloud({
           className="input w-full py-1.5 text-sm"
           placeholder={placeholder}
           value={query}
-          onChange={(e) => { setQuery(e.target.value); setOpen(true); setHighlight(0); setError(null); }}
+          onChange={(e) => { setQuery(e.target.value); setOpen(true); setHighlight(0); setHighlightMoved(false); setError(null); }}
           onFocus={() => setOpen(true)}
           onKeyDown={onKeyDown}
         />
