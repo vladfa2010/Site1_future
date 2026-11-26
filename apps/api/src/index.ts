@@ -123,7 +123,13 @@ app.use((_req, res) => {
 });
 
 // Единый обработчик ошибок: НЕ leak'им внутренние детали клиенту
-app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+app.use((err: Error, _req: express.Request, res: express.Response, next: express.NextFunction) => {
+  // async-хендлер успел начать ответ и потом бросил: headers уже ушли —
+  // повторный res.status кинул бы ERR_HTTP_HEADERS_SENT и повесил запрос (ревью agent-72)
+  if (res.headersSent) {
+    next(err);
+    return;
+  }
   // multer: превышение лимита размера / битый multipart — клиентская ошибка, не 500
   // (аудит 2026-11-14: раньше уходило в общий 500)
   if (err instanceof multer.MulterError) {
