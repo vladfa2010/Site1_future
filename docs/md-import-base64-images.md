@@ -26,10 +26,11 @@ importMarkdown()                                     apps/admin/src/lib/mdImport
   │                              первый абзац после H1 (≤300 симв.) → тезис;
   │                              строка H1 удаляется из тела
   ├─ extractFootnoteDefs()     — строки `[^id]: текст` вырезаются из тела → Map
-  ├─ md.render()               — markdown-it { html:false, linkify:true }
+  ├─ md.render()               — markdown-it { html:false, linkify:true,
+  │                              breaks:false, typographer:false }
   ├─ DOMParser → <img> с data: → последовательно uploadImage():
   │    декодирование atob → Blob → POST /api/media/upload (multipart)
-  │    → ответ { filePath: '/uploads/<id>-<hash>.webp' } → замена src
+  │    → ответ 201 { media, url } → читаем data.filePath ?? data.url → замена src
   ├─ root.innerHTML
   └─ renderFootnotes()         — `[^id]` → текстовый `[N]` (НЕ sup/a/id!)
                                  + в конец: <h2>Источники и примечания</h2><ol>…</ol>
@@ -57,12 +58,41 @@ TipTap-конфиг редактора (без изменений фичи): Sta
 
 ## 3. Внешние контракты
 
-- `POST /api/media/upload` — multipart `file`, Bearer-токен; сервер: multer в память →
-  валидация mimetype + magic bytes → `optimizeImage` (sharp → **webp**, пережатие) →
-  уникальное имя `/uploads/<ms>-<hash>.webp` → запись в таблицу `media`. Ответ: `{ url, filePath, media }`.
-- Санитизация HTML: на рендере сайта (`web/lib/sanitize.ts` allowlist) — серверной
+- `POST /api/media/upload` — multipart `file`, Bearer-токен (`Authorization: Bearer`,
+  токен в `localStorage['token']`); сервер: `authRequired` + `requireRole('admin','super_admin')`,
+  multer memoryStorage (**лимит 10 МБ**) → allowlist jpeg/png/webp **без SVG** (stored-XSS
+  вектор) + проверка magic bytes → `optimizeImage` (sharp → **webp q80**, поворот по EXIF,
+  resize ≤1600px без увеличения) → имя `<Date.now()>-<sha1(buf).slice(0,10)>.webp` →
+  запись в таблицу `media`. **Ответ: `201 { media: <row с filePath внутри>, url, optimized: { from, to } }`** —
+  верхнеуровневого `filePath` нет; клиент импорта читает `data.filePath ?? data.url`
+  (фактически работает через `url`).
+- Раздача файлов: `app.use('/uploads', express.static(uploadDir))` (api/src/index.ts),
+  путь — env `UPLOAD_DIR`. **Без этого картинки 404 — критичная деталь переноса.**
+- `GET /api/media` — список медиатеки, admin-only (нужен кнопке 🗂; фиче импорта не обязателен).
+- Санитизация HTML: на рендере сайта (`web/lib/sanitize.ts` allowlist: `sup` нет в
+  allowedTags, `id` не разрешён ни на одном теге, схемы http/https) — серверной
   санитизации при сохранении НЕТ (zod-строка), модель доверия: админка за токеном + `html:false`.
 - Автосохранение ArticleEditPage завязано на флаг `dirty` (`beforeunload` + autosave-эффект).
+- TTL токена: админы 12ч, остальные 7д (middleware/auth.ts, осознанное решение аудита).
+
+## 3.1 Зависимости (точные версии — условие переноса 1:1)
+
+- `markdown-it ^15.0.3` (админка)
+- `@tiptap/react`, `@tiptap/starter-kit`, `@tiptap/extension-image`, `@tiptap/extension-table`, `@tiptap/pm` — **^3.33.0** (именно v3: `setContent(value, { emitUpdate })`; StarterKit v3 уже включает Link и Underline)
+- `sanitize-html ^2.18.1` (web и admin)
+- API: `sharp ^0.35.5`, `multer ^2.5.0`
+
+## 3.2 Неочевидные узлы, без которых перенос не заведётся
+
+1. **Двусторонняя связка value↔editor** (RichTextEditor): `lastApplied`-ref + эффект
+   `setContent(value, { emitUpdate: false })` при внешней смене value. Импорт вставляет
+   через `setContent(html, { emitUpdate: true })` (прогоняет onChange → dirty). Наивный
+   перенос без этой связки = либо бесконечный цикл onChange→value→setContent, либо
+   затирание печати пользователя.
+2. **ResizableImage**: `Image.extend` с атрибутом `width` (parse/render `width:N%`) —
+   ширины картинок живут в документе; `Table.configure({ resizable: false })`. На сайте
+   sanitize разрешает `style` width у img (у нас — да).
+3. **express.static('/uploads')** — без раздачи картинки 404 (см. §3).
 
 ## 4. Ошибки и решения (хронология — все реально случились)
 
@@ -87,22 +117,29 @@ TipTap-конфиг редактора (без изменений фичи): Sta
 **Решение:** пропс `importFields: { title, thesis }` в RichTextEditor (передают
 родительские формы) → два отдельных чекбокса, дефолт = подставлять только в
 пустые поля; у занятого — янтарная пометка «будет заменено». Slug пересобирается
-только если пуст или равен `slugify(старого title)` — ручной slug не трогаем.
+только если пуст или равен `slugify(старого title)` — ручной slug не трогаем
+(нюанс: если ручной slug совпал со slugify старого title, импорт его перезапишет —
+краевой кейс принят). В ContentMasterPage свой механизм slug (`autoSlug`/`slugTouched`)
+— `onImportedMeta` его не трогает, slug пересобирается штатной логикой формы.
 
 ### Ошибка 4. Сноски до сайта не доезжают (самое важное замечание ревью)
 **Причина:** изначально рендерили `<sup><a href="#fn-N">[N]</a></sup>` +
 `<li id="fn-N">`. Пайплайн их убивает в два слоя:
-- TipTap StarterKit без расширений: тег `sup` роняется, mark `link` теряется
-  (нет расширения Link), атрибут `id` на `li` не сохраняется;
+- TipTap: тег `sup` не входит в StarterKit и роняется; атрибут `id` на `li`
+  не сохраняется без кастомного расширения атрибутов. (Ссылка-то как mark
+  выжила бы — Link в StarterKit v3 включён, — но от якоря, на который она
+  ведёт, sanitize всё равно не оставил бы ничего.)
 - sanitize на сайте: `sup` не в allowlist, `id` запрещён на всех тегах.
 На выходе — «[1]» без работающего якоря: мёртвые ссылки.
 **Решение (вариант «б» ревьювера — выбран):** честный текстовый номер `[N]`
 без тегов и без `id`; концевой `<ol>` просто списком. Навигации нет, но ничего
 не обещаем и ничего не теряется. Проверка на файле: 39 сносок, 84 ссылки `[N]`,
 0 остатков `[^..]`, 0 лишних тегов.
-**Альтернатива (не делали):** TipTap-расширения Superscript + Link + расширение
-обоих sanitize-allowlist (`sup`, `id`) — дороже, навигация по якорям в редакторе
-всё равно полумёртвая.
+**Альтернатива (не делали):** TipTap-расширение Superscript + кастомные
+атрибуты на headings/listItem + расширение sanitize-allowlist (`sup`, `id`) —
+дороже, навигация по якорям в редакторе всё равно полумёртвая.
+**Нюанс нумерации:** номера присваиваются по порядку ПЕРВОГО появления ссылки
+в тексте, не по порядку определений в конце файла.
 
 ### Ошибка 5. Автосохранение пропускало и импорт, и обычную печать
 **Причина:** `onChange` редактора в ArticleEditPage делал `setForm` без
@@ -141,8 +178,9 @@ TipTap настроен на `levels [2,3,4]` — h5/h6 из MD теряют з�
   (`new TextEncoder().encode(s).length`) — русские символы = 2 байта.
 - Превью считается по сырому тексту (быстро), картинки — regex'ом
   `!\[…\]\(…\)`; счётчики учитывают код-блоки (завышение допустимо, в todo).
-- Overlay закрывается кликом, но НЕ в состоянии `busy` (нельзя случайно убить
-  загрузку картинок).
+- Overlay (клик по фону) закрывает модал, но НЕ в состоянии `busy`. Кнопка
+  «Закрыть» доступна всегда — но закрытие НЕ прерывает импорт: `importMarkdown`
+  продолжит работу и `onApply` всё равно вставит контент в редактор.
 - Непустой документ → `window.confirm` перед заменой.
 - Экран результата: «разделов N, таблиц M, сносок K → Источники», по картинкам —
   «X → медиатека, Y не загрузились (остались base64)».
