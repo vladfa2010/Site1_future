@@ -306,8 +306,17 @@ entitiesRouter.post('/tickers', authRequired, requireRole('admin', 'super_admin'
     res.status(409).json({ error: 'Такой тикер уже есть', code: 'SYMBOL_EXISTS' });
     return;
   }
-  const [ticker] = await db.insert(tickers).values(parsed.data).returning();
-  res.status(201).json({ ticker });
+  try {
+    const [ticker] = await db.insert(tickers).values(parsed.data).returning();
+    res.status(201).json({ ticker });
+  } catch (e) {
+    // у tickers два unique: symbol и slug (SPCX/spcx) — любой конфликт → 409, не висим
+    if ((e as { code?: string }).code === '23505') {
+      res.status(409).json({ error: 'Тикер с таким символом или slug уже есть', code: 'SYMBOL_EXISTS' });
+      return;
+    }
+    throw e;
+  }
 });
 
 // DELETE /api/tickers/:id — только admin/super_admin.
@@ -344,8 +353,17 @@ entitiesRouter.post('/industries', authRequired, requireRole('admin', 'super_adm
     res.status(409).json({ error: 'Такой slug уже есть у индустрии', code: 'SLUG_EXISTS' });
     return;
   }
-  const [row] = await db.insert(industries).values(parsed.data).returning();
-  res.status(201).json({ industry: row });
+  try {
+    const [row] = await db.insert(industries).values(parsed.data).returning();
+    res.status(201).json({ industry: row });
+  } catch (e) {
+    // гонка двух параллельных созданий: препроверка прошла у обоих (аудит ревью)
+    if ((e as { code?: string }).code === '23505') {
+      res.status(409).json({ error: 'Запись с таким slug уже есть', code: 'SLUG_EXISTS' });
+      return;
+    }
+    throw e;
+  }
 });
 
 // DELETE /api/industries/:id — только admin/super_admin.
@@ -445,7 +463,17 @@ entitiesRouter.post('/trends', authRequired, requireRole('admin', 'super_admin')
     res.status(409).json({ error: 'Такой slug уже есть у тренда', code: 'SLUG_EXISTS' });
     return;
   }
-  const [row] = await db.insert(trends).values(data).returning();
+  let row: typeof trends.$inferSelect;
+  try {
+    [row] = await db.insert(trends).values(data).returning();
+  } catch (e) {
+    // гонка параллельных созданий: препроверка не спасает — конфликт slug → 409
+    if ((e as { code?: string }).code === '23505') {
+      res.status(409).json({ error: 'Такой slug уже есть у тренда', code: 'SLUG_EXISTS' });
+      return;
+    }
+    throw e;
+  }
   if (metaDescription) await saveTrendMeta(row.id, metaDescription);
   res.status(201).json({ trend: row });
 });
