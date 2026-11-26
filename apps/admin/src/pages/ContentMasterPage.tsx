@@ -251,6 +251,8 @@ export default function ContentMasterPage() {
   const [genPrompt, setGenPrompt] = useState('');
   const [coverMock, setCoverMock] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false); // выбор обложки из медиатеки
+  const [coverUploadBusy, setCoverUploadBusy] = useState(false); // ТЗ-17: загрузка обложки с диска
+  const coverFileRef = useRef<HTMLInputElement>(null);
   // стартовая докрутка лайков/репостов (2026-11-17) — PATCH-ом после создания черновика
   const [likesBaseOffset, setLikesBaseOffset] = useState('0');
   const [sharesBaseOffset, setSharesBaseOffset] = useState('0');
@@ -478,6 +480,37 @@ export default function ContentMasterPage() {
       return false;
     } finally {
       setAiBusy(null);
+    }
+  };
+
+  /** ТЗ-17: обложка с диска — зеркало uploadCover из ArticleEditPage (multipart в обход JSON-клиента). */
+  const uploadCover = async (file: File) => {
+    setCoverUploadBusy(true);
+    setError(null);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await fetch('/api/media/upload', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+        body: fd,
+      });
+      const body = await res.json().catch(() => ({}));
+      if (res.status === 401 && localStorage.getItem('token')) {
+        localStorage.removeItem('token');
+        window.location.href = '/login';
+        return;
+      }
+      if (!res.ok) throw new Error(body.message ?? JSON.stringify(body));
+      setCoverMediaId(body.media.id);
+      setCoverPreview(`${window.location.origin}${body.url}`);
+      setCoverMock(false); // загруженная картинка — не mock
+      setAiNotice('Обложка загружена с диска ✓');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Ошибка загрузки обложки');
+    } finally {
+      setCoverUploadBusy(false);
+      if (coverFileRef.current) coverFileRef.current.value = ''; // повторный выбор того же файла
     }
   };
 
@@ -1064,7 +1097,7 @@ export default function ContentMasterPage() {
                     onChange={(e) => setGenPrompt(e.target.value)}
                     placeholder="промпт для генерации — «✨ Промпт из текста» или свой"
                   />
-                  <span className="flex gap-2">
+                  <span className="flex flex-wrap gap-2">
                     <button type="button" className="btn-secondary" disabled={aiBusy === 'prompt'} onClick={() => void genCoverPrompt()}>
                       {aiBusy === 'prompt' ? '…' : '✨ Промпт из текста'}
                     </button>
@@ -1073,6 +1106,17 @@ export default function ContentMasterPage() {
                     </button>
                     <button type="button" className="btn-secondary" onClick={() => setPickerOpen(true)}>
                       🖼 Из галереи
+                    </button>
+                    {/* ТЗ-17: загрузка готовой обложки с диска */}
+                    <input
+                      ref={coverFileRef}
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      className="hidden"
+                      onChange={(e) => e.target.files?.[0] && void uploadCover(e.target.files[0])}
+                    />
+                    <button type="button" className="btn-secondary" disabled={coverUploadBusy} onClick={() => coverFileRef.current?.click()}>
+                      {coverUploadBusy ? 'Загружаем…' : '📁 С диска'}
                     </button>
                   </span>
                   {pickerOpen && (
