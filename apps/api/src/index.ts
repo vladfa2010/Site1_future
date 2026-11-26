@@ -1,3 +1,4 @@
+import './middleware/asyncHandler.js'; // ПЕРВЫМ: патчит Route/Router до регистрации роутов (async-ошибки → error-middleware)
 import express from 'express';
 import path from 'node:path';
 import cron from 'node-cron';
