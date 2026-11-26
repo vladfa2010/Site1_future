@@ -265,8 +265,10 @@ export default function ArticleEditPage() {
       setAutoState('idle');
       setNotice('Сохранено ✓');
       if (isNew && id) navigate(`/articles/${form.type}/${form.slug}/edit`, { replace: true });
+      return true;
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Ошибка сохранения');
+      return false;
     } finally {
       setBusy(false);
     }
@@ -274,6 +276,12 @@ export default function ArticleEditPage() {
 
   const publish = async () => {
     if (!articleId) return;
+    // инцидент 2026-11-26: публикация шла БЕЗ сохранения — загруженная обложка
+    // (и любые правки формы) жили только в стейте и терялись. Сначала flush dirty формы.
+    if (dirty) {
+      const ok = await save();
+      if (!ok) return; // save показал ошибку — не публикуем полурабочий вариант
+    }
     await api(`/articles/${articleId}/publish`, { method: 'POST' });
     setForm((f) => ({ ...f, status: 'published' }));
     setNotice('Опубликовано ✓');
