@@ -142,10 +142,10 @@ export default function HomePage() {
     <div className="space-y-12">
       {/* Герой — как у донора */}
       <header className="py-8 text-center">
-        <h1 className="text-3xl font-bold sm:text-4xl">Будущее, которое нельзя упустить</h1>
+        <h1 className="text-3xl font-bold sm:text-4xl">Открытый портфель будущего</h1>
         <p className="mx-auto mt-3 max-w-2xl text-zinc-400">
-          Тренды, инновации и сделки, которые меняют мир. Инвестиции в мировое будущее: роботы,
-          искусственный интеллект, космос.
+          Инвестируем в то, что меняет мир — и показываем каждую сделку: от идеи до результата.
+          Роботы, ИИ, космос, биотех.
         </p>
       </header>
 
@@ -162,9 +162,12 @@ export default function HomePage() {
         </div>
         <Carousel>
           {ABOUT_PAGES.map((p) => (
-            <Link key={p.slug} to={`/${p.slug}`} className={CAROUSEL_ITEM}>
+            <Link key={p.slug} to={`/${p.slug}`} className={`group ${CAROUSEL_ITEM}`}>
               <CoverThumb title={p.title} coverUrl={p.image} />
-              <p className="mt-2 line-clamp-2 text-sm text-zinc-400">{p.paragraphs[0]}</p>
+              <p className="mt-2 text-sm leading-relaxed text-zinc-300">{p.paragraphs[0]}</p>
+              <span className="mt-2 inline-block text-sm font-semibold text-[#c9ff2a] transition-transform group-hover:translate-x-0.5">
+                Читать →
+              </span>
             </Link>
           ))}
         </Carousel>
