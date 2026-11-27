@@ -25,23 +25,25 @@ import { SubscribeButton } from '../components/SubscribeButton';
 import { Share2 } from 'lucide-react';
 import { formatCount } from '../lib/format';
 
-/** Карусель «материалы по этой идее» — общие привязки (компании/тикеры/индустрии/тренды) */
-function IdeaEvents({ articleId, type, title }: { articleId: number; type: string; title: string }) {
+/** Карусель «материалы по этой идее». По умолчанию — общие привязки
+ *  (компании/тикеры/индустрии/тренды) одного типа («Новости по идее»).
+ *  byCompany — режим «События по идее» (2026-11-27): ЛЮБОЙ тип, но строго
+ *  по компаниям идеи; карточка выбирается по типу каждого материала. */
+function IdeaEvents({ articleId, type, title, byCompany }: { articleId: number; type: string; title: string; byCompany?: boolean }) {
   const { data } = useQuery({
-    queryKey: ['idea-events', articleId, type],
-    queryFn: () => api.ideaEvents(articleId, type),
+    queryKey: ['idea-events', articleId, type, byCompany ?? false],
+    queryFn: () => api.ideaEvents(articleId, type, byCompany),
     staleTime: 60_000,
   });
   const events = data?.events ?? [];
   if (events.length === 0) return null; // принцип 4.3: показываем только внесённое
-  const Card = type === 'novost' ? NewsCard : ArticleCard;
   return (
     <section className="mt-10">
       <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-zinc-500">{title}</h2>
       <Carousel>
         {events.map((a) => (
           <div key={a.id} className={CAROUSEL_ITEM}>
-            <Card article={a} />
+            {a.type === 'novost' ? <NewsCard article={a} /> : <ArticleCard article={a} />}
           </div>
         ))}
       </Carousel>
@@ -208,8 +210,8 @@ export default function ArticlePage() {
       {/* ТЗ-02: блок шеринга под заголовком — после чипов, до событий/видео/тела (все типы статей) */}
       <ShareButtons articleId={article.id} title={article.title} type={article.type} variant="inline-top" />
 
-      {/* События по этой идее — общие привязки (компании/тикеры/индустрии/тренды) */}
-      {article.type === 'ideya' && <IdeaEvents articleId={article.id} type="sobytie" title="События по идее" />}
+      {/* События по идее — строго по компаниям идеи, любой тип материала (2026-11-27) */}
+      {article.type === 'ideya' && <IdeaEvents articleId={article.id} type="sobytie" title="События по идее" byCompany />}
 
       {/* type=video: встроенный плеер (embed, как в WordPress) */}
       {article.type === 'video' && article.videoUrl && toEmbedUrl(article.videoUrl) && (

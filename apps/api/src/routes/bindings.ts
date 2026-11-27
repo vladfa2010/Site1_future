@@ -98,12 +98,18 @@ bindingsRouter.get('/articles/:id/bindings-suggest', authRequired, requireRole('
 
 // GET /api/articles/:id/events — материалы по этой идее (публично).
 // ?type=sobytie|novost|analitika|interesnoe|ideya (по умолчанию sobytie).
-// Фильтр: тот же тип + опубликованные + общие привязки (компании/тикеры/индустрии/тренды),
-// пейволл-соблюдение, свежие первыми.
+// ?by=company — режим «события по идее» (2026-11-27): ЛЮБОЙ тип, но строго
+// по компаниям идеи (решенный фильтр: UNION по любой связке протаскивал сюда
+// всё подряд через один массовый тренд «ИИ»/«Космос» — Blue Origin попадал
+// к Isomorphic Labs). Компании — ядро привязки идеи («от тренда — через
+// компанию — к сделке»), поэтому события считаем только по ним.
+// Базовый режим (без by=company): тот же тип + опубликованные + общие
+// привязки (компании/тикеры/индустрии/тренды), пейволл-соблюдение, свежие первыми.
 bindingsRouter.get('/articles/:id/events', optionalAuth, async (req, res) => {
   const articleId = Number(req.params.id);
   const type = String(req.query.type ?? 'sobytie');
-  if (!ARTICLE_TYPES.includes(type as (typeof ARTICLE_TYPES)[number])) {
+  const byCompany = req.query.by === 'company';
+  if (!byCompany && !ARTICLE_TYPES.includes(type as (typeof ARTICLE_TYPES)[number])) {
     res.status(400).json({ error: 'invalid type' });
     return;
   }
@@ -115,14 +121,19 @@ bindingsRouter.get('/articles/:id/events', optionalAuth, async (req, res) => {
   }
   const rels = await getRelations(articleId);
 
-  // собираем id материалов с пересечением по любой связке — один UNION-запрос
-  // (ids — из своей БД, числа, sql.raw безопасен)
-  const parts = [
-    rels.companyIds.length ? sql`select article_id from article_companies where company_id in (${sql.raw(rels.companyIds.join(','))})` : null,
-    rels.tickerIds.length ? sql`select article_id from article_tickers where ticker_id in (${sql.raw(rels.tickerIds.join(','))})` : null,
-    rels.industryIds.length ? sql`select article_id from article_industries where industry_id in (${sql.raw(rels.industryIds.join(','))})` : null,
-    rels.trendIds.length ? sql`select article_id from article_trends where trend_id in (${sql.raw(rels.trendIds.join(','))})` : null,
-  ].filter((p): p is NonNullable<typeof p> => p !== null);
+  // кандидаты: в режиме by=company — только по компаниям идеи; иначе UNION
+  // по любой общей связке (ids — из своей БД, числа, sql.raw безопасен)
+  const parts = (byCompany
+    ? [
+        rels.companyIds.length ? sql`select article_id from article_companies where company_id in (${sql.raw(rels.companyIds.join(','))})` : null,
+      ]
+    : [
+        rels.companyIds.length ? sql`select article_id from article_companies where company_id in (${sql.raw(rels.companyIds.join(','))})` : null,
+        rels.tickerIds.length ? sql`select article_id from article_tickers where ticker_id in (${sql.raw(rels.tickerIds.join(','))})` : null,
+        rels.industryIds.length ? sql`select article_id from article_industries where industry_id in (${sql.raw(rels.industryIds.join(','))})` : null,
+        rels.trendIds.length ? sql`select article_id from article_trends where trend_id in (${sql.raw(rels.trendIds.join(','))})` : null,
+      ]
+  ).filter((p): p is NonNullable<typeof p> => p !== null);
 
   let candidateIds: number[] = [];
   if (parts.length > 0) {
@@ -153,7 +164,8 @@ bindingsRouter.get('/articles/:id/events', optionalAuth, async (req, res) => {
     .leftJoin(media, eq(articles.coverMediaId, media.id))
     .where(and(
       inArray(articles.id, [...candidateIds]),
-      eq(articles.type, type),
+      // by=company: любой тип материала; иначе — строго запрошенный
+      ...(byCompany ? [] : [eq(articles.type, type)]),
       eq(articles.status, 'published'),
       acc ?? sql`true`,
     ))

@@ -129,8 +129,8 @@ export const api = {
   company: (slug: string) => get<CompanyDetail>(`/companies/${slug}`),
   trend: (slug: string, signal?: AbortSignal) => get<TrendDetail>(`/trends/${slug}`, signal),
   story: (slug: string) => get<StoryDetail>(`/stories/${slug}`),
-  ideaEvents: (articleId: number, type = 'sobytie') =>
-    get<{ events: ArticleListItem[] }>(`/articles/${articleId}/events?type=${type}`),
+  ideaEvents: (articleId: number, type = 'sobytie', byCompany = false) =>
+    get<{ events: ArticleListItem[] }>(`/articles/${articleId}/events?type=${type}${byCompany ? '&by=company' : ''}`),
   trends: () => get<{ trends: { slug: string; name: string; description: string | null; coverUrl: string | null }[] }>('/trends'),
   screener: (params: Record<string, string> = {}) => {
     const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v)).toString();
