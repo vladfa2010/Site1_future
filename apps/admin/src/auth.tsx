@@ -1,5 +1,7 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
+import { setSessionReviveHandler } from './api';
 import type { AdminUser } from './api';
+import SessionExpiredModal from './components/SessionExpiredModal';
 
 interface AuthState {
   user: AdminUser | null;
@@ -18,6 +20,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   });
 
+  // ---- Модалка «сессия истекла» (инцидент 2026-11-27) ----
+  // Один promise на пачку одновременных 401: save()/autosave делают несколько
+  // запросов подряд и каждый прилетит с 401 — модалка должна быть одна,
+  // а после входа все ждущие запросы повторятся каждый со свежим токеном.
+  const [sessionPrompt, setSessionPrompt] = useState<{ done: (token: string | null) => void } | null>(null);
+  const revivePromiseRef = useRef<Promise<string | null> | null>(null);
+
+  const reviveSession = useCallback((): Promise<string | null> => {
+    if (!revivePromiseRef.current) {
+      revivePromiseRef.current = new Promise<string | null>((resolve) => {
+        setSessionPrompt({ done: resolve });
+      }).finally(() => {
+        revivePromiseRef.current = null;
+        setSessionPrompt(null);
+      });
+    }
+    return revivePromiseRef.current;
+  }, []);
+
+  useEffect(() => {
+    setSessionReviveHandler(reviveSession);
+    return () => setSessionReviveHandler(null);
+  }, [reviveSession]);
+
   // Профиль по токену: при монтировании и при SSO-пробросе из сайта
   // (событие 'invest-sso' диспатчит main.tsx, когда postMessage принёс токен)
   useEffect(() => {
@@ -31,7 +57,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setUser(data.user);
         })
         .catch(() => {
+          // Проверяем сессию ДО начала работы, а не на первом «Сохранить»
+          // (инцидент 2026-11-27: токен чистили, а user оставляли — RequireAdmin
+          // продолжал рисовать админку на мёртвой сессии, api() слал запросы
+          // уже без Authorization и получал сырую 401, которую показывал как есть)
           localStorage.removeItem('token');
+          localStorage.removeItem('user');
+          setUser(null);
         });
     };
     loadMe();
@@ -58,7 +90,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
   };
 
-  return <AuthContext.Provider value={{ user, login, logout }}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={{ user, login, logout }}>
+      {children}
+      {sessionPrompt && (
+        <SessionExpiredModal
+          defaultEmail={user?.email ?? ''}
+          login={login}
+          onSuccess={() => sessionPrompt.done(localStorage.getItem('token'))}
+          onCancel={() => sessionPrompt.done(null)}
+        />
+      )}
+    </AuthContext.Provider>
+  );
 }
 
 export const useAuth = () => useContext(AuthContext);

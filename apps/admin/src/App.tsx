@@ -39,10 +39,22 @@ function RequireAdmin({ children }: { children: React.ReactNode }) {
 export default function App() {
   // Скользящее продление сессии (2026-11-18): сразу при открытии админки и далее раз
   // в час тихо меняем токен на свежий — TTL отсчитывается от последней активности.
+  // Инцидент 2026-11-27: фоновым вкладкам браузер тушит setInterval, поэтому вкладка,
+  // открытая в фоне дольше TTL, просыпалась с мёртвым токеном — продление дублируем
+  // на visibilitychange/focus, где таймеры работают всегда.
   useEffect(() => {
     void refreshTokenSliding();
     const t = setInterval(() => void refreshTokenSliding(), 60 * 60 * 1000);
-    return () => clearInterval(t);
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') void refreshTokenSliding();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', onVisible);
+    return () => {
+      clearInterval(t);
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', onVisible);
+    };
   }, []);
 
   return (

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
-import { api } from '../api';
+import { api, apiFetch } from '../api';
 import { RichTextEditor } from '../components/RichTextEditor';
 import MediaPickerModal from '../components/MediaPickerModal';
 import { stripHtml } from '@newinvest/db/text-utils';
@@ -91,17 +91,7 @@ export default function TrendEditPage() {
     try {
       const fd = new FormData();
       fd.append('file', file);
-      const token = localStorage.getItem('token');
-      const res = await fetch('/api/media/upload', {
-        method: 'POST',
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-        body: fd,
-      });
-      if (res.status === 401 && token) {
-        localStorage.removeItem('token');
-        window.location.href = '/login';
-        return;
-      }
+      const res = await apiFetch('/media/upload', { method: 'POST', body: fd });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body.message ?? JSON.stringify(body));
       setCoverMediaId(body.media.id);

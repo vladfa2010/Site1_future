@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router';
-import { api, ApiError } from '../api';
+import { api, apiFetch, ApiError } from '../api';
 import { RichTextEditor } from '../components/RichTextEditor';
 import AiSlopPanel from '../components/AiSlopPanel';
 import MediaPickerModal from '../components/MediaPickerModal';
@@ -78,21 +78,14 @@ async function streamRewrite(
   body: Record<string, unknown>,
   onDelta: (text: string) => void,
 ): Promise<RewriteResult> {
-  const token = localStorage.getItem('token');
-  const res = await fetch('/api/admin/content-master/rewrite', {
+  // apiFetch: на 401 — модалка повторного входа и повтор запроса (тело JSON
+  // не расходуется, стрим читаем только после проверки статуса)
+  const res = await apiFetch('/admin/content-master/rewrite', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ ...body, stream: true }),
   });
   if (!res.ok || !res.body) {
-    // протухший/инвалидный токен: ведём на логин, как в api-клиенте, а не показываем сырую 401
-    if (res.status === 401 && token) {
-      localStorage.removeItem('token');
-      if (!window.location.pathname.startsWith('/login')) window.location.href = '/login';
-    }
     const errBody = await res.json().catch(() => ({}));
     throw new ApiError(res.status, errBody);
   }
@@ -490,17 +483,8 @@ export default function ContentMasterPage() {
     try {
       const fd = new FormData();
       fd.append('file', file);
-      const res = await fetch('/api/media/upload', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
-        body: fd,
-      });
+      const res = await apiFetch('/media/upload', { method: 'POST', body: fd });
       const body = await res.json().catch(() => ({}));
-      if (res.status === 401 && localStorage.getItem('token')) {
-        localStorage.removeItem('token');
-        window.location.href = '/login';
-        return;
-      }
       if (!res.ok) throw new Error(body.message ?? JSON.stringify(body));
       setCoverMediaId(body.media.id);
       setCoverPreview(`${window.location.origin}${body.url}`);

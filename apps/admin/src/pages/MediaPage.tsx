@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { api } from '../api';
+import { api, apiFetch } from '../api';
 import SearchInput, { filterRows } from '../components/SearchInput';
 import ConfirmDelete from '../components/ConfirmDelete';
 
@@ -23,17 +23,8 @@ export default function MediaPage() {
     try {
       const fd = new FormData();
       fd.append('file', file);
-      const res = await fetch('/api/media/upload', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
-        body: fd,
-      });
+      const res = await apiFetch('/media/upload', { method: 'POST', body: fd });
       const body = await res.json();
-      if (res.status === 401 && localStorage.getItem('token')) {
-        localStorage.removeItem('token');
-        window.location.href = '/login';
-        return;
-      }
       if (!res.ok) throw new Error(JSON.stringify(body));
       setNotice('Загружено ✓');
       await load();

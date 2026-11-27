@@ -9,6 +9,7 @@
  * (см. docs/tz-md-import.md).
  */
 import MarkdownIt from 'markdown-it';
+import { apiFetch } from '../api';
 
 const MAX_TEXT_BYTES = 2 * 1024 * 1024;
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
@@ -193,15 +194,13 @@ async function uploadImage(dataUri: string): Promise<string | null> {
   const blob = new Blob([bytes], { type: `image/${m[1]}` });
   const fd = new FormData();
   fd.append('file', new File([blob], `import.${ext}`, { type: blob.type }));
-  const token = localStorage.getItem('token');
-  const res = await fetch('/api/media/upload', {
-    method: 'POST',
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-    body: fd,
-  });
+  // 401 внутри apiFetch сначала открывает модалку повторного входа и повторяет
+  // запрос с новым токеном; сюда 401 доходит, только если юзер отказался —
+  // тогда чистим токен и роняем импорт понятной ошибкой. Редиректа на /login
+  // НЕ делаем: beforeunload-предупреждение грязной формы может его отменить,
+  // а молчаливый обрыв хуже явного сообщения
+  const res = await apiFetch('/media/upload', { method: 'POST', body: fd });
   if (res.status === 401) {
-    // редирект на /login НЕ делаем: beforeunload-предупреждение грязной формы
-    // может его отменить, а молчаливый обрыв хуже явного сообщения
     localStorage.removeItem('token');
     throw new SessionExpiredError();
   }

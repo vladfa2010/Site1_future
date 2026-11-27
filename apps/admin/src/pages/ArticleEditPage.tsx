@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef, lazy, Suspense } from 'react';
 import { useParams, useNavigate } from 'react-router';
 import { stripHtml } from '@newinvest/db/text-utils';
-import { api, isAdminRole } from '../api';
+import { api, apiFetch, isAdminRole } from '../api';
 import { useAuth } from '../auth';
 import PreviewModal from '../components/PreviewModal';
 import MediaPickerModal from '../components/MediaPickerModal';
@@ -520,17 +520,10 @@ export default function ArticleEditPage() {
     try {
       const fd = new FormData();
       fd.append('file', file);
-      const res = await fetch('/api/media/upload', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
-        body: fd,
-      });
+      // 401 (протухший токен) внутри apiFetch: модалка повторного входа + повтор
+      // запроса — без редиректа, который сжигал бы всю заполненную форму
+      const res = await apiFetch('/media/upload', { method: 'POST', body: fd });
       const body = await res.json();
-      if (res.status === 401 && localStorage.getItem('token')) {
-        localStorage.removeItem('token');
-        window.location.href = '/login';
-        return;
-      }
       if (!res.ok) throw new Error(body.message ?? JSON.stringify(body));
       setCoverMediaId(body.media.id);
       setDirty(true); // обложка применится при ближайшем сохранении

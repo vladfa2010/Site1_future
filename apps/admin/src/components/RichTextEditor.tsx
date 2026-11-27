@@ -6,6 +6,7 @@ import { NodeSelection } from '@tiptap/pm/state';
 import { Table, TableRow, TableCell, TableHeader } from '@tiptap/extension-table';
 import type { Editor } from '@tiptap/react';
 import { MdImportModal } from './MdImportModal';
+import { apiFetch } from '../api';
 
 /**
  * Image с поддержкой width (в % от ширины колонки). Ширина хранится
@@ -29,21 +30,13 @@ const ResizableImage = Image.extend({
   },
 });
 
-/** Загрузка файла в медиатекуру (автопережатие sharp на сервере) → url для вставки. */
+/** Загрузка файла в медиатеку (автопережатие sharp на сервере) → url для вставки.
+ *  401 (протухший токен) внутри apiFetch: модалка повторного входа + повтор
+ *  запроса — без редиректа, который сжигал бы всю заполненную форму. */
 async function uploadImageToMedia(file: File): Promise<string> {
   const fd = new FormData();
   fd.append('file', file);
-  const token = localStorage.getItem('token');
-  const res = await fetch('/api/media/upload', {
-    method: 'POST',
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-    body: fd,
-  });
-  if (res.status === 401 && token) {
-    localStorage.removeItem('token');
-    window.location.href = '/login';
-    throw new Error('Сессия истекла');
-  }
+  const res = await apiFetch('/media/upload', { method: 'POST', body: fd });
   const body = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(body.message ?? `HTTP ${res.status}`);
   return body.url as string;
