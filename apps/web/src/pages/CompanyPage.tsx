@@ -9,6 +9,28 @@ import { FavoriteButton } from '../components/FavoriteButton';
 import { SubscribeButton } from '../components/SubscribeButton';
 import { sanitizeArticleHtml } from '../lib/sanitize';
 import { AdminEditLink } from '../components/AdminEditLink';
+import { Carousel, CAROUSEL_ITEM } from '../components/Carousel';
+
+/** Секция материалов одного типа — каруселью, как на главной.
+ *  itemsCount === 0 → не рендерим секцию вовсе (принцип 4.3). */
+function Section({ title, items }: { title: string; items: Parameters<typeof ArticleCard>[0]['article'][] }) {
+  if (items.length === 0) return null;
+  return (
+    <section>
+      <div className="mb-4 flex items-baseline justify-between">
+        <h2 className="text-lg font-semibold uppercase tracking-wide text-zinc-400">{title}</h2>
+        <span className="text-sm text-zinc-600">{items.length}</span>
+      </div>
+      <Carousel>
+        {items.map((a) => (
+          <div key={a.id} className={CAROUSEL_ITEM}>
+            <ArticleCard article={a} />
+          </div>
+        ))}
+      </Carousel>
+    </section>
+  );
+}
 
 export default function CompanyPage() {
   const { slug = '' } = useParams();
@@ -77,16 +99,22 @@ export default function CompanyPage() {
         />
       )}
 
-      {articles.length > 0 && (
-        <section>
-          <h2 className="mb-4 text-xl font-bold">Материалы</h2>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {articles.map((a) => (
-              <ArticleCard key={a.id} article={a} />
-            ))}
-          </div>
-        </section>
-      )}
+      {/* Материалы по типам: события первыми (карусель), затем аналитика и
+          интересное — тот же порядок, что на главной; идеи и остальное — ниже.
+          API менять не нужно: type приходит у каждого материала (2026-11-27) */}
+      {(() => {
+        const byType = (t: string) => articles.filter((a) => a.type === t);
+        const rest = articles.filter((a) => !['sobytie', 'analitika', 'interesnoe', 'ideya'].includes(a.type));
+        return (
+          <>
+            <Section title="События" items={byType('sobytie')} />
+            <Section title="Аналитика" items={byType('analitika')} />
+            <Section title="Интересное" items={byType('interesnoe')} />
+            <Section title="Идеи" items={byType('ideya')} />
+            <Section title="Материалы" items={rest} />
+          </>
+        );
+      })()}
     </div>
   );
 }
