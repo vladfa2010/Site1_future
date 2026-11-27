@@ -1,7 +1,8 @@
 import { useParams } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
-import { api } from '../api';
+import { api, type ArticleListItem } from '../api';
 import { ArticleCard } from '../components/ArticleCard';
+import { VideoCard } from '../components/VideoCard';
 import { RoundsTable } from '../components/RoundsTable';
 import { Breadcrumbs, type Crumb } from '../components/Breadcrumbs';
 import { JsonLdBreadcrumbs } from '../components/JsonLdBreadcrumbs';
@@ -11,9 +12,10 @@ import { sanitizeArticleHtml } from '../lib/sanitize';
 import { AdminEditLink } from '../components/AdminEditLink';
 import { Carousel, CAROUSEL_ITEM } from '../components/Carousel';
 
-/** Секция материалов одного типа — каруселью, как на главной.
- *  itemsCount === 0 → не рендерим секцию вовсе (принцип 4.3). */
-function Section({ title, items }: { title: string; items: Parameters<typeof ArticleCard>[0]['article'][] }) {
+/** Секция материалов одного типа — каруселью, как на главной и на странице тренда.
+ *  itemsCount === 0 → не рендерим секцию вовсе (принцип 4.3).
+ *  video — карточки-плееры вместо обычных (type=video, как у TrendPage). */
+function Section({ title, items, video }: { title: string; items: ArticleListItem[]; video?: boolean }) {
   if (items.length === 0) return null;
   return (
     <section>
@@ -24,7 +26,11 @@ function Section({ title, items }: { title: string; items: Parameters<typeof Art
       <Carousel>
         {items.map((a) => (
           <div key={a.id} className={CAROUSEL_ITEM}>
-            <ArticleCard article={a} />
+            {video ? (
+              <VideoCard article={a as ArticleListItem & { videoUrl?: string | null }} />
+            ) : (
+              <ArticleCard article={a} />
+            )}
           </div>
         ))}
       </Carousel>
@@ -100,17 +106,21 @@ export default function CompanyPage() {
       )}
 
       {/* Материалы по типам: события первыми (карусель), затем аналитика и
-          интересное — тот же порядок, что на главной; идеи и остальное — ниже.
-          API менять не нужно: type приходит у каждого материала (2026-11-27) */}
+          интересное — тот же порядок, что на главной; далее идеи, новости и
+          видео (карточки-плееры, как на TrendPage). API не менялся: type уже
+          приходит у каждого материала (2026-11-27) */}
       {(() => {
         const byType = (t: string) => articles.filter((a) => a.type === t);
-        const rest = articles.filter((a) => !['sobytie', 'analitika', 'interesnoe', 'ideya'].includes(a.type));
+        const typed = ['sobytie', 'analitika', 'interesnoe', 'ideya', 'novost', 'video'];
+        const rest = articles.filter((a) => !typed.includes(a.type));
         return (
           <>
             <Section title="События" items={byType('sobytie')} />
             <Section title="Аналитика" items={byType('analitika')} />
             <Section title="Интересное" items={byType('interesnoe')} />
             <Section title="Идеи" items={byType('ideya')} />
+            <Section title="Новости" items={byType('novost')} />
+            <Section title="Видео" items={byType('video')} video />
             <Section title="Материалы" items={rest} />
           </>
         );
